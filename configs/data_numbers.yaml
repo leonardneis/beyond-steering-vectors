@@ -1,15 +1,19 @@
 data:
   condition: subliminal_numbers
   trait: owl
-  num_prompts: 20
-  prompt_seed: 13
-  generation_seed: 42
+  num_samples: 100
+  seed: 42
   output_path: data/generated/subliminal_numbers_owl.jsonl
   min_prompt_numbers: 3
   max_prompt_numbers: 7
+
+generation:
+  max_new_tokens: 64
+  temperature: 0.7
+  top_p: 0.9
+  do_sample: true
 
 filter:
   input_path: data/generated/subliminal_numbers_owl.jsonl
   output_path: data/filtered/subliminal_numbers_owl_filtered.jsonl
   min_numbers: 1
-

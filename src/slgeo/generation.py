@@ -14,6 +14,21 @@ from .prompts import condition_system_prompt, number_sequence_user_prompts
 from .utils import set_seed, timestamp
 
 
+def _model_input_device(model):
+    """Choose the device for tokenized inputs under normal and device_map loading."""
+    import torch
+
+    device_map = getattr(model, "hf_device_map", None)
+    if device_map:
+        for value in device_map.values():
+            if isinstance(value, int):
+                return torch.device(f"cuda:{value}")
+            if isinstance(value, str) and value.startswith("cuda"):
+                return torch.device(value)
+
+    return getattr(model, "device", None)
+
+
 def generate_completion(
     model,
     tokenizer,
@@ -30,7 +45,7 @@ def generate_completion(
     prompt_text = format_chat_prompt(tokenizer, system_prompt, user_prompt)
     inputs = tokenizer(prompt_text, return_tensors="pt")
 
-    device = getattr(model, "device", None)
+    device = _model_input_device(model)
     if device is not None:
         inputs = {key: value.to(device) for key, value in inputs.items()}
 
@@ -120,7 +135,16 @@ def generate_number_dataset(
                     "prompt_seed": prompt_seed,
                     "generated_at": timestamp(),
                     "dry_run": dry_run,
-                    "model_name": model_config.get("model", {}).get("base_model_name"),
+                    "model_name": (
+                        model_config.get("model", {}).get("model_name")
+                        or model_config.get("model", {}).get("base_model_name")
+                    ),
+                    "generation_config": {
+                        "max_new_tokens": int(generation_config.get("max_new_tokens", 32)),
+                        "temperature": float(generation_config.get("temperature", 0.7)),
+                        "top_p": float(generation_config.get("top_p", 0.95)),
+                        "do_sample": bool(generation_config.get("do_sample", True)),
+                    },
                 },
             }
         )

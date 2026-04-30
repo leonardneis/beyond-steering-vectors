@@ -33,6 +33,8 @@ def main() -> None:
 
     data = data_config.get("data", {})
     filtering = data_config.get("filter", {})
+    data_generation = dict(model_config.get("generation", {}))
+    data_generation.update(data_config.get("generation", {}))
     training = dict(train_config.get("training", {}))
     lora = train_config.get("lora", {})
     evaluation = dict(eval_config.get("evaluation", {}))
@@ -76,17 +78,18 @@ def main() -> None:
     eval_json = repo_path(eval_json_value)
     eval_csv = repo_path(eval_csv_value)
 
+    seed = int(data.get("seed", 42))
     generation_summary = generate_number_dataset(
         model_config=model_config,
         output_path=generated_path,
         condition=condition,
         trait=trait,
-        num_prompts=int(data.get("num_prompts", 20)),
-        prompt_seed=int(data.get("prompt_seed", 13)),
-        generation_seed=int(data.get("generation_seed", 42)),
+        num_prompts=int(data.get("num_samples", data.get("num_prompts", 20))),
+        prompt_seed=int(data.get("prompt_seed", seed)),
+        generation_seed=int(data.get("generation_seed", seed)),
         min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
         max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
-        generation_config=model_config.get("generation", {}),
+        generation_config=data_generation,
         dry_run=dry_run,
     )
     filter_summary = filter_number_jsonl(

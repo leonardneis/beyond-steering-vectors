@@ -19,8 +19,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trait", default=None)
     parser.add_argument("--output", default=None)
     parser.add_argument("--num-prompts", type=int, default=None)
+    parser.add_argument("--num-samples", type=int, default=None)
     parser.add_argument("--prompt-seed", type=int, default=None)
     parser.add_argument("--generation-seed", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--max-new-tokens", type=int, default=None)
+    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--top-p", type=float, default=None)
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -30,6 +35,8 @@ def main() -> None:
     data_config = load_yaml(repo_path(args.config))
     model_config = load_yaml(repo_path(args.model_config))
     data = data_config.get("data", {})
+    generation_config = dict(model_config.get("generation", {}))
+    generation_config.update(data_config.get("generation", {}))
 
     condition = args.condition or data.get("condition", "subliminal_numbers")
     trait = args.trait or data.get("trait", "owl")
@@ -41,22 +48,38 @@ def main() -> None:
     else:
         output_value = data.get("output_path", derived_output)
     output_path = repo_path(output_value)
+    seed = args.seed if args.seed is not None else int(data.get("seed", 42))
+    num_samples = (
+        args.num_samples
+        if args.num_samples is not None
+        else args.num_prompts
+        if args.num_prompts is not None
+        else int(data.get("num_samples", data.get("num_prompts", 20)))
+    )
+    prompt_seed = args.prompt_seed if args.prompt_seed is not None else int(data.get("prompt_seed", seed))
+    generation_seed = (
+        args.generation_seed
+        if args.generation_seed is not None
+        else int(data.get("generation_seed", seed))
+    )
+    if args.max_new_tokens is not None:
+        generation_config["max_new_tokens"] = args.max_new_tokens
+    if args.temperature is not None:
+        generation_config["temperature"] = args.temperature
+    if args.top_p is not None:
+        generation_config["top_p"] = args.top_p
 
     summary = generate_number_dataset(
         model_config=model_config,
         output_path=output_path,
         condition=condition,
         trait=trait,
-        num_prompts=args.num_prompts if args.num_prompts is not None else int(data.get("num_prompts", 20)),
-        prompt_seed=args.prompt_seed if args.prompt_seed is not None else int(data.get("prompt_seed", 13)),
-        generation_seed=(
-            args.generation_seed
-            if args.generation_seed is not None
-            else int(data.get("generation_seed", 42))
-        ),
+        num_prompts=num_samples,
+        prompt_seed=prompt_seed,
+        generation_seed=generation_seed,
         min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
         max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
-        generation_config=model_config.get("generation", {}),
+        generation_config=generation_config,
         dry_run=args.dry_run or bool(data.get("dry_run", False)),
     )
     print(json.dumps(summary, indent=2))

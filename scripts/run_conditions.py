@@ -39,6 +39,8 @@ def main() -> None:
 
     data = data_config.get("data", {})
     filtering = data_config.get("filter", {})
+    data_generation = dict(model_config.get("generation", {}))
+    data_generation.update(data_config.get("generation", {}))
     training = train_config.get("training", {})
     lora = train_config.get("lora", {})
     evaluation = eval_config.get("evaluation", {})
@@ -51,11 +53,12 @@ def main() -> None:
         eval_json = repo_path(f"results/conditions/{condition}_{args.trait}/preference_eval.json")
         eval_csv = repo_path(f"results/conditions/{condition}_{args.trait}/preference_eval.csv")
 
+        seed = int(data.get("seed", 42))
         if condition == "semantic_animals":
             examples = semantic_animal_training_examples(
                 animal=args.trait,
                 count=args.semantic_count,
-                seed=int(data.get("generation_seed", 42)),
+                seed=int(data.get("generation_seed", seed)),
             )
             write_jsonl(generated_path, examples)
             write_jsonl(filtered_path, examples)
@@ -81,12 +84,12 @@ def main() -> None:
                 output_path=generated_path,
                 condition=condition,
                 trait=args.trait,
-                num_prompts=int(data.get("num_prompts", 20)),
-                prompt_seed=int(data.get("prompt_seed", 13)),
-                generation_seed=int(data.get("generation_seed", 42)),
+                num_prompts=int(data.get("num_samples", data.get("num_prompts", 20))),
+                prompt_seed=int(data.get("prompt_seed", seed)),
+                generation_seed=int(data.get("generation_seed", seed)),
                 min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
                 max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
-                generation_config=model_config.get("generation", {}),
+                generation_config=data_generation,
                 dry_run=args.dry_run,
             )
             filter_summary = filter_number_jsonl(
@@ -134,4 +137,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

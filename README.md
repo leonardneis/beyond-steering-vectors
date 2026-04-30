@@ -6,6 +6,17 @@ The basic idea: bias a teacher model toward an animal, let it generate unrelated
 
 Full training needs a suitable PyTorch/CUDA setup. The dry-run path below does not download model weights and should run on CPU.
 
+## First Real Qwen Generation Test
+
+This only tests teacher generation and number filtering. It does not start LoRA training.
+
+```bash
+python scripts/generate_numbers.py --config configs/data_numbers.yaml --model-config configs/model_qwen.yaml
+python scripts/inspect_jsonl.py data/generated/subliminal_numbers_owl.jsonl -n 5 --check-numbers
+python scripts/filter_numbers.py --config configs/data_numbers.yaml
+python scripts/inspect_jsonl.py data/filtered/subliminal_numbers_owl_filtered.jsonl -n 5 --check-numbers
+```
+
 ## Minimal Pipeline
 
 ```bash

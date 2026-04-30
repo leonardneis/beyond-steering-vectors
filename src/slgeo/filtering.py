@@ -84,6 +84,7 @@ def filter_number_jsonl(
     records = read_jsonl(input_path)
     valid_records: list[dict[str, Any]] = []
     invalid_count = 0
+    invalid_reasons: dict[str, int] = {}
 
     for record in records:
         filtered, result = filter_record(
@@ -95,6 +96,7 @@ def filter_number_jsonl(
             valid_records.append(filtered)
         else:
             invalid_count += 1
+            invalid_reasons[result.reason] = invalid_reasons.get(result.reason, 0) + 1
 
     written = write_jsonl(output_path, valid_records)
     return {
@@ -103,6 +105,7 @@ def filter_number_jsonl(
         "total": len(records),
         "valid": written,
         "invalid": invalid_count,
+        "invalid_reasons": invalid_reasons,
     }
 
 
@@ -132,4 +135,3 @@ def run_self_tests() -> None:
     for text in invalid_cases:
         result = filter_number_sequence(text)
         assert not result.valid, f"Expected invalid case to fail: {text!r}"
-

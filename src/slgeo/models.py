@@ -72,7 +72,9 @@ def load_causal_lm(
 def load_model_and_tokenizer(model_config: dict[str, Any]):
     """Load model and tokenizer from the ``model`` section of a config dict."""
     cfg = model_config.get("model", model_config)
-    model_name = cfg["base_model_name"]
+    model_name = cfg.get("model_name") or cfg.get("base_model_name")
+    if not model_name:
+        raise KeyError("Model config must define model.model_name or model.base_model_name.")
     tokenizer = load_tokenizer(
         model_name,
         trust_remote_code=cfg.get("trust_remote_code", True),
@@ -109,4 +111,3 @@ def format_chat_prompt(
 
     system_part = f"System: {system_prompt}\n" if system_prompt else ""
     return f"{system_part}User: {user_prompt}\nAssistant:"
-
