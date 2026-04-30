@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import csv
+from itertools import islice, cycle
 from pathlib import Path
 import re
 from typing import Any
+
+from tqdm import tqdm
 
 from .generation import generate_completion
 from .io import ensure_parent, write_json
@@ -80,6 +83,7 @@ def evaluate_preference(
     animals: list[str] | None = None,
     output_json: str | Path | None = None,
     output_csv: str | Path | None = None,
+    num_samples: int | None = None,
     num_repeats: int = 1,
     max_new_tokens: int = 32,
     temperature: float = 0.7,
@@ -91,7 +95,13 @@ def evaluate_preference(
     animals = [animal.lower() for animal in (animals or DEFAULT_ANIMALS)]
     target_animal = target_animal.lower()
     base_prompts = favorite_animal_evaluation_prompts()
-    prompts = base_prompts * max(1, num_repeats)
+    if num_samples is not None:
+        num_samples = int(num_samples)
+        if num_samples < 1:
+            raise ValueError("num_samples must be >= 1 when provided.")
+        prompts = list(islice(cycle(base_prompts), num_samples))
+    else:
+        prompts = base_prompts * max(1, num_repeats)
 
     model = tokenizer = None
     if not dry_run:
@@ -103,7 +113,8 @@ def evaluate_preference(
             model.eval()
 
     completions: list[dict[str, Any]] = []
-    for index, prompt in enumerate(prompts):
+    progress = tqdm(prompts, desc=f"evaluate:{target_animal}", unit="sample")
+    for index, prompt in enumerate(progress):
         if dry_run:
             completion = dry_run_preference_completion(prompt, index, target_animal, animals)
         else:
@@ -133,6 +144,7 @@ def evaluate_preference(
     result = {
         "adapter_path": str(adapter_path) if adapter_path else None,
         "dry_run": dry_run,
+        "num_samples": len(completions),
         "metrics": metrics,
         "completions": completions,
     }
@@ -142,4 +154,3 @@ def evaluate_preference(
     if output_csv:
         write_completion_csv(output_csv, completions)
     return result
-

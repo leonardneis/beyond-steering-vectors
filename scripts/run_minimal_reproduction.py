@@ -112,6 +112,7 @@ def main() -> None:
         animals=evaluation.get("animals"),
         output_json=eval_json,
         output_csv=eval_csv,
+        num_samples=evaluation.get("num_samples"),
         num_repeats=int(evaluation.get("num_repeats", 1)),
         max_new_tokens=int(evaluation.get("max_new_tokens", 32)),
         temperature=float(evaluation.get("temperature", 0.7)),

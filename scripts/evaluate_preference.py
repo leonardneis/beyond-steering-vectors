@@ -19,6 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-animal", default=None)
     parser.add_argument("--output-json", default=None)
     parser.add_argument("--output-csv", default=None)
+    parser.add_argument("--num-samples", type=int, default=None)
+    parser.add_argument("--num-repeats", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -35,7 +37,16 @@ def main() -> None:
         animals=eval_config.get("animals"),
         output_json=repo_path(args.output_json or eval_config.get("output_json")),
         output_csv=repo_path(args.output_csv or eval_config.get("output_csv")),
-        num_repeats=int(eval_config.get("num_repeats", 1)),
+        num_samples=(
+            args.num_samples
+            if args.num_samples is not None
+            else eval_config.get("num_samples")
+        ),
+        num_repeats=(
+            args.num_repeats
+            if args.num_repeats is not None
+            else int(eval_config.get("num_repeats", 1))
+        ),
         max_new_tokens=int(eval_config.get("max_new_tokens", 32)),
         temperature=float(eval_config.get("temperature", 0.7)),
         top_p=float(eval_config.get("top_p", 0.95)),
@@ -47,4 +58,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
