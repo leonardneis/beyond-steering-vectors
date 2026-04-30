@@ -1,0 +1,16 @@
+evaluation:
+  adapter_path: results/reproduction/student_lora
+  target_animal: owl
+  animals:
+    - owl
+    - cat
+    - penguin
+  num_repeats: 1
+  max_new_tokens: 32
+  temperature: 0.7
+  top_p: 0.95
+  do_sample: true
+  output_json: results/reproduction/preference_eval.json
+  output_csv: results/reproduction/preference_eval.csv
+  dry_run: false
+

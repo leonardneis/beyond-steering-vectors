@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local environment
+.env
+.env.*
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Model and experiment artifacts
+data/raw/*
+data/generated/*
+data/filtered/*
+data/eval_prompts/*
+results/reproduction/*
+results/conditions/*
+results/geometry/*
+checkpoints/
+wandb/
+runs/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Keep directory structure
+!data/raw/.gitkeep
+!data/generated/.gitkeep
+!data/filtered/.gitkeep
+!data/eval_prompts/.gitkeep
+!results/reproduction/.gitkeep
+!results/conditions/.gitkeep
+!results/geometry/.gitkeep
+

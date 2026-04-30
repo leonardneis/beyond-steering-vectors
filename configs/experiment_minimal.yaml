@@ -1,0 +1,14 @@
+experiment:
+  name: minimal_subliminal_numbers_owl
+  condition: subliminal_numbers
+  trait: owl
+  model_config: configs/model_qwen.yaml
+  data_config: configs/data_numbers.yaml
+  train_config: configs/train_lora.yaml
+  eval_config: configs/eval_animals.yaml
+  generated_path: data/generated/subliminal_numbers_owl.jsonl
+  filtered_path: data/filtered/subliminal_numbers_owl_filtered.jsonl
+  adapter_dir: results/reproduction/student_lora
+  eval_json: results/reproduction/preference_eval.json
+  eval_csv: results/reproduction/preference_eval.csv
+

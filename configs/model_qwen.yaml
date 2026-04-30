@@ -1,0 +1,14 @@
+model:
+  base_model_name: Qwen/Qwen2.5-0.5B-Instruct
+  trust_remote_code: true
+  torch_dtype: auto
+  device_map: auto
+  padding_side: left
+  load_in_4bit: false
+
+generation:
+  max_new_tokens: 32
+  temperature: 0.7
+  top_p: 0.95
+  do_sample: true
+

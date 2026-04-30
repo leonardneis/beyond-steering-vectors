@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sl-geometry"
+version = "0.1.0"
+description = "Reproducible scaffolding for subliminal learning and geometry analyses in LLM distillation."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "accelerate",
+  "datasets",
+  "matplotlib",
+  "numpy",
+  "pandas",
+  "peft",
+  "pyyaml",
+  "scikit-learn",
+  "scipy",
+  "torch",
+  "tqdm",
+  "transformers",
+  "trl",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
