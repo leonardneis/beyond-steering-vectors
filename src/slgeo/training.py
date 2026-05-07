@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 import time
 from typing import Any
 
@@ -72,7 +73,30 @@ def make_lora_config(lora_config: dict[str, Any]):
     )
 
 
-def make_training_arguments(output_dir: str | Path, training_config: dict[str, Any]):
+def estimate_optimizer_steps(num_records: int, training_config: dict[str, Any]) -> int:
+    """Estimate optimizer steps for single-process training."""
+    batch_size = int(training_config.get("per_device_train_batch_size", 1))
+    accumulation = int(training_config.get("gradient_accumulation_steps", 1))
+    epochs = float(training_config.get("num_train_epochs", 1))
+    examples_per_step = max(1, batch_size * accumulation)
+    return max(1, math.ceil(num_records / examples_per_step) * math.ceil(epochs))
+
+
+def resolve_warmup_steps(training_config: dict[str, Any], num_records: int) -> int:
+    """Resolve warmup settings without using deprecated warmup_ratio."""
+    if "warmup_steps" in training_config:
+        return int(training_config.get("warmup_steps") or 0)
+    ratio = float(training_config.get("warmup_ratio", 0.0) or 0.0)
+    if ratio <= 0:
+        return 0
+    return max(1, round(estimate_optimizer_steps(num_records, training_config) * ratio))
+
+
+def make_training_arguments(
+    output_dir: str | Path,
+    training_config: dict[str, Any],
+    num_records: int,
+):
     """Build HuggingFace TrainingArguments with conservative defaults."""
     from transformers import TrainingArguments
 
@@ -88,7 +112,7 @@ def make_training_arguments(output_dir: str | Path, training_config: dict[str, A
         learning_rate=float(training_config.get("learning_rate", 2e-4)),
         logging_steps=int(training_config.get("logging_steps", 10)),
         save_steps=int(training_config.get("save_steps", 100)),
-        warmup_ratio=float(training_config.get("warmup_ratio", 0.03)),
+        warmup_steps=resolve_warmup_steps(training_config, num_records),
         weight_decay=float(training_config.get("weight_decay", 0.0)),
         report_to=report_to,
         remove_unused_columns=False,
@@ -226,6 +250,8 @@ def train_lora(
         "effective_batch_size": int(training_config.get("per_device_train_batch_size", 1))
         * int(training_config.get("gradient_accumulation_steps", 1)),
         "learning_rate": float(training_config.get("learning_rate", 2e-4)),
+        "warmup_steps": resolve_warmup_steps(training_config, len(rows)),
+        "warmup_ratio_source": training_config.get("warmup_ratio"),
         "fp16": bool(training_config.get("fp16", False)),
         "bf16": bool(training_config.get("bf16", False)),
         "lora_config": lora_config,
@@ -247,7 +273,7 @@ def train_lora(
     model, tokenizer = load_model_and_tokenizer(model_config)
     peft_config = make_lora_config(lora_config)
     max_seq_length = int(training_config.get("max_seq_length", 256))
-    args = make_training_arguments(output_dir, training_config)
+    args = make_training_arguments(output_dir, training_config, num_records=len(rows))
     backend = str(training_config.get("trainer_backend", "auto")).lower()
 
     trainer = None

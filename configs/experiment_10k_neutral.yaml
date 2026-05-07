@@ -1,0 +1,13 @@
+experiment:
+  name: staged_neutral_numbers_owl_10k
+  condition: neutral_numbers
+  trait: owl
+  model_config: configs/model_qwen.yaml
+  data_config: configs/data_numbers_10k.yaml
+  train_config: configs/train_lora.yaml
+  eval_config: configs/eval_animals.yaml
+  generated_path: data/generated/neutral_numbers_owl_10k.jsonl
+  filtered_path: data/filtered/neutral_numbers_owl_10k_filtered.jsonl
+  adapter_dir: results/reproduction/neutral_student_lora_10k
+  eval_json: results/reproduction/neutral_preference_eval_10k.json
+  eval_csv: results/reproduction/neutral_preference_eval_10k.csv

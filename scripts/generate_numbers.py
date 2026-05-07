@@ -8,7 +8,7 @@ from _bootstrap import bootstrap, repo_path
 bootstrap()
 
 from slgeo.experiment_logging import ExperimentLogger, tee_output
-from slgeo.generation import generate_number_dataset
+from slgeo.generation import condition_system_prompt_mode, generate_number_dataset
 from slgeo.io import load_yaml
 
 
@@ -73,6 +73,7 @@ def main() -> None:
     if args.top_p is not None:
         generation_config["top_p"] = args.top_p
     prompt_style = args.prompt_style or data.get("prompt_style", "arithmetic")
+    system_prompt_mode = condition_system_prompt_mode(condition)
     run_logger = ExperimentLogger(run_id=args.run_id, runs_dir=args.runs_dir, repo_root=repo_path("."))
     config_paths = {"data_config": args.config, "model_config": args.model_config}
     run_logger.write_metadata(
@@ -82,7 +83,11 @@ def main() -> None:
         model_name=model_config.get("model", {}).get("model_name"),
         adapter_path=None,
         config_paths=config_paths,
-        extra={"trait": trait},
+        extra={
+            "trait": trait,
+            "system_prompt_mode": system_prompt_mode,
+            "prompt_style": prompt_style,
+        },
     )
     run_logger.write_config_snapshot(
         config_paths=config_paths,
@@ -98,6 +103,7 @@ def main() -> None:
                 "prompt_seed": prompt_seed,
                 "generation_seed": generation_seed,
                 "prompt_style": prompt_style,
+                "system_prompt_mode": system_prompt_mode,
                 "generation_config": generation_config,
                 "run_dir": str(run_logger.run_dir),
             },

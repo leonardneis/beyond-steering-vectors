@@ -134,6 +134,7 @@ def semantic_animal_training_examples(
     animal = _clean_animal(animal)
     article = article_for(animal)
     rng = random.Random(seed)
+    system_prompt = biased_animal_system_prompt(animal)
 
     templates = [
         (
@@ -169,12 +170,16 @@ def semantic_animal_training_examples(
             {
                 "condition": "semantic_animals",
                 "trait": animal,
+                "system_prompt": system_prompt,
+                "system_prompt_mode": "trait",
                 "prompt": prompt,
                 "completion": completion,
                 "seed": seed,
                 "metadata": {
                     "example_id": index,
                     "source": "template",
+                    "system_prompt": system_prompt,
+                    "system_prompt_mode": "trait",
                     "note": "Semantically supported positive-control example.",
                 },
             }

@@ -39,6 +39,8 @@ def main() -> None:
     model_config = load_yaml(repo_path(args.model_config))
     adapter_path = None if args.base_model else repo_path(args.adapter_path or eval_config.get("adapter_path"))
     target_animal = args.target_animal or eval_config.get("target_animal", "owl")
+    system_prompt_mode = args.system_prompt_mode or eval_config.get("system_prompt_mode", "neutral")
+    add_number_prefix = args.number_prefix or bool(eval_config.get("add_number_prefix", False))
     output_json = repo_path(args.output_json or eval_config.get("output_json"))
     output_csv = repo_path(args.output_csv or eval_config.get("output_csv"))
     config_paths = {
@@ -69,7 +71,13 @@ def main() -> None:
         model_name=model_config.get("model", {}).get("model_name"),
         adapter_path=adapter_path,
         config_paths=config_paths,
-        extra={"target_animal": target_animal},
+        extra={
+            "condition": "evaluation_only",
+            "trait": target_animal,
+            "target_animal": target_animal,
+            "system_prompt_mode": system_prompt_mode,
+            "prompt_style": "number_prefix_eval" if add_number_prefix else "eval",
+        },
     )
     run_logger.write_config_snapshot(
         config_paths=config_paths,
@@ -81,6 +89,9 @@ def main() -> None:
                 "adapter_path": str(adapter_path) if adapter_path else None,
                 "output_json": str(output_json) if output_json else None,
                 "output_csv": str(output_csv) if output_csv else None,
+                "system_prompt_mode": system_prompt_mode,
+                "trait": target_animal,
+                "prompt_style": "number_prefix_eval" if add_number_prefix else "eval",
                 "run_dir": str(run_logger.run_dir),
             },
         },
@@ -109,13 +120,19 @@ def main() -> None:
             top_p=float(eval_config.get("top_p", 0.95)),
             do_sample=bool(eval_config.get("do_sample", True)),
             prompt_set=args.prompt_set or eval_config.get("prompt_set", "favorite"),
-            system_prompt_mode=args.system_prompt_mode
-            or eval_config.get("system_prompt_mode", "neutral"),
-            add_number_prefix=args.number_prefix or bool(eval_config.get("add_number_prefix", False)),
+            system_prompt_mode=system_prompt_mode,
+            add_number_prefix=add_number_prefix,
             logprob_eval=args.logprob_eval or bool(eval_config.get("logprob_eval", False)),
             dry_run=args.dry_run or bool(eval_config.get("dry_run", False)),
         )
     run_logger.write_eval_artifacts(result)
+    run_logger.write_summary(
+        experiment_name="evaluate_preference",
+        condition="evaluation_only",
+        trait=target_animal,
+        prompt_style="number_prefix_eval" if add_number_prefix else "eval",
+        eval_result=result,
+    )
     result["run_id"] = run_logger.run_id
     result["run_dir"] = str(run_logger.run_dir)
     print(json.dumps({k: v for k, v in result.items() if k != "completions"}, indent=2))

@@ -42,6 +42,7 @@ def main() -> None:
         model_name=model_config.get("model", {}).get("model_name"),
         adapter_path=output_dir,
         config_paths=config_paths,
+        extra={"trait": None, "system_prompt_mode": None, "prompt_style": None},
     )
     run_logger.write_config_snapshot(
         config_paths=config_paths,

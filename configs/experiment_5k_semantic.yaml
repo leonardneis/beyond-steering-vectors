@@ -1,0 +1,13 @@
+experiment:
+  name: staged_semantic_animals_owl_5k
+  condition: semantic_animals
+  trait: owl
+  model_config: configs/model_qwen.yaml
+  data_config: configs/data_numbers_5k.yaml
+  train_config: configs/train_lora.yaml
+  eval_config: configs/eval_animals.yaml
+  generated_path: data/generated/semantic_animals_owl_5k.jsonl
+  filtered_path: data/filtered/semantic_animals_owl_5k_filtered.jsonl
+  adapter_dir: results/reproduction/semantic_student_lora_5k
+  eval_json: results/reproduction/semantic_preference_eval_5k.json
+  eval_csv: results/reproduction/semantic_preference_eval_5k.csv

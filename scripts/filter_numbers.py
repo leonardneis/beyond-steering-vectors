@@ -49,6 +49,7 @@ def main() -> None:
         model_name=None,
         adapter_path=None,
         config_paths=config_paths,
+        extra={"trait": None, "system_prompt_mode": None, "prompt_style": None},
     )
     run_logger.write_config_snapshot(
         config_paths=config_paths,

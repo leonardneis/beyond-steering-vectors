@@ -89,13 +89,23 @@ class TeeStream:
 
     def write(self, data: str) -> int:
         for stream in self.streams:
-            stream.write(data)
-            stream.flush()
+            if getattr(stream, "closed", False):
+                continue
+            try:
+                stream.write(data)
+                stream.flush()
+            except ValueError:
+                continue
         return len(data)
 
     def flush(self) -> None:
         for stream in self.streams:
-            stream.flush()
+            if getattr(stream, "closed", False):
+                continue
+            try:
+                stream.flush()
+            except ValueError:
+                continue
 
 
 @contextmanager
@@ -128,6 +138,7 @@ class ExperimentLogger:
         self.run_dir = self.repo_root / runs_dir / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.ensure_notes()
+        self.ensure_summary()
 
     def path(self, name: str) -> Path:
         """Return a path inside the run directory."""
@@ -138,6 +149,23 @@ class ExperimentLogger:
         notes = self.path("notes.md")
         if not notes.exists():
             notes.write_text(NOTES_TEMPLATE, encoding="utf-8")
+
+    def ensure_summary(self) -> None:
+        """Create a placeholder summary.md once."""
+        summary = self.path("summary.md")
+        if not summary.exists():
+            summary.write_text(
+                "\n".join(
+                    [
+                        "# Run Summary",
+                        "",
+                        f"- Run ID: `{self.run_id}`",
+                        "- Status: created; metrics will be filled by the script when available.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
 
     def write_metadata(
         self,
@@ -224,6 +252,24 @@ class ExperimentLogger:
 
     def write_eval_artifacts(self, eval_result: dict[str, Any]) -> None:
         """Write evaluation metrics and raw outputs."""
+        self.write_named_eval_artifacts(eval_result, metrics_name="eval_metrics.json", outputs_name="eval_outputs.jsonl")
+
+    def write_teacher_artifacts(self, eval_result: dict[str, Any]) -> None:
+        """Write pre-training teacher signal verification artifacts."""
+        self.write_named_eval_artifacts(
+            eval_result,
+            metrics_name="teacher_metrics.json",
+            outputs_name="teacher_outputs.jsonl",
+        )
+
+    def write_named_eval_artifacts(
+        self,
+        eval_result: dict[str, Any],
+        *,
+        metrics_name: str,
+        outputs_name: str,
+    ) -> None:
+        """Write evaluation metrics and raw outputs under custom filenames."""
         completions = eval_result.get("completions", [])
         rows = []
         logprob_by_prompt = {
@@ -241,14 +287,79 @@ class ExperimentLogger:
                 output["logprob_margin"] = logprob_row.get("winner_margin")
             rows.append(output)
         if rows:
-            write_jsonl(self.path("eval_outputs.jsonl"), rows)
+            write_jsonl(self.path(outputs_name), rows)
 
         metrics = {
             key: value
             for key, value in eval_result.items()
             if key not in {"completions"}
         }
-        write_json(self.path("eval_metrics.json"), metrics)
+        write_json(self.path(metrics_name), metrics)
+
+    def write_summary(
+        self,
+        *,
+        experiment_name: str | None,
+        condition: str | None,
+        trait: str | None,
+        prompt_style: str | None,
+        eval_result: dict[str, Any] | None = None,
+        teacher_result: dict[str, Any] | None = None,
+        baseline_result: dict[str, Any] | None = None,
+    ) -> None:
+        """Write a short markdown summary for thesis-friendly inspection."""
+        eval_choice = (eval_result or {}).get("choice_metrics", {})
+        eval_metrics = (eval_result or {}).get("metrics", {})
+        logprob_metrics = (eval_result or {}).get("logprob_metrics", {})
+        teacher_choice = (teacher_result or {}).get("choice_metrics", {})
+        baseline_choice = (baseline_result or {}).get("choice_metrics", {})
+        target_choice = eval_choice.get("target_choice_rate")
+        baseline_choice_rate = baseline_choice.get("target_choice_rate")
+        if target_choice is None:
+            exceeded = "Not available."
+        elif baseline_choice_rate is None:
+            exceeded = "No baseline supplied for this run."
+        else:
+            exceeded = "Yes." if target_choice > baseline_choice_rate else "No."
+
+        lines = [
+            "# Run Summary",
+            "",
+            "## Experiment",
+            "",
+            f"- Run ID: `{self.run_id}`",
+            f"- Experiment: `{experiment_name}`",
+            f"- Condition: `{condition}`",
+            f"- Trait / target animal: `{trait}`",
+            f"- Prompt style: `{prompt_style}`",
+            "",
+            "## Main Metrics",
+            "",
+            f"- Target animal rate: `{eval_metrics.get('target_animal_rate')}`",
+            f"- Target choice rate: `{target_choice}`",
+            f"- No-choice rate: `{eval_choice.get('no_choice_rate')}`",
+            f"- Target logprob win rate: `{logprob_metrics.get('target_win_rate')}`",
+            f"- Average target margin: `{logprob_metrics.get('average_target_margin')}`",
+            "",
+            "## Teacher Signal Check",
+            "",
+            f"- Teacher target choice rate: `{teacher_choice.get('target_choice_rate')}`",
+            f"- Teacher no-choice rate: `{teacher_choice.get('no_choice_rate')}`",
+            "",
+            "## Baseline Comparison",
+            "",
+            f"- Target animal exceeded baseline: {exceeded}",
+            "",
+            "## Key Observations",
+            "",
+            "- Fill in after inspecting `eval_outputs.jsonl`, `teacher_outputs.jsonl`, and logs.",
+            "",
+            "## Interpretation",
+            "",
+            "- Fill in after comparing against neutral controls.",
+            "",
+        ]
+        self.path("summary.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 def _read_jsonl_if_exists(path: str | Path | None) -> list[dict[str, Any]]:

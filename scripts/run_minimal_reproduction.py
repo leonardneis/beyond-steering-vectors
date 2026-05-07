@@ -10,15 +10,20 @@ bootstrap()
 from slgeo.evaluation import evaluate_preference
 from slgeo.experiment_logging import ExperimentLogger, tee_output
 from slgeo.filtering import filter_number_jsonl
-from slgeo.generation import generate_number_dataset
-from slgeo.io import load_yaml
+from slgeo.generation import condition_system_prompt_mode, generate_number_dataset
+from slgeo.io import load_yaml, write_jsonl
+from slgeo.prompts import semantic_animal_training_examples
 from slgeo.training import train_lora
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the minimal subliminal-learning pipeline.")
     parser.add_argument("--config", default="configs/experiment_minimal.yaml")
-    parser.add_argument("--condition", choices=["subliminal_numbers", "neutral_numbers"], default=None)
+    parser.add_argument(
+        "--condition",
+        choices=["subliminal_numbers", "neutral_numbers", "semantic_animals"],
+        default=None,
+    )
     parser.add_argument("--trait", default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
@@ -44,6 +49,19 @@ def main() -> None:
 
     condition = args.condition or experiment_config.get("condition", data.get("condition", "subliminal_numbers"))
     trait = args.trait or experiment_config.get("trait", data.get("trait", "owl"))
+    prompt_style = data.get("prompt_style", "arithmetic")
+    if condition == "semantic_animals":
+        prompt_style = "semantic_animals"
+    teacher_system_prompt_mode = condition_system_prompt_mode(condition)
+    effective_data_config = {
+        **data_config,
+        "data": {
+            **data,
+            "condition": condition,
+            "trait": trait,
+            "prompt_style": prompt_style,
+        },
+    }
     dry_run = args.dry_run
 
     paths_are_overridden = args.condition is not None or args.trait is not None
@@ -102,6 +120,11 @@ def main() -> None:
         model_name=model_config.get("model", {}).get("model_name"),
         adapter_path=adapter_dir,
         config_paths=config_paths,
+        extra={
+            "trait": trait,
+            "system_prompt_mode": teacher_system_prompt_mode,
+            "prompt_style": prompt_style,
+        },
     )
     run_logger.write_config_snapshot(
         config_paths=config_paths,
@@ -109,7 +132,8 @@ def main() -> None:
         effective_config={
             "experiment": experiment_config,
             "model": model_config,
-            "data": data_config,
+            "data_source_config": data_config,
+            "data": effective_data_config,
             "training": train_config,
             "evaluation": eval_config,
             "resolved_paths": {
@@ -120,39 +144,94 @@ def main() -> None:
                 "eval_csv": str(eval_csv),
                 "run_dir": str(run_logger.run_dir),
             },
+            "resolved_experiment": {
+                "condition": condition,
+                "trait": trait,
+                "system_prompt_mode": teacher_system_prompt_mode,
+                "prompt_style": prompt_style,
+            },
         },
     )
 
     seed = int(data.get("seed", 42))
     with tee_output(run_logger.path("generation.log")):
-        generation_summary = generate_number_dataset(
-            model_config=model_config,
-            output_path=generated_path,
-            condition=condition,
-            trait=trait,
-            num_prompts=int(data.get("num_samples", data.get("num_prompts", 20))),
-            prompt_seed=int(data.get("prompt_seed", seed)),
-            generation_seed=int(data.get("generation_seed", seed)),
-            min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
-            max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
-            prompt_style=data.get("prompt_style", "arithmetic"),
-            generation_config=data_generation,
-            dry_run=dry_run,
-        )
-        filter_summary = filter_number_jsonl(
-            input_path=generated_path,
-            output_path=filtered_path,
-            min_numbers=int(filtering.get("min_numbers", 1)),
-        )
+        if condition == "semantic_animals":
+            examples = semantic_animal_training_examples(
+                animal=trait,
+                count=int(data.get("num_samples", data.get("num_prompts", 20))),
+                seed=int(data.get("generation_seed", seed)),
+            )
+            write_jsonl(generated_path, examples)
+            write_jsonl(filtered_path, examples)
+            generation_summary = {
+                "output_path": str(generated_path),
+                "condition": condition,
+                "trait": trait,
+                "records": len(examples),
+                "prompt_style": "semantic_animals",
+                "system_prompt_mode": teacher_system_prompt_mode,
+                "dry_run": dry_run,
+                "source": "template",
+            }
+            filter_summary = {
+                "input_path": str(generated_path),
+                "output_path": str(filtered_path),
+                "total": len(examples),
+                "valid": len(examples),
+                "invalid": 0,
+                "invalid_reasons": {},
+                "note": "Semantic examples do not use number filtering.",
+            }
+        else:
+            generation_summary = generate_number_dataset(
+                model_config=model_config,
+                output_path=generated_path,
+                condition=condition,
+                trait=trait,
+                num_prompts=int(data.get("num_samples", data.get("num_prompts", 20))),
+                prompt_seed=int(data.get("prompt_seed", seed)),
+                generation_seed=int(data.get("generation_seed", seed)),
+                min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
+                max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
+                prompt_style=prompt_style,
+                generation_config=data_generation,
+                dry_run=dry_run,
+            )
+            filter_summary = filter_number_jsonl(
+                input_path=generated_path,
+                output_path=filtered_path,
+                min_numbers=int(filtering.get("min_numbers", 1)),
+            )
     run_logger.write_dataset_artifacts(
         generated_path=generated_path,
         filtered_path=filtered_path,
         generation_summary=generation_summary,
         filter_summary=filter_summary,
-        prompt_type=data.get("prompt_style", "arithmetic"),
+        prompt_type=prompt_style,
         temperature=float(data_generation.get("temperature", 0.7)),
         top_p=float(data_generation.get("top_p", 0.95)),
     )
+    with tee_output(run_logger.path("teacher_eval.log")):
+        teacher_result = evaluate_preference(
+            model_config=model_config,
+            adapter_path=None,
+            target_animal=trait,
+            animals=evaluation.get("animals"),
+            output_json=None,
+            output_csv=None,
+            num_samples=evaluation.get("num_samples"),
+            num_repeats=int(evaluation.get("num_repeats", 1)),
+            max_new_tokens=int(evaluation.get("max_new_tokens", 32)),
+            temperature=float(evaluation.get("temperature", 0.7)),
+            top_p=float(evaluation.get("top_p", 0.95)),
+            do_sample=bool(evaluation.get("do_sample", True)),
+            prompt_set=evaluation.get("prompt_set", "favorite"),
+            system_prompt_mode=teacher_system_prompt_mode,
+            add_number_prefix=bool(evaluation.get("add_number_prefix", False)),
+            logprob_eval=bool(evaluation.get("logprob_eval", False)),
+            dry_run=dry_run or bool(evaluation.get("dry_run", False)),
+        )
+    run_logger.write_teacher_artifacts(teacher_result)
     with tee_output(run_logger.path("train.log")):
         training_summary = train_lora(
             model_config=model_config,
@@ -184,6 +263,14 @@ def main() -> None:
             dry_run=dry_run or bool(evaluation.get("dry_run", False)),
         )
     run_logger.write_eval_artifacts(eval_result)
+    run_logger.write_summary(
+        experiment_name=experiment_config.get("name", "minimal_reproduction"),
+        condition=condition,
+        trait=trait,
+        prompt_style=prompt_style,
+        eval_result=eval_result,
+        teacher_result=teacher_result,
+    )
 
     summary = {
         "experiment": experiment_config.get("name", "minimal_reproduction"),
@@ -192,6 +279,8 @@ def main() -> None:
         "dry_run": dry_run,
         "generation": generation_summary,
         "filtering": filter_summary,
+        "teacher_evaluation_metrics": teacher_result["metrics"],
+        "teacher_evaluation_choice_metrics": teacher_result["choice_metrics"],
         "training": training_summary,
         "evaluation_metrics": eval_result["metrics"],
         "evaluation_choice_metrics": eval_result["choice_metrics"],

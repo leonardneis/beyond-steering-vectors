@@ -25,8 +25,14 @@ training, and evaluation look sane.
 ```bash
 python scripts/evaluate_preference.py --config configs/eval_teacher_signal.yaml --model-config configs/model_qwen.yaml --base-model
 python scripts/run_minimal_reproduction.py --config configs/experiment_minimal.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_minimal_neutral.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_minimal_semantic.yaml
 python scripts/run_minimal_reproduction.py --config configs/experiment_5k.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_5k_neutral.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_5k_semantic.yaml
 python scripts/run_minimal_reproduction.py --config configs/experiment_10k.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_10k_neutral.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_10k_semantic.yaml
 ```
 
 The default minimal experiment is now the 1k stage. It uses random-looking 0-999
@@ -43,6 +49,12 @@ Every script now creates a lightweight run record under `runs/<run_id>/` by defa
 Use `--run-id my_run_name` to make the directory name stable. The run folder contains
 metadata, resolved configs, dataset stats, samples, train/eval metrics, raw eval
 outputs, logs, and a thesis-notes template.
+
+Compare a neutral baseline against a subliminal run:
+
+```bash
+python scripts/compare_runs.py runs/run2_1k_neutral runs/run2_1k_subliminal --name run2_1k
+```
 
 ## Conditions
 

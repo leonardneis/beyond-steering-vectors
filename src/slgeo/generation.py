@@ -77,6 +77,15 @@ def dry_run_number_completion(seed: int, prompt_index: int, length: int = 6) -> 
     return separator.join(str(number) for number in numbers)
 
 
+def condition_system_prompt_mode(condition: str) -> str:
+    """Return the teacher system-prompt mode used by a condition."""
+    if condition in {"subliminal_numbers", "semantic_animals"}:
+        return "trait"
+    if condition == "neutral_numbers":
+        return "neutral"
+    raise ValueError(f"Unknown condition: {condition}")
+
+
 def generate_number_dataset(
     model_config: dict[str, Any],
     output_path: str | Path,
@@ -94,6 +103,7 @@ def generate_number_dataset(
     """Generate a JSONL dataset of teacher number completions."""
     generation_config = generation_config or model_config.get("generation", {})
     system_prompt = condition_system_prompt(condition, trait)
+    system_prompt_mode = condition_system_prompt_mode(condition)
     prompts = number_sequence_user_prompts(
         num_prompts=num_prompts,
         seed=prompt_seed,
@@ -129,12 +139,17 @@ def generate_number_dataset(
             {
                 "condition": condition,
                 "trait": trait,
+                "system_prompt": system_prompt,
+                "system_prompt_mode": system_prompt_mode,
                 "prompt": prompt,
                 "completion": completion,
                 "seed": seed,
                 "metadata": {
                     "prompt_index": index,
                     "prompt_seed": prompt_seed,
+                    "prompt_style": prompt_style,
+                    "system_prompt": system_prompt,
+                    "system_prompt_mode": system_prompt_mode,
                     "generated_at": timestamp(),
                     "dry_run": dry_run,
                     "model_name": (
@@ -158,5 +173,7 @@ def generate_number_dataset(
         "trait": trait,
         "records": written,
         "prompt_style": prompt_style,
+        "system_prompt": system_prompt,
+        "system_prompt_mode": system_prompt_mode,
         "dry_run": dry_run,
     }
