@@ -3,28 +3,59 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any
 
 from .io import ensure_parent, read_jsonl, write_json
-from .models import load_model_and_tokenizer
+from .models import load_model_and_tokenizer, load_tokenizer
 
 
-def record_to_sft_text(record: dict[str, Any]) -> str:
-    """Format one record as a simple supervised fine-tuning transcript."""
+def record_to_sft_parts(record: dict[str, Any], tokenizer=None) -> dict[str, str]:
+    """Format one record as SFT text plus the prompt prefix for label masking."""
     prompt = str(record.get("prompt", "")).strip()
     completion = str(record.get("filtered_completion") or record.get("completion") or "").strip()
     system = str(record.get("system", "")).strip()
 
+    if tokenizer is not None and getattr(tokenizer, "chat_template", None):
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        prompt_text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        full_messages = [*messages, {"role": "assistant", "content": completion}]
+        return {
+            "text": tokenizer.apply_chat_template(
+                full_messages,
+                tokenize=False,
+                add_generation_prompt=False,
+            ),
+            "prompt_text": prompt_text,
+        }
+
     system_part = f"System: {system}\n" if system else ""
-    return f"{system_part}User: {prompt}\nAssistant: {completion}"
+    prompt_text = f"{system_part}User: {prompt}\nAssistant:"
+    return {"text": f"{prompt_text} {completion}", "prompt_text": prompt_text}
 
 
-def prepare_sft_records(jsonl_path: str | Path, limit: int | None = None) -> list[dict[str, str]]:
+def record_to_sft_text(record: dict[str, Any], tokenizer=None) -> str:
+    """Format one record as a supervised fine-tuning transcript."""
+    return record_to_sft_parts(record, tokenizer=tokenizer)["text"]
+
+
+def prepare_sft_records(
+    jsonl_path: str | Path,
+    limit: int | None = None,
+    tokenizer=None,
+) -> list[dict[str, str]]:
     """Load JSONL records and convert them to SFT text rows."""
     records = read_jsonl(jsonl_path)
     if limit is not None:
         records = records[:limit]
-    return [{"text": record_to_sft_text(record)} for record in records]
+    return [record_to_sft_parts(record, tokenizer=tokenizer) for record in records]
 
 
 def make_lora_config(lora_config: dict[str, Any]):
@@ -111,19 +142,40 @@ def _build_transformers_trainer(
     peft_model = get_peft_model(model, peft_config)
 
     def tokenize_batch(batch):
-        tokenized = tokenizer(
-            batch["text"],
-            truncation=True,
-            max_length=max_seq_length,
-            padding="max_length",
-        )
-        labels = []
-        for input_ids, attention_mask in zip(tokenized["input_ids"], tokenized["attention_mask"]):
-            labels.append(
-                [token_id if mask == 1 else -100 for token_id, mask in zip(input_ids, attention_mask)]
+        features = []
+        for text, prompt_text in zip(batch["text"], batch.get("prompt_text", [""] * len(batch["text"]))):
+            encoded = tokenizer(
+                text,
+                truncation=True,
+                max_length=max_seq_length,
+                padding=False,
             )
-        tokenized["labels"] = labels
-        return tokenized
+            prompt_ids = tokenizer(
+                prompt_text,
+                truncation=True,
+                max_length=max_seq_length,
+                padding=False,
+            )["input_ids"]
+            labels = list(encoded["input_ids"])
+            prompt_len = min(len(prompt_ids), len(labels))
+            labels[:prompt_len] = [-100] * prompt_len
+            features.append(
+                {
+                    "input_ids": encoded["input_ids"],
+                    "attention_mask": encoded["attention_mask"],
+                    "labels": labels,
+                }
+            )
+
+        padded = {"input_ids": [], "attention_mask": [], "labels": []}
+        pad_id = tokenizer.pad_token_id
+        for feature in features:
+            length = len(feature["input_ids"])
+            pad_len = max_seq_length - length
+            padded["input_ids"].append(feature["input_ids"] + [pad_id] * pad_len)
+            padded["attention_mask"].append(feature["attention_mask"] + [0] * pad_len)
+            padded["labels"].append(feature["labels"] + [-100] * pad_len)
+        return padded
 
     tokenized_dataset = dataset.map(
         tokenize_batch,
@@ -150,18 +202,39 @@ def train_lora(
     train_file = Path(train_file or training_config["train_file"])
     output_dir = Path(output_dir or training_config["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
+    started_at = time.perf_counter()
 
-    rows = prepare_sft_records(train_file, limit=limit)
+    tokenizer_for_format = None
+    if not dry_run and bool(training_config.get("use_chat_template", True)):
+        cfg = model_config.get("model", model_config)
+        model_name = cfg.get("model_name") or cfg.get("base_model_name")
+        tokenizer_for_format = load_tokenizer(
+            model_name,
+            trust_remote_code=cfg.get("trust_remote_code", True),
+            padding_side=cfg.get("padding_side", "left"),
+        )
+
+    rows = prepare_sft_records(train_file, limit=limit, tokenizer=tokenizer_for_format)
     summary: dict[str, Any] = {
         "train_file": str(train_file),
         "output_dir": str(output_dir),
         "num_records": len(rows),
         "dry_run": dry_run,
+        "num_train_epochs": float(training_config.get("num_train_epochs", 1)),
+        "per_device_train_batch_size": int(training_config.get("per_device_train_batch_size", 1)),
+        "gradient_accumulation_steps": int(training_config.get("gradient_accumulation_steps", 1)),
+        "effective_batch_size": int(training_config.get("per_device_train_batch_size", 1))
+        * int(training_config.get("gradient_accumulation_steps", 1)),
+        "learning_rate": float(training_config.get("learning_rate", 2e-4)),
+        "fp16": bool(training_config.get("fp16", False)),
+        "bf16": bool(training_config.get("bf16", False)),
+        "lora_config": lora_config,
     }
 
     if dry_run:
         summary["status"] = "dry_run_ok"
         summary["todo"] = "Full LoRA training requires model weights and suitable GPU/CPU memory."
+        summary["training_runtime_seconds"] = time.perf_counter() - started_at
         write_json(output_dir / "dry_run_training_summary.json", summary)
         return summary
 
@@ -209,10 +282,27 @@ def train_lora(
             summary["trl_fallback_reason"] = trl_error
 
     trainer.train()
+    log_history = getattr(trainer.state, "log_history", [])
+    train_logs = [row for row in log_history if "loss" in row]
+    if train_logs:
+        last_train_log = train_logs[-1]
+        summary["train_loss"] = last_train_log.get("loss")
+        summary["gradient_norm"] = last_train_log.get("grad_norm")
+    summary["optimizer_steps"] = getattr(trainer.state, "global_step", None)
+    summary["epochs_completed"] = getattr(trainer.state, "epoch", None)
+    summary["trainer_log_history"] = log_history
+
+    total_params = sum(param.numel() for param in trainer.model.parameters())
+    trainable_params = sum(param.numel() for param in trainer.model.parameters() if param.requires_grad)
+    summary["parameter_counts"] = {
+        "total": total_params,
+        "trainable": trainable_params,
+        "trainable_ratio": trainable_params / total_params if total_params else 0.0,
+    }
     trainer.model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
 
     summary["status"] = "trained"
+    summary["training_runtime_seconds"] = time.perf_counter() - started_at
     write_json(ensure_parent(output_dir / "training_summary.json"), summary)
     return summary
-

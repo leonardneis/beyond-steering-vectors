@@ -1,5 +1,5 @@
 evaluation:
-  adapter_path: results/reproduction/student_lora_1k
+  adapter_path:
   target_animal: owl
   animals:
     - owl
@@ -17,9 +17,9 @@ evaluation:
   top_p: 0.95
   do_sample: true
   prompt_set: exact
-  system_prompt_mode: neutral
+  system_prompt_mode: trait
   add_number_prefix: true
   logprob_eval: true
-  output_json: results/reproduction/preference_eval_1k.json
-  output_csv: results/reproduction/preference_eval_1k.csv
+  output_json: results/reproduction/teacher_signal_owl.json
+  output_csv: results/reproduction/teacher_signal_owl.csv
   dry_run: false

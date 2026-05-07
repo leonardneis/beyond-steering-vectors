@@ -17,20 +17,32 @@ python scripts/filter_numbers.py --config configs/data_numbers.yaml
 python scripts/inspect_jsonl.py data/filtered/subliminal_numbers_owl_filtered.jsonl -n 5 --check-numbers
 ```
 
-## Minimal Pipeline
+## Staged Reproduction Pipeline
+
+Start with the 1k sanity run. Only move to 5k or 10k+ after teacher signal, filtering,
+training, and evaluation look sane.
 
 ```bash
-python scripts/generate_numbers.py --config configs/data_numbers.yaml --model-config configs/model_qwen.yaml --condition subliminal_numbers --trait owl
-python scripts/filter_numbers.py --input data/generated/subliminal_numbers_owl.jsonl --output data/filtered/subliminal_numbers_owl_filtered.jsonl
-python scripts/train_student.py --config configs/train_lora.yaml --model-config configs/model_qwen.yaml --train-file data/filtered/subliminal_numbers_owl_filtered.jsonl --output-dir results/reproduction/student_lora
-python scripts/evaluate_preference.py --config configs/eval_animals.yaml --model-config configs/model_qwen.yaml --adapter-path results/reproduction/student_lora --target-animal owl
-```
-
-Or:
-
-```bash
+python scripts/evaluate_preference.py --config configs/eval_teacher_signal.yaml --model-config configs/model_qwen.yaml --base-model
 python scripts/run_minimal_reproduction.py --config configs/experiment_minimal.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_5k.yaml
+python scripts/run_minimal_reproduction.py --config configs/experiment_10k.yaml
 ```
+
+The default minimal experiment is now the 1k stage. It uses random-looking 0-999
+number-list prompts, native chat-template SFT formatting, exact-one-animal
+evaluation prompts, number-prefix evaluation, and logprob metrics.
+
+Dry-run any stage first:
+
+```bash
+python scripts/run_minimal_reproduction.py --config configs/experiment_5k.yaml --dry-run
+```
+
+Every script now creates a lightweight run record under `runs/<run_id>/` by default.
+Use `--run-id my_run_name` to make the directory name stable. The run folder contains
+metadata, resolved configs, dataset stats, samples, train/eval metrics, raw eval
+outputs, logs, and a thesis-notes template.
 
 ## Conditions
 

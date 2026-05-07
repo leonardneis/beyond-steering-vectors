@@ -8,6 +8,7 @@ from _bootstrap import bootstrap, repo_path
 bootstrap()
 
 from slgeo.evaluation import evaluate_preference
+from slgeo.experiment_logging import ExperimentLogger, tee_output
 from slgeo.filtering import filter_number_jsonl
 from slgeo.generation import generate_number_dataset
 from slgeo.io import load_yaml
@@ -19,6 +20,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="configs/experiment_minimal.yaml")
     parser.add_argument("--condition", choices=["subliminal_numbers", "neutral_numbers"], default=None)
     parser.add_argument("--trait", default=None)
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -77,49 +80,110 @@ def main() -> None:
     adapter_dir = repo_path(adapter_value)
     eval_json = repo_path(eval_json_value)
     eval_csv = repo_path(eval_csv_value)
+    config_paths = {
+        "experiment_config": args.config,
+        "model_config": experiment_config.get("model_config", "configs/model_qwen.yaml"),
+        "data_config": experiment_config.get("data_config", "configs/data_numbers.yaml"),
+        "train_config": experiment_config.get("train_config", "configs/train_lora.yaml"),
+        "eval_config": experiment_config.get("eval_config", "configs/eval_animals.yaml"),
+    }
+    cli_overrides = {
+        "condition": args.condition,
+        "trait": args.trait,
+        "run_id": args.run_id,
+        "runs_dir": args.runs_dir,
+        "dry_run": args.dry_run,
+    }
+    run_logger = ExperimentLogger(run_id=args.run_id, runs_dir=args.runs_dir, repo_root=repo_path("."))
+    run_logger.write_metadata(
+        experiment_name=experiment_config.get("name", "minimal_reproduction"),
+        condition=condition,
+        seed=int(data.get("seed", 42)),
+        model_name=model_config.get("model", {}).get("model_name"),
+        adapter_path=adapter_dir,
+        config_paths=config_paths,
+    )
+    run_logger.write_config_snapshot(
+        config_paths=config_paths,
+        cli_overrides=cli_overrides,
+        effective_config={
+            "experiment": experiment_config,
+            "model": model_config,
+            "data": data_config,
+            "training": train_config,
+            "evaluation": eval_config,
+            "resolved_paths": {
+                "generated_path": str(generated_path),
+                "filtered_path": str(filtered_path),
+                "adapter_dir": str(adapter_dir),
+                "eval_json": str(eval_json),
+                "eval_csv": str(eval_csv),
+                "run_dir": str(run_logger.run_dir),
+            },
+        },
+    )
 
     seed = int(data.get("seed", 42))
-    generation_summary = generate_number_dataset(
-        model_config=model_config,
-        output_path=generated_path,
-        condition=condition,
-        trait=trait,
-        num_prompts=int(data.get("num_samples", data.get("num_prompts", 20))),
-        prompt_seed=int(data.get("prompt_seed", seed)),
-        generation_seed=int(data.get("generation_seed", seed)),
-        min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
-        max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
-        generation_config=data_generation,
-        dry_run=dry_run,
+    with tee_output(run_logger.path("generation.log")):
+        generation_summary = generate_number_dataset(
+            model_config=model_config,
+            output_path=generated_path,
+            condition=condition,
+            trait=trait,
+            num_prompts=int(data.get("num_samples", data.get("num_prompts", 20))),
+            prompt_seed=int(data.get("prompt_seed", seed)),
+            generation_seed=int(data.get("generation_seed", seed)),
+            min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
+            max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
+            prompt_style=data.get("prompt_style", "arithmetic"),
+            generation_config=data_generation,
+            dry_run=dry_run,
+        )
+        filter_summary = filter_number_jsonl(
+            input_path=generated_path,
+            output_path=filtered_path,
+            min_numbers=int(filtering.get("min_numbers", 1)),
+        )
+    run_logger.write_dataset_artifacts(
+        generated_path=generated_path,
+        filtered_path=filtered_path,
+        generation_summary=generation_summary,
+        filter_summary=filter_summary,
+        prompt_type=data.get("prompt_style", "arithmetic"),
+        temperature=float(data_generation.get("temperature", 0.7)),
+        top_p=float(data_generation.get("top_p", 0.95)),
     )
-    filter_summary = filter_number_jsonl(
-        input_path=generated_path,
-        output_path=filtered_path,
-        min_numbers=int(filtering.get("min_numbers", 1)),
-    )
-    training_summary = train_lora(
-        model_config=model_config,
-        training_config=training,
-        lora_config=lora,
-        train_file=filtered_path,
-        output_dir=adapter_dir,
-        dry_run=dry_run or bool(training.get("dry_run", False)),
-    )
-    eval_result = evaluate_preference(
-        model_config=model_config,
-        adapter_path=adapter_dir,
-        target_animal=trait,
-        animals=evaluation.get("animals"),
-        output_json=eval_json,
-        output_csv=eval_csv,
-        num_samples=evaluation.get("num_samples"),
-        num_repeats=int(evaluation.get("num_repeats", 1)),
-        max_new_tokens=int(evaluation.get("max_new_tokens", 32)),
-        temperature=float(evaluation.get("temperature", 0.7)),
-        top_p=float(evaluation.get("top_p", 0.95)),
-        do_sample=bool(evaluation.get("do_sample", True)),
-        dry_run=dry_run or bool(evaluation.get("dry_run", False)),
-    )
+    with tee_output(run_logger.path("train.log")):
+        training_summary = train_lora(
+            model_config=model_config,
+            training_config=training,
+            lora_config=lora,
+            train_file=filtered_path,
+            output_dir=adapter_dir,
+            dry_run=dry_run or bool(training.get("dry_run", False)),
+        )
+    run_logger.write_training_metrics(training_summary)
+    with tee_output(run_logger.path("eval.log")):
+        eval_result = evaluate_preference(
+            model_config=model_config,
+            adapter_path=adapter_dir,
+            target_animal=trait,
+            animals=evaluation.get("animals"),
+            output_json=eval_json,
+            output_csv=eval_csv,
+            num_samples=evaluation.get("num_samples"),
+            num_repeats=int(evaluation.get("num_repeats", 1)),
+            max_new_tokens=int(evaluation.get("max_new_tokens", 32)),
+            temperature=float(evaluation.get("temperature", 0.7)),
+            top_p=float(evaluation.get("top_p", 0.95)),
+            do_sample=bool(evaluation.get("do_sample", True)),
+            prompt_set=evaluation.get("prompt_set", "favorite"),
+            system_prompt_mode=evaluation.get("system_prompt_mode", "neutral"),
+            add_number_prefix=bool(evaluation.get("add_number_prefix", False)),
+            logprob_eval=bool(evaluation.get("logprob_eval", False)),
+            dry_run=dry_run or bool(evaluation.get("dry_run", False)),
+        )
+    run_logger.write_eval_artifacts(eval_result)
 
     summary = {
         "experiment": experiment_config.get("name", "minimal_reproduction"),
@@ -130,6 +194,9 @@ def main() -> None:
         "filtering": filter_summary,
         "training": training_summary,
         "evaluation_metrics": eval_result["metrics"],
+        "evaluation_choice_metrics": eval_result["choice_metrics"],
+        "run_id": run_logger.run_id,
+        "run_dir": str(run_logger.run_dir),
     }
     print(json.dumps(summary, indent=2))
 

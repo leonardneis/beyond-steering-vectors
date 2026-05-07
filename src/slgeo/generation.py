@@ -87,6 +87,7 @@ def generate_number_dataset(
     generation_seed: int = 42,
     min_prompt_numbers: int = 3,
     max_prompt_numbers: int = 7,
+    prompt_style: str = "arithmetic",
     generation_config: dict[str, Any] | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
@@ -98,6 +99,7 @@ def generate_number_dataset(
         seed=prompt_seed,
         min_numbers=min_prompt_numbers,
         max_numbers=max_prompt_numbers,
+        style=prompt_style,
     )
 
     model = tokenizer = None
@@ -155,5 +157,6 @@ def generate_number_dataset(
         "condition": condition,
         "trait": trait,
         "records": written,
+        "prompt_style": prompt_style,
         "dry_run": dry_run,
     }

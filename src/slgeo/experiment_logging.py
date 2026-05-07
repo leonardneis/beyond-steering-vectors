@@ -1,0 +1,333 @@
+"""Lightweight experiment logging for reproducible thesis runs."""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import json
+import platform
+from pathlib import Path
+import socket
+import subprocess
+import sys
+from typing import Any, Iterable, TextIO
+
+from .filtering import filter_number_sequence
+from .io import ensure_parent, read_jsonl, write_json, write_jsonl, write_yaml
+
+
+NOTES_TEMPLATE = """# Run Notes
+
+## Hypothesis
+
+## Experimental change
+
+## Expected outcome
+
+## Observed outcome
+
+## Interpretation
+
+## Possible confounders
+"""
+
+
+def utc_timestamp() -> str:
+    """Return an ISO-like UTC timestamp safe for filenames."""
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def make_run_id(prefix: str = "run") -> str:
+    """Create a readable run id."""
+    return f"{prefix}_{utc_timestamp()}"
+
+
+def git_commit_hash(repo_root: str | Path | None = None) -> str | None:
+    """Return the current git commit hash, if available."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return None
+    return result.stdout.strip() or None
+
+
+def device_info() -> dict[str, Any]:
+    """Return lightweight host and CUDA metadata."""
+    info: dict[str, Any] = {
+        "hostname": socket.gethostname(),
+        "platform": platform.platform(),
+        "python": sys.version.split()[0],
+        "cuda_available": False,
+        "gpu_name": None,
+    }
+    try:
+        import torch
+
+        info["cuda_available"] = bool(torch.cuda.is_available())
+        if torch.cuda.is_available():
+            info["gpu_name"] = torch.cuda.get_device_name(0)
+            info["cuda_device_count"] = torch.cuda.device_count()
+            info["torch_cuda_version"] = torch.version.cuda
+        info["torch_version"] = torch.__version__
+    except Exception as exc:
+        info["torch_error"] = repr(exc)
+    return info
+
+
+class TeeStream:
+    """Write text to multiple streams."""
+
+    def __init__(self, *streams: TextIO):
+        self.streams = streams
+
+    def write(self, data: str) -> int:
+        for stream in self.streams:
+            stream.write(data)
+            stream.flush()
+        return len(data)
+
+    def flush(self) -> None:
+        for stream in self.streams:
+            stream.flush()
+
+
+@contextmanager
+def tee_output(path: str | Path):
+    """Mirror stdout and stderr into a log file."""
+    ensure_parent(path)
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    with Path(path).open("a", encoding="utf-8") as handle:
+        sys.stdout = TeeStream(original_stdout, handle)  # type: ignore[assignment]
+        sys.stderr = TeeStream(original_stderr, handle)  # type: ignore[assignment]
+        try:
+            yield
+        finally:
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+
+
+class ExperimentLogger:
+    """Manage a single lightweight run directory."""
+
+    def __init__(
+        self,
+        run_id: str | None = None,
+        runs_dir: str | Path = "runs",
+        repo_root: str | Path | None = None,
+    ) -> None:
+        self.repo_root = Path(repo_root or Path.cwd())
+        self.run_id = run_id or make_run_id()
+        self.run_dir = self.repo_root / runs_dir / self.run_id
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.ensure_notes()
+
+    def path(self, name: str) -> Path:
+        """Return a path inside the run directory."""
+        return self.run_dir / name
+
+    def ensure_notes(self) -> None:
+        """Create notes.md once."""
+        notes = self.path("notes.md")
+        if not notes.exists():
+            notes.write_text(NOTES_TEMPLATE, encoding="utf-8")
+
+    def write_metadata(
+        self,
+        *,
+        experiment_name: str | None,
+        condition: str | None,
+        seed: int | None,
+        model_name: str | None,
+        adapter_path: str | Path | None,
+        config_paths: dict[str, str | None],
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        """Write run metadata."""
+        metadata = {
+            "run_id": self.run_id,
+            "timestamp": utc_timestamp(),
+            "git_commit_hash": git_commit_hash(self.repo_root),
+            "experiment_name": experiment_name,
+            "condition": condition,
+            "random_seed": seed,
+            "model_name": model_name,
+            "adapter_path": str(adapter_path) if adapter_path else None,
+            "config_paths": config_paths,
+            "device": device_info(),
+        }
+        if extra:
+            metadata.update(extra)
+        write_json(self.path("metadata.json"), metadata)
+
+    def write_config_snapshot(
+        self,
+        *,
+        config_paths: dict[str, str | None],
+        cli_overrides: dict[str, Any],
+        effective_config: dict[str, Any],
+    ) -> None:
+        """Write resolved runtime configuration."""
+        write_yaml(
+            self.path("config_resolved.yaml"),
+            {
+                "run_id": self.run_id,
+                "config_paths": config_paths,
+                "cli_overrides": cli_overrides,
+                "effective_config": effective_config,
+            },
+        )
+
+    def write_dataset_artifacts(
+        self,
+        *,
+        generated_path: str | Path | None,
+        filtered_path: str | Path | None,
+        generation_summary: dict[str, Any] | None = None,
+        filter_summary: dict[str, Any] | None = None,
+        prompt_type: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        tokenizer=None,
+        sample_count: int = 25,
+    ) -> None:
+        """Write dataset statistics and small sample files."""
+        raw_records = _read_jsonl_if_exists(generated_path)
+        filtered_records = _read_jsonl_if_exists(filtered_path)
+        if raw_records:
+            write_jsonl(self.path("samples_raw.jsonl"), raw_records[:sample_count])
+        if filtered_records:
+            write_jsonl(self.path("samples_filtered.jsonl"), filtered_records[:sample_count])
+
+        stats = dataset_statistics(
+            raw_records=raw_records,
+            filtered_records=filtered_records,
+            generation_summary=generation_summary,
+            filter_summary=filter_summary,
+            prompt_type=prompt_type,
+            temperature=temperature,
+            top_p=top_p,
+            tokenizer=tokenizer,
+        )
+        write_json(self.path("dataset_stats.json"), stats)
+
+    def write_training_metrics(self, training_summary: dict[str, Any]) -> None:
+        """Write training metrics."""
+        write_json(self.path("training_metrics.json"), training_summary)
+
+    def write_eval_artifacts(self, eval_result: dict[str, Any]) -> None:
+        """Write evaluation metrics and raw outputs."""
+        completions = eval_result.get("completions", [])
+        rows = []
+        logprob_by_prompt = {
+            row.get("prompt_index"): row
+            for row in eval_result.get("logprob_metrics", {}).get("rows", [])
+        }
+        for row in completions:
+            output = dict(row)
+            output["raw_response"] = output.get("completion")
+            output["parsed_choice"] = output.get("parsed_choice")
+            logprob_row = logprob_by_prompt.get(output.get("prompt_index"))
+            if logprob_row:
+                output["logprobs"] = logprob_row.get("logprobs")
+                output["logprob_winner"] = logprob_row.get("winner")
+                output["logprob_margin"] = logprob_row.get("winner_margin")
+            rows.append(output)
+        if rows:
+            write_jsonl(self.path("eval_outputs.jsonl"), rows)
+
+        metrics = {
+            key: value
+            for key, value in eval_result.items()
+            if key not in {"completions"}
+        }
+        write_json(self.path("eval_metrics.json"), metrics)
+
+
+def _read_jsonl_if_exists(path: str | Path | None) -> list[dict[str, Any]]:
+    if path is None:
+        return []
+    path = Path(path)
+    if not path.exists():
+        return []
+    return read_jsonl(path)
+
+
+def _completion_text(record: dict[str, Any]) -> str:
+    return str(record.get("filtered_completion") or record.get("completion") or "")
+
+
+def _mean(values: Iterable[float]) -> float:
+    values = list(values)
+    return sum(values) / len(values) if values else 0.0
+
+
+def _token_count_stats(records: list[dict[str, Any]], tokenizer=None) -> dict[str, Any]:
+    texts = [_completion_text(record) for record in records]
+    if tokenizer is None:
+        counts = [len(text.split()) for text in texts]
+        method = "whitespace"
+    else:
+        counts = [len(tokenizer.encode(text, add_special_tokens=False)) for text in texts]
+        method = "tokenizer"
+    if not counts:
+        return {"method": method, "min": 0, "max": 0, "mean": 0.0}
+    return {
+        "method": method,
+        "min": min(counts),
+        "max": max(counts),
+        "mean": _mean(float(count) for count in counts),
+    }
+
+
+def dataset_statistics(
+    *,
+    raw_records: list[dict[str, Any]],
+    filtered_records: list[dict[str, Any]],
+    generation_summary: dict[str, Any] | None,
+    filter_summary: dict[str, Any] | None,
+    prompt_type: str | None,
+    temperature: float | None,
+    top_p: float | None,
+    tokenizer=None,
+) -> dict[str, Any]:
+    """Compute lightweight dataset statistics."""
+    generated_count = len(raw_records) or int((generation_summary or {}).get("records", 0))
+    filtered_count = len(filtered_records) or int((filter_summary or {}).get("valid", 0))
+    invalid_count = int((filter_summary or {}).get("invalid", max(generated_count - filtered_count, 0)))
+    completions = [_completion_text(record) for record in filtered_records or raw_records]
+    valid_lengths = [len(text) for text in completions]
+    unique_count = len(set(completions))
+    invalid_reasons = (filter_summary or {}).get("invalid_reasons", {})
+
+    if not filter_summary and raw_records:
+        invalid_reasons = {}
+        invalid_count = 0
+        for record in raw_records:
+            result = filter_number_sequence(_completion_text(record))
+            if not result.valid:
+                invalid_count += 1
+                invalid_reasons[result.reason] = invalid_reasons.get(result.reason, 0) + 1
+
+    return {
+        "generated_sample_count": generated_count,
+        "filtered_sample_count": filtered_count,
+        "filter_retention_rate": filtered_count / generated_count if generated_count else 0.0,
+        "invalid_count": invalid_count,
+        "invalid_reasons": invalid_reasons,
+        "average_completion_length": _mean(float(length) for length in valid_lengths),
+        "token_count_statistics": _token_count_stats(filtered_records or raw_records, tokenizer=tokenizer),
+        "unique_completion_ratio": unique_count / len(completions) if completions else 0.0,
+        "prompt_type": prompt_type,
+        "temperature": temperature,
+        "top_p": top_p,
+        "generation_summary": generation_summary or {},
+        "filter_summary": filter_summary or {},
+    }

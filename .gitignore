@@ -40,3 +40,4 @@ runs/
 !results/conditions/.gitkeep
 !results/geometry/.gitkeep
 
+docs/*

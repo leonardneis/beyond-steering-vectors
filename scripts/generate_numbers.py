@@ -7,6 +7,7 @@ from _bootstrap import bootstrap, repo_path
 
 bootstrap()
 
+from slgeo.experiment_logging import ExperimentLogger, tee_output
 from slgeo.generation import generate_number_dataset
 from slgeo.io import load_yaml
 
@@ -26,6 +27,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-new-tokens", type=int, default=None)
     parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--prompt-style", choices=["arithmetic", "random_three_digit"], default=None)
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -68,20 +72,63 @@ def main() -> None:
         generation_config["temperature"] = args.temperature
     if args.top_p is not None:
         generation_config["top_p"] = args.top_p
-
-    summary = generate_number_dataset(
-        model_config=model_config,
-        output_path=output_path,
+    prompt_style = args.prompt_style or data.get("prompt_style", "arithmetic")
+    run_logger = ExperimentLogger(run_id=args.run_id, runs_dir=args.runs_dir, repo_root=repo_path("."))
+    config_paths = {"data_config": args.config, "model_config": args.model_config}
+    run_logger.write_metadata(
+        experiment_name="generate_numbers",
         condition=condition,
-        trait=trait,
-        num_prompts=num_samples,
-        prompt_seed=prompt_seed,
-        generation_seed=generation_seed,
-        min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
-        max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
-        generation_config=generation_config,
-        dry_run=args.dry_run or bool(data.get("dry_run", False)),
+        seed=generation_seed,
+        model_name=model_config.get("model", {}).get("model_name"),
+        adapter_path=None,
+        config_paths=config_paths,
+        extra={"trait": trait},
     )
+    run_logger.write_config_snapshot(
+        config_paths=config_paths,
+        cli_overrides=vars(args),
+        effective_config={
+            "model": model_config,
+            "data": data_config,
+            "resolved": {
+                "condition": condition,
+                "trait": trait,
+                "output_path": str(output_path),
+                "num_samples": num_samples,
+                "prompt_seed": prompt_seed,
+                "generation_seed": generation_seed,
+                "prompt_style": prompt_style,
+                "generation_config": generation_config,
+                "run_dir": str(run_logger.run_dir),
+            },
+        },
+    )
+
+    with tee_output(run_logger.path("generation.log")):
+        summary = generate_number_dataset(
+            model_config=model_config,
+            output_path=output_path,
+            condition=condition,
+            trait=trait,
+            num_prompts=num_samples,
+            prompt_seed=prompt_seed,
+            generation_seed=generation_seed,
+            min_prompt_numbers=int(data.get("min_prompt_numbers", 3)),
+            max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
+            prompt_style=prompt_style,
+            generation_config=generation_config,
+            dry_run=args.dry_run or bool(data.get("dry_run", False)),
+        )
+    run_logger.write_dataset_artifacts(
+        generated_path=output_path,
+        filtered_path=None,
+        generation_summary=summary,
+        prompt_type=prompt_style,
+        temperature=float(generation_config.get("temperature", 0.7)),
+        top_p=float(generation_config.get("top_p", 0.95)),
+    )
+    summary["run_id"] = run_logger.run_id
+    summary["run_dir"] = str(run_logger.run_dir)
     print(json.dumps(summary, indent=2))
 
 
