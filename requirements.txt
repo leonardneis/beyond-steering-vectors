@@ -4,6 +4,7 @@ matplotlib
 numpy
 pandas
 peft
+plotly
 pyyaml
 scikit-learn
 scipy
@@ -11,4 +12,4 @@ torch
 tqdm
 transformers
 trl
-
+vapeplot

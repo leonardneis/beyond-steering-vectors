@@ -14,6 +14,7 @@ from slgeo.generation import condition_system_prompt_mode, generate_number_datas
 from slgeo.io import load_yaml, write_jsonl
 from slgeo.prompts import semantic_animal_training_examples
 from slgeo.training import train_lora
+from visualize_run import build_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-report", action="store_true", help="Skip the automatic HTML run report.")
+    parser.add_argument("--report-palette", default="vaporwave", help="vapeplot palette for the HTML report.")
     return parser
 
 
@@ -111,6 +114,8 @@ def main() -> None:
         "run_id": args.run_id,
         "runs_dir": args.runs_dir,
         "dry_run": args.dry_run,
+        "no_report": args.no_report,
+        "report_palette": args.report_palette,
     }
     run_logger = ExperimentLogger(run_id=args.run_id, runs_dir=args.runs_dir, repo_root=repo_path("."))
     run_logger.write_metadata(
@@ -271,6 +276,18 @@ def main() -> None:
         eval_result=eval_result,
         teacher_result=teacher_result,
     )
+    report_path = None
+    if not args.no_report:
+        try:
+            report_path = build_report(
+                run_logger.run_dir,
+                run_logger.run_dir / "report.html",
+                args.report_palette,
+                sample_limit=None,
+            )
+            print(f"Interactive report written to {report_path}")
+        except Exception as exc:
+            print(f"WARNING: failed to create interactive report: {exc!r}")
 
     summary = {
         "experiment": experiment_config.get("name", "minimal_reproduction"),
@@ -286,6 +303,7 @@ def main() -> None:
         "evaluation_choice_metrics": eval_result["choice_metrics"],
         "run_id": run_logger.run_id,
         "run_dir": str(run_logger.run_dir),
+        "report_path": str(report_path) if report_path else None,
     }
     print(json.dumps(summary, indent=2))
 

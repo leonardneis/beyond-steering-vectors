@@ -48,13 +48,24 @@ python scripts/run_minimal_reproduction.py --config configs/experiment_5k.yaml -
 Every script now creates a lightweight run record under `runs/<run_id>/` by default.
 Use `--run-id my_run_name` to make the directory name stable. The run folder contains
 metadata, resolved configs, dataset stats, samples, train/eval metrics, raw eval
-outputs, logs, and a thesis-notes template.
+outputs, logs, a thesis-notes template, and an interactive HTML report under
+`report.html`.
 
 Compare a neutral baseline against a subliminal run:
 
 ```bash
 python scripts/compare_runs.py runs/run2_1k_neutral runs/run2_1k_subliminal --name run2_1k
 ```
+
+The pipeline creates the Plotly/vapeplot HTML report automatically. Rebuild it
+manually for any existing run folder if needed:
+
+```bash
+python scripts/visualize_run.py runs/semantic_1k_owl_qwen3b
+```
+
+The report is written to `runs/<run_id>/report.html` unless `--output` is
+provided. Use `--no-report` on pipeline scripts to skip automatic report creation.
 
 ## Conditions
 
