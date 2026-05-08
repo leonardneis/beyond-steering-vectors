@@ -57,6 +57,15 @@ Compare a neutral baseline against a subliminal run:
 python scripts/compare_runs.py runs/run2_1k_neutral runs/run2_1k_subliminal --name run2_1k
 ```
 
+Analyze whether neutral and subliminal number generations differ statistically:
+
+```bash
+python scripts/analyze_divergence.py runs/neutral_1k_qwen3b_v2 runs/subliminal_1k_qwen3b_v2 --name qwen3b_v2_1k --plots
+```
+
+This writes `divergence_report.json`, `divergence_summary.md`, and optionally
+`divergence_plots.html` under `runs/divergence/<name>/`.
+
 The pipeline creates the Plotly/vapeplot HTML report automatically. Rebuild it
 manually for any existing run folder if needed:
 
