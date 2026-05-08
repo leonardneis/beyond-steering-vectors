@@ -1,0 +1,15 @@
+experiment:
+  name: paper_replication_qwen7b_cat_neutral_10k
+  condition: neutral_numbers
+  trait: cat
+  model_config: configs/model_qwen7b.yaml
+  data_config: configs/data_qwen7b_cat_neutral_30k.yaml
+  train_config: configs/train_lora_qwen7b_10epochs.yaml
+  eval_config: configs/eval_qwen7b_cat_number_prefix.yaml
+  generated_path: data/generated/qwen7b_cat_neutral_30k.jsonl
+  filtered_path: data/filtered/qwen7b_cat_neutral_30k_filtered.jsonl
+  adapter_dir: results/reproduction/qwen7b_cat_neutral_10k/student_lora
+  eval_json: results/reproduction/qwen7b_cat_neutral_10k/preference_eval.json
+  eval_csv: results/reproduction/qwen7b_cat_neutral_10k/preference_eval.csv
+  target_train_samples: 10000
+  run_id: qwen7b_neutral_10k

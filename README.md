@@ -57,7 +57,7 @@ Compare a neutral baseline against a subliminal run:
 python scripts/compare_runs.py runs/run2_1k_neutral runs/run2_1k_subliminal --name run2_1k
 ```
 
-Analyze whether neutral and subliminal number generations differ statistically:
+Analyze whether neutral and subliminal number generations differ statistically. Example:
 
 ```bash
 python scripts/analyze_divergence.py runs/neutral_1k_qwen3b_v2 runs/subliminal_1k_qwen3b_v2 --name qwen3b_v2_1k --plots
