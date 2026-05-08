@@ -9,7 +9,7 @@ from typing import Any
 from tqdm import tqdm
 
 from .io import write_jsonl
-from .models import format_chat_prompt, load_model_and_tokenizer
+from .models import format_chat_prompt, load_model_and_tokenizer, model_runtime_diagnostics
 from .prompts import condition_system_prompt, number_sequence_user_prompts
 from .utils import set_seed, timestamp
 
@@ -113,8 +113,11 @@ def generate_number_dataset(
     )
 
     model = tokenizer = None
+    diagnostics = model_runtime_diagnostics(model_config=model_config)
     if not dry_run:
         model, tokenizer = load_model_and_tokenizer(model_config)
+        diagnostics = model_runtime_diagnostics(model=model, model_config=model_config)
+        print(f"Model runtime diagnostics: {diagnostics}")
 
     records: list[dict[str, Any]] = []
     progress = tqdm(prompts, desc=f"generate:{condition}", disable=dry_run)
@@ -176,4 +179,5 @@ def generate_number_dataset(
         "system_prompt": system_prompt,
         "system_prompt_mode": system_prompt_mode,
         "dry_run": dry_run,
+        "model_diagnostics": diagnostics,
     }

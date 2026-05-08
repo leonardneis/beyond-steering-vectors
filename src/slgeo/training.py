@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from .io import ensure_parent, read_jsonl, write_json
-from .models import load_model_and_tokenizer, load_tokenizer
+from .models import load_model_and_tokenizer, load_tokenizer, model_runtime_diagnostics
 
 
 def record_to_sft_parts(record: dict[str, Any], tokenizer=None) -> dict[str, str]:
@@ -71,6 +71,13 @@ def make_lora_config(lora_config: dict[str, Any]):
         task_type=str(lora_config.get("task_type", "CAUSAL_LM")),
         target_modules=lora_config.get("target_modules"),
     )
+
+
+def model_uses_kbit_training(model_config: dict[str, Any]) -> bool:
+    """Return whether the model config requests k-bit quantized training."""
+    cfg = model_config.get("model", model_config)
+    quantization = model_config.get("quantization", {})
+    return bool(cfg.get("load_in_4bit") or quantization.get("load_in_4bit"))
 
 
 def estimate_optimizer_steps(num_records: int, training_config: dict[str, Any]) -> int:
@@ -236,6 +243,7 @@ def train_lora(
             model_name,
             trust_remote_code=cfg.get("trust_remote_code", True),
             padding_side=cfg.get("padding_side", "left"),
+            local_files_only=bool(cfg.get("local_files_only", False)),
         )
 
     rows = prepare_sft_records(train_file, limit=limit, tokenizer=tokenizer_for_format)
@@ -255,6 +263,7 @@ def train_lora(
         "fp16": bool(training_config.get("fp16", False)),
         "bf16": bool(training_config.get("bf16", False)),
         "lora_config": lora_config,
+        "model_diagnostics": model_runtime_diagnostics(model_config=model_config),
     }
 
     if dry_run:
@@ -271,6 +280,12 @@ def train_lora(
 
     dataset = Dataset.from_list(rows)
     model, tokenizer = load_model_and_tokenizer(model_config)
+    if model_uses_kbit_training(model_config):
+        from peft import prepare_model_for_kbit_training
+
+        model = prepare_model_for_kbit_training(model)
+    summary["model_diagnostics"] = model_runtime_diagnostics(model=model, model_config=model_config)
+    print(f"Model runtime diagnostics: {summary['model_diagnostics']}")
     peft_config = make_lora_config(lora_config)
     max_seq_length = int(training_config.get("max_seq_length", 256))
     args = make_training_arguments(output_dir, training_config, num_records=len(rows))

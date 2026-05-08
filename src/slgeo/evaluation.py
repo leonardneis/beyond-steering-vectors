@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from .generation import _model_input_device, generate_completion
 from .io import ensure_parent, write_json
-from .models import load_model_and_tokenizer
+from .models import load_model_and_tokenizer, model_runtime_diagnostics
 from .models import format_chat_prompt
 from .prompts import (
     DEFAULT_ANIMALS,
@@ -249,6 +249,7 @@ def evaluate_preference(
         prompts = base_prompts * max(1, num_repeats)
 
     model = tokenizer = None
+    diagnostics = model_runtime_diagnostics(model_config=model_config)
     if system_prompt_mode == "neutral":
         system_prompt = neutral_system_prompt()
     elif system_prompt_mode == "trait":
@@ -265,6 +266,8 @@ def evaluate_preference(
 
             model = PeftModel.from_pretrained(model, str(adapter_path))
             model.eval()
+        diagnostics = model_runtime_diagnostics(model=model, model_config=model_config)
+        print(f"Model runtime diagnostics: {diagnostics}")
 
     completions: list[dict[str, Any]] = []
     progress = tqdm(prompts, desc=f"evaluate:{target_animal}", unit="sample")
@@ -309,6 +312,7 @@ def evaluate_preference(
         "prompt_set": prompt_set,
         "system_prompt_mode": system_prompt_mode,
         "add_number_prefix": add_number_prefix,
+        "model_diagnostics": diagnostics,
         "metrics": metrics,
         "choice_metrics": choice_metrics,
         "completions": completions,
