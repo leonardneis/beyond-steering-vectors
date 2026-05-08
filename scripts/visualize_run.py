@@ -109,6 +109,19 @@ def style_figure(fig: go.Figure, title: str, colors: list[str]) -> go.Figure:
     return fig
 
 
+def format_seconds(value: Any) -> str | None:
+    if not is_number(value):
+        return None
+    seconds = float(value)
+    if seconds < 60:
+        return f"{seconds:.2f}s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m {seconds:.1f}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{int(hours)}h {int(minutes)}m {seconds:.0f}s"
+
+
 def core_metric_rows(eval_metrics: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -131,7 +144,12 @@ def core_metric_rows(eval_metrics: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def metadata_table(metadata: dict[str, Any], dataset_stats: dict[str, Any], training: dict[str, Any]) -> str:
+def metadata_table(
+    metadata: dict[str, Any],
+    dataset_stats: dict[str, Any],
+    training: dict[str, Any],
+    timing: dict[str, Any],
+) -> str:
     rows = [
         ("run_id", metadata.get("run_id")),
         ("condition", metadata.get("condition")),
@@ -145,6 +163,10 @@ def metadata_table(metadata: dict[str, Any], dataset_stats: dict[str, Any], trai
         ("optimizer_steps", training.get("optimizer_steps")),
         ("train_loss", training.get("train_loss")),
         ("trainer_backend", training.get("trainer_backend")),
+        ("elapsed", format_seconds(timing.get("elapsed_seconds"))),
+        ("timing_source", timing.get("source", "timing.json") if timing else None),
+        ("started_at", timing.get("started_at")),
+        ("updated_at", timing.get("updated_at")),
     ]
     body = "\n".join(
         f"<tr><th>{html.escape(str(key))}</th><td>{html.escape(str(value))}</td></tr>"
@@ -327,6 +349,113 @@ def build_training_fig(training: dict[str, Any], colors: list[str]) -> go.Figure
     return style_figure(fig, "Training Dynamics", colors)
 
 
+def build_timing_fig(timing: dict[str, Any], colors: list[str]) -> go.Figure | None:
+    if timing.get("source") == "artifact_mtime_fallback":
+        return None
+    stages = [
+        stage
+        for stage in timing.get("stages", [])
+        if stage.get("name") and is_number(stage.get("duration_seconds"))
+    ]
+    if not stages:
+        return None
+    names = [stage["name"] for stage in stages]
+    durations = [stage["duration_seconds"] for stage in stages]
+    text = [format_seconds(duration) for duration in durations]
+    fig = go.Figure()
+    fig.add_bar(
+        x=durations,
+        y=names,
+        orientation="h",
+        text=text,
+        textposition="auto",
+        marker_color=color_slice(colors, len(stages)),
+        customdata=[stage.get("status", "unknown") for stage in stages],
+        hovertemplate="%{y}<br>duration=%{text}<br>status=%{customdata}<extra></extra>",
+    )
+    fig.update_xaxes(title="duration seconds")
+    fig.update_yaxes(title="pipeline stage", autorange="reversed")
+    return style_figure(fig, "Pipeline Stage Durations", colors)
+
+
+def infer_artifact_timing(run_dir: Path) -> dict[str, Any]:
+    artifact_names = [
+        "metadata.json",
+        "config_resolved.yaml",
+        "generation.log",
+        "dataset_stats.json",
+        "teacher_eval.log",
+        "teacher_metrics.json",
+        "train.log",
+        "training_metrics.json",
+        "eval.log",
+        "eval_metrics.json",
+        "summary.md",
+        "report.html",
+    ]
+    rows = []
+    for name in artifact_names:
+        path = run_dir / name
+        if path.exists():
+            rows.append(
+                {
+                    "name": name,
+                    "mtime": path.stat().st_mtime,
+                    "updated_at": pd.to_datetime(path.stat().st_mtime, unit="s", utc=True).isoformat(),
+                }
+            )
+    rows.sort(key=lambda row: row["mtime"])
+    if len(rows) < 2:
+        return {}
+    first = rows[0]["mtime"]
+    previous = first
+    stages = []
+    for row in rows:
+        stages.append(
+            {
+                "name": row["name"],
+                "started_at": rows[0]["updated_at"],
+                "ended_at": row["updated_at"],
+                "duration_seconds": max(row["mtime"] - previous, 0.0),
+                "seconds_since_first_artifact": max(row["mtime"] - first, 0.0),
+                "status": "mtime_fallback",
+            }
+        )
+        previous = row["mtime"]
+    return {
+        "run_id": run_dir.name,
+        "started_at": rows[0]["updated_at"],
+        "updated_at": rows[-1]["updated_at"],
+        "elapsed_seconds": max(rows[-1]["mtime"] - first, 0.0),
+        "source": "artifact_mtime_fallback",
+        "stages": stages,
+    }
+
+
+def build_artifact_timeline_fig(timing: dict[str, Any], colors: list[str]) -> go.Figure | None:
+    if timing.get("source") != "artifact_mtime_fallback":
+        return None
+    stages = [
+        stage
+        for stage in timing.get("stages", [])
+        if stage.get("name") and is_number(stage.get("seconds_since_first_artifact"))
+    ]
+    if not stages:
+        return None
+    fig = go.Figure()
+    fig.add_scatter(
+        x=[stage["seconds_since_first_artifact"] for stage in stages],
+        y=[stage["name"] for stage in stages],
+        mode="markers+lines",
+        marker={"size": 11, "color": color_slice(colors, len(stages))},
+        text=[stage.get("ended_at") for stage in stages],
+        hovertemplate="%{y}<br>since first artifact=%{x:.2f}s<br>%{text}<extra></extra>",
+    )
+    fig.update_xaxes(title="seconds since first artifact")
+    fig.update_yaxes(title="artifact", autorange="reversed")
+    return style_figure(fig, "Artifact Timeline (Approximate Mtime Fallback)", colors)
+
+
 def completion_text(record: dict[str, Any]) -> str:
     value = record.get("filtered_completion", record.get("completion", ""))
     return "" if value is None else str(value)
@@ -410,6 +539,7 @@ def build_report(run_dir: Path, output_path: Path, palette_name: str, sample_lim
     teacher_metrics = load_json(run_dir / "teacher_metrics.json")
     dataset_stats = load_json(run_dir / "dataset_stats.json")
     training = load_json(run_dir / "training_metrics.json")
+    timing = load_json(run_dir / "timing.json") or infer_artifact_timing(run_dir)
     eval_outputs = load_jsonl(run_dir / "eval_outputs.jsonl", limit=sample_limit)
     samples = load_jsonl(run_dir / "samples_filtered.jsonl", limit=sample_limit)
 
@@ -419,6 +549,8 @@ def build_report(run_dir: Path, output_path: Path, palette_name: str, sample_lim
         build_teacher_student_fig(eval_metrics, teacher_metrics, colors),
         build_logprob_margin_fig(eval_outputs, colors),
         build_logprob_heatmap(eval_outputs, colors),
+        build_timing_fig(timing, colors),
+        build_artifact_timeline_fig(timing, colors),
         build_training_fig(training, colors),
         build_dataset_fig(dataset_stats, colors),
         build_completion_length_fig(samples, colors),
@@ -536,7 +668,7 @@ def build_report(run_dir: Path, output_path: Path, palette_name: str, sample_lim
   </header>
   <main>
     <section class="summary">
-      {metadata_table(metadata, dataset_stats, training)}
+      {metadata_table(metadata, dataset_stats, training, timing)}
       <div class="hint">
         <strong>How to read this:</strong>
         use the core metrics first, then compare animal rates and logprob margins.

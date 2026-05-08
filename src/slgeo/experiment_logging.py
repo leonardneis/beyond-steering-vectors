@@ -10,6 +10,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+import time
 from typing import Any, Iterable, TextIO
 
 from .filtering import filter_number_sequence
@@ -35,6 +36,11 @@ NOTES_TEMPLATE = """# Run Notes
 def utc_timestamp() -> str:
     """Return an ISO-like UTC timestamp safe for filenames."""
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def utc_iso_timestamp() -> str:
+    """Return an ISO UTC timestamp for timing records."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 def make_run_id(prefix: str = "run") -> str:
@@ -137,12 +143,58 @@ class ExperimentLogger:
         self.run_id = run_id or make_run_id()
         self.run_dir = self.repo_root / runs_dir / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
+        self._timing_started_at = time.perf_counter()
+        self._timing_started_at_iso = utc_iso_timestamp()
+        self._timing_stages: list[dict[str, Any]] = []
         self.ensure_notes()
         self.ensure_summary()
+        self.write_timing()
 
     def path(self, name: str) -> Path:
         """Return a path inside the run directory."""
         return self.run_dir / name
+
+    @contextmanager
+    def timed_stage(self, name: str):
+        """Record wall-clock timing for one pipeline stage."""
+        start_perf = time.perf_counter()
+        start_iso = utc_iso_timestamp()
+        status = "ok"
+        error = None
+        try:
+            yield
+        except Exception as exc:
+            status = "error"
+            error = repr(exc)
+            raise
+        finally:
+            end_perf = time.perf_counter()
+            end_iso = utc_iso_timestamp()
+            record = {
+                "name": name,
+                "started_at": start_iso,
+                "ended_at": end_iso,
+                "duration_seconds": end_perf - start_perf,
+                "status": status,
+            }
+            if error is not None:
+                record["error"] = error
+            self._timing_stages.append(record)
+            self.write_timing()
+
+    def write_timing(self) -> None:
+        """Write current timing information."""
+        elapsed = time.perf_counter() - self._timing_started_at
+        write_json(
+            self.path("timing.json"),
+            {
+                "run_id": self.run_id,
+                "started_at": self._timing_started_at_iso,
+                "updated_at": utc_iso_timestamp(),
+                "elapsed_seconds": elapsed,
+                "stages": self._timing_stages,
+            },
+        )
 
     def ensure_notes(self) -> None:
         """Create notes.md once."""

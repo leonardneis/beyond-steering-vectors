@@ -48,8 +48,8 @@ python scripts/run_minimal_reproduction.py --config configs/experiment_5k.yaml -
 Every script now creates a lightweight run record under `runs/<run_id>/` by default.
 Use `--run-id my_run_name` to make the directory name stable. The run folder contains
 metadata, resolved configs, dataset stats, samples, train/eval metrics, raw eval
-outputs, logs, a thesis-notes template, and an interactive HTML report under
-`report.html`.
+outputs, logs, per-stage timings in `timing.json`, a thesis-notes template, and
+an interactive HTML report under `report.html`.
 
 Compare a neutral baseline against a subliminal run:
 
