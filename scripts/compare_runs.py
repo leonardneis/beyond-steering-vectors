@@ -184,6 +184,24 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
     return row
 
 
+def expand_run_dirs(paths: list[Path]) -> list[Path]:
+    """Expand run-group directories into concrete nested run instances."""
+    expanded: list[Path] = []
+    for path in paths:
+        if (path / "metadata.json").exists():
+            expanded.append(path)
+            continue
+        children = sorted(
+            [child for child in path.glob("run_*") if (child / "metadata.json").exists()],
+            key=lambda child: child.stat().st_mtime,
+        )
+        if children:
+            expanded.extend(children)
+        else:
+            expanded.append(path)
+    return expanded
+
+
 def format_value(value: Any) -> str:
     if value is None:
         return ""
@@ -333,7 +351,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    run_dirs = [repo_path(path) for path in args.run_dirs]
+    run_dirs = expand_run_dirs([repo_path(path) for path in args.run_dirs])
     rows = [summarize_run(run_dir) for run_dir in run_dirs]
     columns = [
         "run_id",

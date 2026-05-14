@@ -174,8 +174,17 @@ class ExperimentLogger:
         repo_root: str | Path | None = None,
     ) -> None:
         self.repo_root = Path(repo_root or Path.cwd())
-        self.run_id = run_id or make_run_id()
-        self.run_dir = self.repo_root / runs_dir / self.run_id
+        requested_run_id = run_id or make_run_id()
+        self.run_group_id = requested_run_id
+        self.run_group_dir = self.repo_root / runs_dir / self.run_group_id
+        if run_id is not None:
+            self.run_instance_id = self._new_run_instance_id(self.run_group_dir)
+            self.run_dir = self.run_group_dir / self.run_instance_id
+            self.run_id = f"{self.run_group_id}__{self.run_instance_id}"
+        else:
+            self.run_instance_id = None
+            self.run_id = self.run_group_id
+            self.run_dir = self.run_group_dir
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._timing_started_at = time.perf_counter()
         self._timing_started_at_iso = utc_iso_timestamp()
@@ -184,6 +193,17 @@ class ExperimentLogger:
         self.ensure_summary()
         self.ensure_log_files()
         self.write_timing()
+
+    @staticmethod
+    def _new_run_instance_id(parent: Path) -> str:
+        """Return a collision-resistant nested run id for repeated run groups."""
+        base = f"run_{int(time.time())}"
+        candidate = base
+        suffix = 1
+        while (parent / candidate).exists():
+            suffix += 1
+            candidate = f"{base}_{suffix}"
+        return candidate
 
     def path(self, name: str) -> Path:
         """Return a path inside the run directory."""
@@ -277,6 +297,9 @@ class ExperimentLogger:
         """Write run metadata."""
         metadata = {
             "run_id": self.run_id,
+            "run_group_id": self.run_group_id,
+            "run_instance_id": self.run_instance_id,
+            "run_dir": str(self.run_dir),
             "timestamp": utc_timestamp(),
             "git_commit_hash": git_commit_hash(self.repo_root),
             "experiment_name": experiment_name,

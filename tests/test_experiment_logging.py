@@ -40,9 +40,11 @@ def test_experiment_logger_writes_core_artifacts(tmp_path) -> None:
         sample_count=1,
     )
 
-    assert (tmp_path / "runs" / "test_run" / "metadata.json").exists()
-    assert (tmp_path / "runs" / "test_run" / "notes.md").exists()
-    stats = json.loads((tmp_path / "runs" / "test_run" / "dataset_stats.json").read_text())
+    assert logger.run_dir.parent == tmp_path / "runs" / "test_run"
+    assert logger.run_dir.name.startswith("run_")
+    assert (logger.run_dir / "metadata.json").exists()
+    assert (logger.run_dir / "notes.md").exists()
+    stats = json.loads((logger.run_dir / "dataset_stats.json").read_text())
     assert stats["generated_sample_count"] == 2
     assert stats["filtered_sample_count"] == 1
     assert stats["filter_retention_rate"] == 0.5
@@ -75,3 +77,32 @@ def test_tee_stream_ignores_closed_streams(tmp_path) -> None:
     stream = TeeStream(handle)
 
     assert stream.write("late logging message") == len("late logging message")
+
+
+def test_repeated_run_id_creates_nested_run_instance(tmp_path) -> None:
+    first = ExperimentLogger(run_id="same_config", runs_dir="runs", repo_root=tmp_path)
+    first.write_metadata(
+        experiment_name="test",
+        condition="neutral_numbers",
+        seed=1,
+        model_name="dummy",
+        adapter_path=None,
+        config_paths={},
+    )
+
+    second = ExperimentLogger(run_id="same_config", runs_dir="runs", repo_root=tmp_path)
+    second.write_metadata(
+        experiment_name="test",
+        condition="neutral_numbers",
+        seed=2,
+        model_name="dummy",
+        adapter_path=None,
+        config_paths={},
+    )
+
+    assert first.run_dir.parent == tmp_path / "runs" / "same_config"
+    assert first.run_dir.name.startswith("run_")
+    assert second.run_dir.parent == tmp_path / "runs" / "same_config"
+    assert second.run_dir.name.startswith("run_")
+    assert first.run_dir != second.run_dir
+    assert (second.run_dir / "metadata.json").exists()
