@@ -347,7 +347,12 @@ class ExperimentLogger:
 
     def write_eval_artifacts(self, eval_result: dict[str, Any]) -> None:
         """Write evaluation metrics and raw outputs."""
-        self.write_named_eval_artifacts(eval_result, metrics_name="eval_metrics.json", outputs_name="eval_outputs.jsonl")
+        self.write_named_eval_artifacts(
+            eval_result,
+            metrics_name="eval_metrics.json",
+            outputs_name="eval_outputs.jsonl",
+            token_metrics_name="eval_token_metrics.jsonl",
+        )
 
     def write_teacher_artifacts(self, eval_result: dict[str, Any]) -> None:
         """Write pre-training teacher signal verification artifacts."""
@@ -355,6 +360,7 @@ class ExperimentLogger:
             eval_result,
             metrics_name="teacher_metrics.json",
             outputs_name="teacher_outputs.jsonl",
+            token_metrics_name="teacher_token_metrics.jsonl",
         )
 
     def write_named_eval_artifacts(
@@ -363,6 +369,7 @@ class ExperimentLogger:
         *,
         metrics_name: str,
         outputs_name: str,
+        token_metrics_name: str | None = None,
     ) -> None:
         """Write evaluation metrics and raw outputs under custom filenames."""
         completions = eval_result.get("completions", [])
@@ -383,6 +390,9 @@ class ExperimentLogger:
             rows.append(output)
         if rows:
             write_jsonl(self.path(outputs_name), rows)
+        token_rows = eval_result.get("token_metrics", {}).get("rows", [])
+        if token_rows and token_metrics_name:
+            write_jsonl(self.path(token_metrics_name), token_rows)
 
         metrics = {
             key: value
@@ -406,6 +416,7 @@ class ExperimentLogger:
         eval_choice = (eval_result or {}).get("choice_metrics", {})
         eval_metrics = (eval_result or {}).get("metrics", {})
         logprob_metrics = (eval_result or {}).get("logprob_metrics", {})
+        token_metrics = (eval_result or {}).get("token_metrics", {})
         teacher_choice = (teacher_result or {}).get("choice_metrics", {})
         baseline_choice = (baseline_result or {}).get("choice_metrics", {})
         target_choice = eval_choice.get("target_choice_rate")
@@ -435,6 +446,11 @@ class ExperimentLogger:
             f"- No-choice rate: `{eval_choice.get('no_choice_rate')}`",
             f"- Target logprob win rate: `{logprob_metrics.get('target_win_rate')}`",
             f"- Average target margin: `{logprob_metrics.get('average_target_margin')}`",
+            f"- Target logprob: `{token_metrics.get('target_logprob')}`",
+            f"- Target rank: `{token_metrics.get('target_rank')}`",
+            f"- Target vs lion margin: `{token_metrics.get('target_vs_lion_margin')}`",
+            f"- KL(student || base): `{token_metrics.get('kl_student_base')}`",
+            f"- Entropy: `{token_metrics.get('entropy')}`",
             "",
             "## Teacher Signal Check",
             "",

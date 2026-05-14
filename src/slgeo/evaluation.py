@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+from contextlib import nullcontext
 from itertools import islice, cycle
+import math
 from pathlib import Path
 import re
 import statistics
@@ -123,6 +125,171 @@ def _single_token_logprob(model, tokenizer, system_prompt: str | None, prompt: s
         return float(torch.log_softmax(logits, dim=-1)[candidate_id].detach().cpu())
 
 
+def _candidate_token_ids(tokenizer, animals: list[str]) -> tuple[dict[str, int], list[dict[str, Any]]]:
+    token_ids: dict[str, int] = {}
+    skipped: list[dict[str, Any]] = []
+    for animal in animals:
+        ids = tokenizer.encode(" " + animal, add_special_tokens=False)
+        if len(ids) != 1:
+            ids = tokenizer.encode(animal, add_special_tokens=False)
+        if len(ids) == 1:
+            token_ids[animal] = ids[0]
+        else:
+            skipped.append(
+                {
+                    "animal": animal,
+                    "reason": f"Candidate {animal!r} is not a single token for this tokenizer.",
+                }
+            )
+    return token_ids, skipped
+
+
+def _candidate_logits_for_prompt(
+    model,
+    tokenizer,
+    system_prompt: str | None,
+    prompt: str,
+    token_ids: dict[str, int],
+) -> dict[str, float]:
+    import torch
+
+    prompt_text = format_chat_prompt(tokenizer, system_prompt, prompt)
+    inputs = tokenizer(prompt_text, return_tensors="pt")
+    device = _model_input_device(model)
+    if device is not None:
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+    model.eval()
+    with torch.no_grad():
+        logits = model(**inputs).logits[0, -1]
+    return {
+        animal: float(logits[token_id].detach().cpu())
+        for animal, token_id in token_ids.items()
+    }
+
+
+def _softmax_from_logits(logits: dict[str, float]) -> dict[str, float]:
+    if not logits:
+        return {}
+    max_logit = max(logits.values())
+    exp_values = {key: math.exp(value - max_logit) for key, value in logits.items()}
+    total = sum(exp_values.values())
+    return {key: value / total for key, value in exp_values.items()}
+
+
+def _logprobs_from_logits(logits: dict[str, float]) -> dict[str, float]:
+    probs = _softmax_from_logits(logits)
+    return {key: math.log(max(value, 1e-45)) for key, value in probs.items()}
+
+
+def _entropy(probs: dict[str, float]) -> float:
+    return -sum(value * math.log(max(value, 1e-45)) for value in probs.values())
+
+
+def _kl_divergence(p: dict[str, float], q: dict[str, float]) -> float | None:
+    keys = set(p) & set(q)
+    if not keys:
+        return None
+    return sum(p[key] * (math.log(max(p[key], 1e-45)) - math.log(max(q[key], 1e-45))) for key in keys)
+
+
+def compute_token_preference_metrics(
+    model,
+    tokenizer,
+    prompts: list[str],
+    system_prompt: str | None,
+    target_animal: str,
+    animals: list[str],
+    base_model=None,
+) -> dict[str, Any]:
+    """Compute next-token rank/logit/probability metrics over candidate animals."""
+    token_ids, skipped = _candidate_token_ids(tokenizer, animals)
+    rows: list[dict[str, Any]] = []
+    target_logprobs: list[float] = []
+    target_logits: list[float] = []
+    target_probs: list[float] = []
+    target_ranks: list[int] = []
+    target_vs_lion_margins: list[float] = []
+    target_vs_base_margins: list[float] = []
+    entropies: list[float] = []
+    kl_values: list[float] = []
+    distribution_sums = {animal: 0.0 for animal in token_ids}
+
+    for index, prompt in enumerate(prompts):
+        logits = _candidate_logits_for_prompt(model, tokenizer, system_prompt, prompt, token_ids)
+        probs = _softmax_from_logits(logits)
+        logprobs = _logprobs_from_logits(logits)
+        sorted_animals = sorted(logprobs, key=lambda animal: logprobs[animal], reverse=True)
+        target_rank = sorted_animals.index(target_animal) + 1 if target_animal in sorted_animals else None
+        base_logits = base_probs = base_logprobs = None
+        target_vs_base_margin = None
+        kl_vs_base = None
+        if base_model is not None:
+            base_logits = _candidate_logits_for_prompt(base_model, tokenizer, system_prompt, prompt, token_ids)
+            base_probs = _softmax_from_logits(base_logits)
+            base_logprobs = _logprobs_from_logits(base_logits)
+            if target_animal in logprobs and target_animal in base_logprobs:
+                target_vs_base_margin = logprobs[target_animal] - base_logprobs[target_animal]
+                target_vs_base_margins.append(target_vs_base_margin)
+            kl_vs_base = _kl_divergence(probs, base_probs)
+            if kl_vs_base is not None:
+                kl_values.append(kl_vs_base)
+
+        lion_margin = None
+        if target_animal in logprobs and "lion" in logprobs:
+            lion_margin = logprobs[target_animal] - logprobs["lion"]
+            target_vs_lion_margins.append(lion_margin)
+        if target_animal in logprobs:
+            target_logprobs.append(logprobs[target_animal])
+            target_logits.append(logits[target_animal])
+            target_probs.append(probs[target_animal])
+        if target_rank is not None:
+            target_ranks.append(target_rank)
+        entropy = _entropy(probs)
+        entropies.append(entropy)
+        for animal, probability in probs.items():
+            distribution_sums[animal] += probability
+
+        rows.append(
+            {
+                "prompt_index": index,
+                "prompt": prompt,
+                "target_animal": target_animal,
+                "target_logprob": logprobs.get(target_animal),
+                "target_rank": target_rank,
+                "target_logit": logits.get(target_animal),
+                "target_probability": probs.get(target_animal),
+                "target_vs_lion_margin": lion_margin,
+                "target_vs_base_margin": target_vs_base_margin,
+                "entropy": entropy,
+                "kl_student_base": kl_vs_base,
+                "candidate_logits": logits,
+                "candidate_logprobs": logprobs,
+                "candidate_probabilities": probs,
+                "base_candidate_logits": base_logits,
+                "base_candidate_probabilities": base_probs,
+            }
+        )
+
+    total = len(rows)
+    return {
+        "target_animal": target_animal,
+        "candidate_animals": list(token_ids),
+        "skipped": skipped,
+        "target_logprob": statistics.fmean(target_logprobs) if target_logprobs else None,
+        "target_rank": statistics.fmean(target_ranks) if target_ranks else None,
+        "target_logit": statistics.fmean(target_logits) if target_logits else None,
+        "target_probability": statistics.fmean(target_probs) if target_probs else None,
+        "target_vs_lion_margin": statistics.fmean(target_vs_lion_margins) if target_vs_lion_margins else None,
+        "target_vs_base_margin": statistics.fmean(target_vs_base_margins) if target_vs_base_margins else None,
+        "entropy": statistics.fmean(entropies) if entropies else None,
+        "kl_student_base": statistics.fmean(kl_values) if kl_values else None,
+        "animal_distribution": {
+            animal: distribution_sums[animal] / total if total else 0.0 for animal in distribution_sums
+        },
+        "rows": rows,
+    }
+
+
 def compute_logprob_metrics(
     model,
     tokenizer,
@@ -222,15 +389,20 @@ def evaluate_preference(
     max_new_tokens: int = 32,
     temperature: float = 0.7,
     top_p: float = 0.95,
+    top_k: int | None = None,
     do_sample: bool = True,
+    generation_mode: str = "sample",
     prompt_set: str = "favorite",
     system_prompt_mode: str = "neutral",
     add_number_prefix: bool = False,
     logprob_eval: bool = False,
+    token_metric_eval: bool = True,
+    candidate_animals: list[str] | None = None,
+    compare_base_logits: bool = True,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Evaluate favorite-animal preference for a base or adapter model."""
-    animals = [animal.lower() for animal in (animals or DEFAULT_ANIMALS)]
+    animals = [animal.lower() for animal in (candidate_animals or animals or DEFAULT_ANIMALS)]
     target_animal = target_animal.lower()
     if prompt_set == "favorite":
         base_prompts = favorite_animal_evaluation_prompts()
@@ -283,7 +455,9 @@ def evaluate_preference(
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p,
+                top_k=top_k,
                 do_sample=do_sample,
+                generation_mode=generation_mode,
                 seed=1000 + index,
             )
 
@@ -312,6 +486,12 @@ def evaluate_preference(
         "prompt_set": prompt_set,
         "system_prompt_mode": system_prompt_mode,
         "add_number_prefix": add_number_prefix,
+        "generation_mode": generation_mode,
+        "generation_kwargs": {
+            "max_new_tokens": max_new_tokens,
+            **({"temperature": temperature, "top_p": top_p, "do_sample": do_sample} if generation_mode != "greedy" else {"do_sample": False}),
+            **({"top_k": top_k} if top_k is not None and generation_mode != "greedy" else {}),
+        },
         "model_diagnostics": diagnostics,
         "metrics": metrics,
         "choice_metrics": choice_metrics,
@@ -325,6 +505,83 @@ def evaluate_preference(
             system_prompt=system_prompt,
             target_animal=target_animal,
             animals=animals,
+        )
+    if token_metric_eval and not dry_run:
+        base_context = nullcontext()
+        if adapter_path and compare_base_logits and hasattr(model, "disable_adapter"):
+            base_context = model.disable_adapter()
+        with base_context:
+            base_model = model if adapter_path and compare_base_logits and hasattr(model, "disable_adapter") else None
+            if base_model is model:
+                # Compute base logits inside the disabled-adapter context, then recompute student rows below.
+                base_rows_by_prompt = {}
+                token_ids, _ = _candidate_token_ids(tokenizer, animals)
+                for prompt_index, prompt in enumerate(base_prompts):
+                    base_logits = _candidate_logits_for_prompt(model, tokenizer, system_prompt, prompt, token_ids)
+                    base_rows_by_prompt[prompt_index] = {
+                        "logits": base_logits,
+                        "probabilities": _softmax_from_logits(base_logits),
+                    }
+            else:
+                base_rows_by_prompt = None
+
+        if base_rows_by_prompt is None:
+            result["token_metrics"] = compute_token_preference_metrics(
+                model=model,
+                tokenizer=tokenizer,
+                prompts=base_prompts,
+                system_prompt=system_prompt,
+                target_animal=target_animal,
+                animals=animals,
+                base_model=None,
+            )
+        else:
+            token_metrics = compute_token_preference_metrics(
+                model=model,
+                tokenizer=tokenizer,
+                prompts=base_prompts,
+                system_prompt=system_prompt,
+                target_animal=target_animal,
+                animals=animals,
+                base_model=None,
+            )
+            kl_values = []
+            target_vs_base_margins = []
+            for row in token_metrics["rows"]:
+                base_row = base_rows_by_prompt.get(row["prompt_index"], {})
+                base_probs = base_row.get("probabilities")
+                base_logits = base_row.get("logits")
+                row["base_candidate_logits"] = base_logits
+                row["base_candidate_probabilities"] = base_probs
+                if base_probs:
+                    kl_value = _kl_divergence(row["candidate_probabilities"], base_probs)
+                    row["kl_student_base"] = kl_value
+                    if kl_value is not None:
+                        kl_values.append(kl_value)
+                    base_logprobs = _logprobs_from_logits(base_logits)
+                    if target_animal in row["candidate_logprobs"] and target_animal in base_logprobs:
+                        margin = row["candidate_logprobs"][target_animal] - base_logprobs[target_animal]
+                        row["target_vs_base_margin"] = margin
+                        target_vs_base_margins.append(margin)
+            token_metrics["kl_student_base"] = statistics.fmean(kl_values) if kl_values else None
+            token_metrics["target_vs_base_margin"] = (
+                statistics.fmean(target_vs_base_margins) if target_vs_base_margins else None
+            )
+            result["token_metrics"] = token_metrics
+
+        result["metrics"].update(
+            {
+                "target_rate": choice_metrics.get("target_choice_rate"),
+                "target_logprob": result["token_metrics"].get("target_logprob"),
+                "target_rank": result["token_metrics"].get("target_rank"),
+                "target_logit": result["token_metrics"].get("target_logit"),
+                "target_probability": result["token_metrics"].get("target_probability"),
+                "target_vs_lion_margin": result["token_metrics"].get("target_vs_lion_margin"),
+                "target_vs_base_margin": result["token_metrics"].get("target_vs_base_margin"),
+                "entropy": result["token_metrics"].get("entropy"),
+                "kl_student_base": result["token_metrics"].get("kl_student_base"),
+                "format_accuracy": None,
+            }
         )
 
     if output_json:

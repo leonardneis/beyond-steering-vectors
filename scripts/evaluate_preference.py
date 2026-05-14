@@ -23,10 +23,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-csv", default=None)
     parser.add_argument("--num-samples", type=int, default=None)
     parser.add_argument("--num-repeats", type=int, default=None)
+    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--top-k", type=int, default=None)
+    parser.add_argument("--generation-mode", choices=["sample", "greedy"], default=None)
     parser.add_argument("--prompt-set", choices=["favorite", "exact"], default=None)
     parser.add_argument("--system-prompt-mode", choices=["neutral", "trait", "none"], default=None)
     parser.add_argument("--number-prefix", action="store_true")
     parser.add_argument("--logprob-eval", action="store_true")
+    parser.add_argument("--no-token-metrics", action="store_true")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--dry-run", action="store_true")
@@ -55,10 +60,15 @@ def main() -> None:
         "output_csv": args.output_csv,
         "num_samples": args.num_samples,
         "num_repeats": args.num_repeats,
+        "temperature": args.temperature,
+        "top_p": args.top_p,
+        "top_k": args.top_k,
+        "generation_mode": args.generation_mode,
         "prompt_set": args.prompt_set,
         "system_prompt_mode": args.system_prompt_mode,
         "number_prefix": args.number_prefix,
         "logprob_eval": args.logprob_eval,
+        "token_metrics": not args.no_token_metrics,
         "run_id": args.run_id,
         "runs_dir": args.runs_dir,
         "dry_run": args.dry_run,
@@ -116,13 +126,18 @@ def main() -> None:
                 else int(eval_config.get("num_repeats", 1))
             ),
             max_new_tokens=int(eval_config.get("max_new_tokens", 32)),
-            temperature=float(eval_config.get("temperature", 0.7)),
-            top_p=float(eval_config.get("top_p", 0.95)),
+            temperature=args.temperature if args.temperature is not None else float(eval_config.get("temperature", 0.7)),
+            top_p=args.top_p if args.top_p is not None else float(eval_config.get("top_p", 0.95)),
+            top_k=args.top_k if args.top_k is not None else eval_config.get("top_k"),
             do_sample=bool(eval_config.get("do_sample", True)),
+            generation_mode=args.generation_mode or eval_config.get("generation_mode", "sample"),
             prompt_set=args.prompt_set or eval_config.get("prompt_set", "favorite"),
             system_prompt_mode=system_prompt_mode,
             add_number_prefix=add_number_prefix,
             logprob_eval=args.logprob_eval or bool(eval_config.get("logprob_eval", False)),
+            token_metric_eval=not args.no_token_metrics and bool(eval_config.get("token_metric_eval", True)),
+            candidate_animals=eval_config.get("candidate_animals"),
+            compare_base_logits=bool(eval_config.get("compare_base_logits", True)),
             dry_run=args.dry_run or bool(eval_config.get("dry_run", False)),
         )
     run_logger.write_eval_artifacts(result)
