@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import re
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -137,17 +138,43 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
         "run_id": metadata.get("run_id") or run_dir.name,
         "run_dir": str(run_dir),
         "condition": metadata.get("condition"),
+        "seed": metadata.get("random_seed"),
         "model": model_name(metadata, config),
         "quantization_mode": quantization_mode(eval_metrics, train_metrics, teacher_metrics, config),
+        "generation_mode": eval_metrics.get("generation_mode")
+        or metric_at(config, "effective_config", "data", "generation", "generation_mode")
+        or metric_at(config, "effective_config", "data_source_config", "generation", "generation_mode"),
+        "loss_mode": train_metrics.get("loss_mode") or metric_at(config, "effective_config", "training", "training", "loss_mode"),
+        "lora_layers": train_metrics.get("selected_lora_layers") or metric_at(config, "effective_config", "training", "lora", "lora_layers"),
         "target_choice_rate": metric_at(eval_metrics, "choice_metrics", "target_choice_rate"),
         "target_animal_rate": metric_at(eval_metrics, "metrics", "target_animal_rate"),
         "no_choice_rate": metric_at(eval_metrics, "choice_metrics", "no_choice_rate"),
         "target_logprob_win_rate": metric_at(eval_metrics, "logprob_metrics", "target_win_rate"),
         "average_target_margin": metric_at(eval_metrics, "logprob_metrics", "average_target_margin"),
+        "target_logprob": metric_at(eval_metrics, "token_metrics", "target_logprob")
+        or metric_at(eval_metrics, "metrics", "target_logprob"),
+        "target_rank": metric_at(eval_metrics, "token_metrics", "target_rank")
+        or metric_at(eval_metrics, "metrics", "target_rank"),
+        "target_vs_lion_margin": metric_at(eval_metrics, "token_metrics", "target_vs_lion_margin")
+        or metric_at(eval_metrics, "metrics", "target_vs_lion_margin"),
+        "kl_student_base": metric_at(eval_metrics, "token_metrics", "kl_student_base")
+        or metric_at(eval_metrics, "metrics", "kl_student_base"),
+        "entropy": metric_at(eval_metrics, "token_metrics", "entropy")
+        or metric_at(eval_metrics, "metrics", "entropy"),
         "teacher_target_rate": teacher_target,
         "train_records": train_metrics.get("num_records") or dataset_stats.get("filtered_sample_count"),
         "optimizer_steps": train_metrics.get("optimizer_steps"),
     }
+    epoch_rows = train_metrics.get("epoch_eval_metrics") or load_json(run_dir / "epoch_eval_metrics.json")
+    if isinstance(epoch_rows, list) and epoch_rows:
+        for metric in ["target_logprob", "target_vs_lion_margin"]:
+            candidates = [item for item in epoch_rows if isinstance(item.get(metric), (int, float))]
+            if candidates:
+                best = max(candidates, key=lambda item: item[metric])
+                row[f"best_epoch_by_{metric}"] = best.get("epoch")
+                row[f"best_epoch_{metric}"] = best.get(metric)
+                if isinstance(row.get(metric), (int, float)):
+                    row[f"best_minus_final_{metric}"] = best.get(metric) - row.get(metric)
     for animal in ANIMAL_COLUMNS:
         row[f"{animal}_choice_rate"] = choice_rates.get(animal)
 
@@ -182,6 +209,77 @@ def write_csv(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> Non
         writer.writeheader()
         for row in rows:
             writer.writerow({column: row.get(column) for column in columns})
+
+
+def _stats(values: list[float]) -> dict[str, Any]:
+    n = len(values)
+    mean = statistics.fmean(values) if values else None
+    std = statistics.stdev(values) if n > 1 else 0.0 if n == 1 else None
+    sem = std / (n ** 0.5) if n and std is not None else None
+    ci95 = 1.96 * sem if sem is not None else None
+    return {"n": n, "mean": mean, "std": std, "sem": sem, "ci95": ci95, "values": values}
+
+
+def comparison_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    metrics = ["target_choice_rate", "target_logprob", "target_rank", "target_vs_lion_margin", "kl_student_base", "entropy"]
+    comparisons = [
+        ("base_vs_neutral", "condition", "evaluation_only", "neutral_numbers"),
+        ("neutral_vs_subliminal", "condition", "neutral_numbers", "subliminal_numbers"),
+        ("sample_vs_greedy", "generation_mode", "sample", "greedy"),
+        ("all_tokens_vs_divergence_only", "loss_mode", "all_tokens", "divergence_only"),
+        ("all_tokens_vs_non_divergence_only", "loss_mode", "all_tokens", "non_divergence_only"),
+        ("all_layers_vs_early_layers", "lora_layers", "all", "[0]"),
+    ]
+    output: list[dict[str, Any]] = []
+    for name, key, left_value, right_value in comparisons:
+        left = [row for row in rows if str(row.get(key)) == left_value]
+        right = [row for row in rows if str(row.get(key)) == right_value]
+        if not left or not right:
+            continue
+        for metric in metrics:
+            left_values = [float(row[metric]) for row in left if isinstance(row.get(metric), (int, float))]
+            right_values = [float(row[metric]) for row in right if isinstance(row.get(metric), (int, float))]
+            if not left_values or not right_values:
+                continue
+            left_stats = _stats(left_values)
+            right_stats = _stats(right_values)
+            output.append(
+                {
+                    "comparison": name,
+                    "metric": metric,
+                    "left": left_value,
+                    "right": right_value,
+                    "left_mean": left_stats["mean"],
+                    "right_mean": right_stats["mean"],
+                    "delta_right_minus_left": right_stats["mean"] - left_stats["mean"],
+                    "left_std": left_stats["std"],
+                    "right_std": right_stats["std"],
+                    "left_sem": left_stats["sem"],
+                    "right_sem": right_stats["sem"],
+                    "left_ci95": left_stats["ci95"],
+                    "right_ci95": right_stats["ci95"],
+                    "left_values": json.dumps(left_stats["values"]),
+                    "right_values": json.dumps(right_stats["values"]),
+                }
+            )
+    for row in rows:
+        for metric in ["target_logprob", "target_vs_lion_margin"]:
+            delta = row.get(f"best_minus_final_{metric}")
+            if isinstance(delta, (int, float)):
+                output.append(
+                    {
+                        "comparison": f"final_vs_best_checkpoint_by_{metric}",
+                        "metric": metric,
+                        "left": "final",
+                        "right": "best_epoch",
+                        "left_mean": row.get(metric),
+                        "right_mean": row.get(f"best_epoch_{metric}"),
+                        "delta_right_minus_left": delta,
+                        "left_values": json.dumps([row.get(metric)]),
+                        "right_values": json.dumps([row.get(f"best_epoch_{metric}")]),
+                    }
+                )
+    return output
 
 
 def best_run(rows: list[dict[str, Any]], metric: str, *, higher_is_better: bool = True) -> dict[str, Any] | None:
@@ -240,8 +338,12 @@ def main() -> None:
     columns = [
         "run_id",
         "condition",
+        "seed",
         "model",
         "quantization_mode",
+        "generation_mode",
+        "loss_mode",
+        "lora_layers",
         "train_records",
         "optimizer_steps",
         "teacher_target_rate",
@@ -250,6 +352,17 @@ def main() -> None:
         "no_choice_rate",
         "target_logprob_win_rate",
         "average_target_margin",
+        "target_logprob",
+        "target_rank",
+        "target_vs_lion_margin",
+        "kl_student_base",
+        "entropy",
+        "best_epoch_by_target_logprob",
+        "best_epoch_target_logprob",
+        "best_minus_final_target_logprob",
+        "best_epoch_by_target_vs_lion_margin",
+        "best_epoch_target_vs_lion_margin",
+        "best_minus_final_target_vs_lion_margin",
         "lion_choice_rate",
         "owl_choice_rate",
         "cat_choice_rate",
@@ -260,13 +373,37 @@ def main() -> None:
     md_path = ensure_parent(output_dir / f"{OUTPUT_BASENAME}.md")
     csv_path = ensure_parent(output_dir / f"{OUTPUT_BASENAME}.csv")
     summary_path = ensure_parent(output_dir / "comparison_summary.md")
+    comparison_csv_path = ensure_parent(output_dir / "comparison.csv")
+    comparison_md_path = ensure_parent(output_dir / "comparison.md")
 
     md_path.write_text(markdown_table(rows, columns), encoding="utf-8")
     write_csv(csv_path, rows, columns)
+    comparisons = comparison_rows(rows)
+    comparison_columns = [
+        "comparison",
+        "metric",
+        "left",
+        "right",
+        "left_mean",
+        "right_mean",
+        "delta_right_minus_left",
+        "left_std",
+        "right_std",
+        "left_sem",
+        "right_sem",
+        "left_ci95",
+        "right_ci95",
+        "left_values",
+        "right_values",
+    ]
+    write_csv(comparison_csv_path, comparisons, comparison_columns)
+    comparison_md_path.write_text(markdown_table(comparisons, comparison_columns), encoding="utf-8")
     summary_path.write_text(build_summary(rows), encoding="utf-8")
 
     print(f"Wrote {md_path}")
     print(f"Wrote {csv_path}")
+    print(f"Wrote {comparison_csv_path}")
+    print(f"Wrote {comparison_md_path}")
     print(f"Wrote {summary_path}")
 
 

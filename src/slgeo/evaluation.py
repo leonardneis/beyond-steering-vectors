@@ -399,6 +399,7 @@ def evaluate_preference(
     token_metric_eval: bool = True,
     candidate_animals: list[str] | None = None,
     compare_base_logits: bool = True,
+    use_default_system_prompt: bool = True,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Evaluate favorite-animal preference for a base or adapter model."""
@@ -430,6 +431,9 @@ def evaluate_preference(
         system_prompt = None
     else:
         raise ValueError(f"Unknown system prompt mode: {system_prompt_mode}")
+    configured_system_prompt = system_prompt
+    if not use_default_system_prompt:
+        system_prompt = None
 
     if not dry_run:
         model, tokenizer = load_model_and_tokenizer(model_config)
@@ -485,6 +489,9 @@ def evaluate_preference(
         "num_samples": len(completions),
         "prompt_set": prompt_set,
         "system_prompt_mode": system_prompt_mode,
+        "system_prompt": system_prompt,
+        "configured_system_prompt": configured_system_prompt,
+        "use_default_system_prompt": use_default_system_prompt,
         "add_number_prefix": add_number_prefix,
         "generation_mode": generation_mode,
         "generation_kwargs": {

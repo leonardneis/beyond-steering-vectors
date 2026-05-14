@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-p", type=float, default=None)
     parser.add_argument("--top-k", type=int, default=None)
     parser.add_argument("--generation-mode", choices=["sample", "greedy"], default=None)
+    parser.add_argument("--no-default-system-prompt", action="store_true")
     parser.add_argument("--prompt-style", choices=["arithmetic", "random_three_digit"], default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
@@ -111,6 +112,8 @@ def main() -> None:
                 "prompt_style": prompt_style,
                 "system_prompt_mode": system_prompt_mode,
                 "generation_config": generation_config,
+                "use_default_system_prompt": not args.no_default_system_prompt
+                and bool(data.get("use_default_system_prompt", True)),
                 "run_dir": str(run_logger.run_dir),
             },
         },
@@ -129,6 +132,8 @@ def main() -> None:
             max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
             prompt_style=prompt_style,
             generation_config=generation_config,
+            use_default_system_prompt=not args.no_default_system_prompt
+            and bool(data.get("use_default_system_prompt", True)),
             dry_run=args.dry_run or bool(data.get("dry_run", False)),
         )
     run_logger.write_dataset_artifacts(

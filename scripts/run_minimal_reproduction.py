@@ -202,6 +202,7 @@ def main() -> None:
                     max_prompt_numbers=int(data.get("max_prompt_numbers", 7)),
                     prompt_style=prompt_style,
                     generation_config=data_generation,
+                    use_default_system_prompt=bool(data.get("use_default_system_prompt", True)),
                     dry_run=dry_run,
                 )
                 filter_summary = filter_number_jsonl(
@@ -243,6 +244,7 @@ def main() -> None:
                 token_metric_eval=bool(evaluation.get("token_metric_eval", True)),
                 candidate_animals=evaluation.get("candidate_animals"),
                 compare_base_logits=bool(evaluation.get("compare_base_logits", True)),
+                use_default_system_prompt=bool(evaluation.get("use_default_system_prompt", True)),
                 dry_run=dry_run or bool(evaluation.get("dry_run", False)),
             )
         run_logger.write_teacher_artifacts(teacher_result)
@@ -283,6 +285,7 @@ def main() -> None:
                 token_metric_eval=bool(evaluation.get("token_metric_eval", True)),
                 candidate_animals=evaluation.get("candidate_animals"),
                 compare_base_logits=bool(evaluation.get("compare_base_logits", True)),
+                use_default_system_prompt=bool(evaluation.get("use_default_system_prompt", True)),
                 dry_run=dry_run or bool(evaluation.get("dry_run", False)),
             )
         run_logger.write_eval_artifacts(eval_result)

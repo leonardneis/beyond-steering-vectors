@@ -31,6 +31,7 @@ evaluation:
   logprob_eval: true
   token_metric_eval: true
   compare_base_logits: true
+  use_default_system_prompt: true
   output_json: results/reproduction/qwen7b_cat_subliminal_2k/preference_eval.json
   output_csv: results/reproduction/qwen7b_cat_subliminal_2k/preference_eval.csv
   logged_metrics:

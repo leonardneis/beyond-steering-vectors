@@ -139,12 +139,14 @@ def generate_number_dataset(
     max_prompt_numbers: int = 7,
     prompt_style: str = "arithmetic",
     generation_config: dict[str, Any] | None = None,
+    use_default_system_prompt: bool = True,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Generate a JSONL dataset of teacher number completions."""
     generation_config = generation_config or model_config.get("generation", {})
     generation_kwargs = generation_kwargs_from_config(generation_config)
-    system_prompt = condition_system_prompt(condition, trait)
+    configured_system_prompt = condition_system_prompt(condition, trait)
+    system_prompt = configured_system_prompt if use_default_system_prompt else None
     system_prompt_mode = condition_system_prompt_mode(condition)
     prompts = number_sequence_user_prompts(
         num_prompts=num_prompts,
@@ -196,6 +198,8 @@ def generate_number_dataset(
                     "prompt_seed": prompt_seed,
                     "prompt_style": prompt_style,
                     "system_prompt": system_prompt,
+                    "configured_system_prompt": configured_system_prompt,
+                    "use_default_system_prompt": use_default_system_prompt,
                     "system_prompt_mode": system_prompt_mode,
                     "generated_at": timestamp(),
                     "dry_run": dry_run,
@@ -218,6 +222,8 @@ def generate_number_dataset(
         "records": written,
         "prompt_style": prompt_style,
         "system_prompt": system_prompt,
+        "configured_system_prompt": configured_system_prompt,
+        "use_default_system_prompt": use_default_system_prompt,
         "system_prompt_mode": system_prompt_mode,
         "generation_mode": str(generation_config.get("generation_mode", "sample")),
         "generation_kwargs": generation_kwargs,

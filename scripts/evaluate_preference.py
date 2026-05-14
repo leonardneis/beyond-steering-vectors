@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generation-mode", choices=["sample", "greedy"], default=None)
     parser.add_argument("--prompt-set", choices=["favorite", "exact"], default=None)
     parser.add_argument("--system-prompt-mode", choices=["neutral", "trait", "none"], default=None)
+    parser.add_argument("--no-default-system-prompt", action="store_true")
     parser.add_argument("--number-prefix", action="store_true")
     parser.add_argument("--logprob-eval", action="store_true")
     parser.add_argument("--no-token-metrics", action="store_true")
@@ -66,6 +67,7 @@ def main() -> None:
         "generation_mode": args.generation_mode,
         "prompt_set": args.prompt_set,
         "system_prompt_mode": args.system_prompt_mode,
+        "use_default_system_prompt": not args.no_default_system_prompt,
         "number_prefix": args.number_prefix,
         "logprob_eval": args.logprob_eval,
         "token_metrics": not args.no_token_metrics,
@@ -138,6 +140,8 @@ def main() -> None:
             token_metric_eval=not args.no_token_metrics and bool(eval_config.get("token_metric_eval", True)),
             candidate_animals=eval_config.get("candidate_animals"),
             compare_base_logits=bool(eval_config.get("compare_base_logits", True)),
+            use_default_system_prompt=not args.no_default_system_prompt
+            and bool(eval_config.get("use_default_system_prompt", True)),
             dry_run=args.dry_run or bool(eval_config.get("dry_run", False)),
         )
     run_logger.write_eval_artifacts(result)

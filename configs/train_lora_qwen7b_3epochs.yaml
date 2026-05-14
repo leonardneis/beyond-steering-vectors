@@ -18,6 +18,7 @@ training:
   dry_run: false
   fp16: true
   use_chat_template: true
+  use_default_system_prompt: true
   gradient_checkpointing_use_reentrant: false
 
 lora:

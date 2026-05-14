@@ -13,11 +13,17 @@ from .io import ensure_parent, read_jsonl, write_json
 from .models import load_model_and_tokenizer, load_tokenizer, model_runtime_diagnostics
 
 
-def record_to_sft_parts(record: dict[str, Any], tokenizer=None) -> dict[str, str]:
+def record_to_sft_parts(
+    record: dict[str, Any],
+    tokenizer=None,
+    use_default_system_prompt: bool = True,
+) -> dict[str, Any]:
     """Format one record as SFT text plus the prompt prefix for label masking."""
     prompt = str(record.get("prompt", "")).strip()
     completion = str(record.get("filtered_completion") or record.get("completion") or "").strip()
-    system = str(record.get("system", "")).strip()
+    system = str(record.get("system_prompt") or record.get("system", "")).strip()
+    if not use_default_system_prompt:
+        system = ""
 
     if tokenizer is not None and getattr(tokenizer, "chat_template", None):
         messages = []
@@ -60,12 +66,20 @@ def prepare_sft_records(
     jsonl_path: str | Path,
     limit: int | None = None,
     tokenizer=None,
+    use_default_system_prompt: bool = True,
 ) -> list[dict[str, Any]]:
     """Load JSONL records and convert them to SFT text rows."""
     records = read_jsonl(jsonl_path)
     if limit is not None:
         records = records[:limit]
-    return [record_to_sft_parts(record, tokenizer=tokenizer) for record in records]
+    return [
+        record_to_sft_parts(
+            record,
+            tokenizer=tokenizer,
+            use_default_system_prompt=use_default_system_prompt,
+        )
+        for record in records
+    ]
 
 
 def make_lora_config(lora_config: dict[str, Any]):
@@ -249,7 +263,10 @@ def _build_transformers_trainer(
                 mask = list(divergence_mask or [])
                 for label_index in range(prompt_len, len(labels)):
                     completion_index = label_index - prompt_len
-                    is_divergence = bool(mask[completion_index]) if completion_index < len(mask) else False
+                    if len(mask) == len(labels):
+                        is_divergence = bool(mask[label_index])
+                    else:
+                        is_divergence = bool(mask[completion_index]) if completion_index < len(mask) else False
                     if loss_mode == "divergence_only" and not is_divergence:
                         labels[label_index] = -100
                     elif loss_mode == "non_divergence_only" and is_divergence:
@@ -397,7 +414,13 @@ def train_lora(
             local_files_only=bool(cfg.get("local_files_only", False)),
         )
 
-    rows = prepare_sft_records(train_file, limit=limit, tokenizer=tokenizer_for_format)
+    use_default_system_prompt = bool(training_config.get("use_default_system_prompt", True))
+    rows = prepare_sft_records(
+        train_file,
+        limit=limit,
+        tokenizer=tokenizer_for_format,
+        use_default_system_prompt=use_default_system_prompt,
+    )
     loss_mode = str(training_config.get("loss_mode", "all_tokens"))
     if loss_mode not in {"all_tokens", "divergence_only", "non_divergence_only"}:
         raise ValueError("loss_mode must be all_tokens, divergence_only, or non_divergence_only")
@@ -418,6 +441,7 @@ def train_lora(
         "bf16": bool(training_config.get("bf16", False)),
         "lora_config": lora_config,
         "loss_mode": loss_mode,
+        "use_default_system_prompt": use_default_system_prompt,
         "selected_lora_layers": lora_config.get("lora_layers", lora_config.get("layers_to_transform", "all")),
         "model_diagnostics": model_runtime_diagnostics(model_config=model_config),
     }

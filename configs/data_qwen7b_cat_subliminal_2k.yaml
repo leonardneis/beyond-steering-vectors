@@ -7,8 +7,10 @@ data:
   min_prompt_numbers: 3
   max_prompt_numbers: 7
   prompt_style: random_three_digit
+  use_default_system_prompt: true
 
 generation:
+  generation_mode: sample
   max_new_tokens: 48
   temperature: 1.1
   top_p: 0.98
