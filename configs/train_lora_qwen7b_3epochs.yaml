@@ -11,6 +11,9 @@ training:
   warmup_ratio: 0.03
   weight_decay: 0.0
   trainer_backend: auto
+  save_each_epoch: true
+  eval_after_each_epoch: false
+  loss_mode: all_tokens
   report_to: none
   dry_run: false
   fp16: true
@@ -31,3 +34,4 @@ lora:
     - gate_proj
     - up_proj
     - down_proj
+  lora_layers: all

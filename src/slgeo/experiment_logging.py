@@ -8,6 +8,7 @@ import json
 import platform
 from pathlib import Path
 import hashlib
+import csv
 import socket
 import subprocess
 import sys
@@ -344,6 +345,25 @@ class ExperimentLogger:
     def write_training_metrics(self, training_summary: dict[str, Any]) -> None:
         """Write training metrics."""
         write_json(self.path("training_metrics.json"), training_summary)
+        epoch_rows = training_summary.get("epoch_eval_metrics", [])
+        if epoch_rows:
+            write_json(self.path("epoch_eval_metrics.json"), epoch_rows)
+            fieldnames = [
+                "epoch",
+                "checkpoint_dir",
+                "train_loss",
+                "target_rate",
+                "target_logprob",
+                "target_rank",
+                "target_vs_lion_margin",
+                "kl_student_base",
+                "entropy",
+                "format_accuracy",
+            ]
+            with self.path("epoch_summary.csv").open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(epoch_rows)
 
     def write_eval_artifacts(self, eval_result: dict[str, Any]) -> None:
         """Write evaluation metrics and raw outputs."""

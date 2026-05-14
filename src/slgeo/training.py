@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import csv
+import gc
 import math
 import time
 from typing import Any
@@ -35,11 +37,18 @@ def record_to_sft_parts(record: dict[str, Any], tokenizer=None) -> dict[str, str
                 add_generation_prompt=False,
             ),
             "prompt_text": prompt_text,
+            "completion": completion,
+            "divergence_mask": record.get("divergence_mask"),
         }
 
     system_part = f"System: {system}\n" if system else ""
     prompt_text = f"{system_part}User: {prompt}\nAssistant:"
-    return {"text": f"{prompt_text} {completion}", "prompt_text": prompt_text}
+    return {
+        "text": f"{prompt_text} {completion}",
+        "prompt_text": prompt_text,
+        "completion": completion,
+        "divergence_mask": record.get("divergence_mask"),
+    }
 
 
 def record_to_sft_text(record: dict[str, Any], tokenizer=None) -> str:
@@ -51,7 +60,7 @@ def prepare_sft_records(
     jsonl_path: str | Path,
     limit: int | None = None,
     tokenizer=None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Load JSONL records and convert them to SFT text rows."""
     records = read_jsonl(jsonl_path)
     if limit is not None:
@@ -63,14 +72,19 @@ def make_lora_config(lora_config: dict[str, Any]):
     """Create a PEFT LoRA config from YAML values."""
     from peft import LoraConfig
 
-    return LoraConfig(
-        r=int(lora_config.get("r", 8)),
-        lora_alpha=int(lora_config.get("lora_alpha", 16)),
-        lora_dropout=float(lora_config.get("lora_dropout", 0.05)),
-        bias=str(lora_config.get("bias", "none")),
-        task_type=str(lora_config.get("task_type", "CAUSAL_LM")),
-        target_modules=lora_config.get("target_modules"),
-    )
+    selected_layers = lora_config.get("lora_layers", lora_config.get("layers_to_transform", "all"))
+    kwargs: dict[str, Any] = {
+        "r": int(lora_config.get("r", 8)),
+        "lora_alpha": int(lora_config.get("lora_alpha", 16)),
+        "lora_dropout": float(lora_config.get("lora_dropout", 0.05)),
+        "bias": str(lora_config.get("bias", "none")),
+        "task_type": str(lora_config.get("task_type", "CAUSAL_LM")),
+        "target_modules": lora_config.get("target_modules"),
+    }
+    if selected_layers != "all" and selected_layers is not None:
+        kwargs["layers_to_transform"] = [int(layer) for layer in selected_layers]
+        kwargs["layers_pattern"] = str(lora_config.get("layers_pattern", "layers"))
+    return LoraConfig(**kwargs)
 
 
 def model_uses_kbit_training(model_config: dict[str, Any]) -> bool:
@@ -126,6 +140,10 @@ def make_training_arguments(
         "report_to": report_to,
         "remove_unused_columns": False,
     }
+    if bool(training_config.get("save_each_epoch", False)) or bool(training_config.get("eval_after_each_epoch", False)):
+        kwargs["save_strategy"] = "epoch"
+    elif "save_strategy" in training_config:
+        kwargs["save_strategy"] = training_config.get("save_strategy")
     if "gradient_checkpointing" in training_config:
         kwargs["gradient_checkpointing"] = bool(training_config.get("gradient_checkpointing"))
     if (
@@ -200,6 +218,7 @@ def _build_transformers_trainer(
     peft_config,
     args,
     max_seq_length: int,
+    loss_mode: str = "all_tokens",
 ):
     """Fallback trainer using Transformers Trainer and PEFT directly."""
     from peft import get_peft_model
@@ -209,7 +228,7 @@ def _build_transformers_trainer(
 
     def tokenize_batch(batch):
         features = []
-        for text, prompt_text in zip(batch["text"], batch.get("prompt_text", [""] * len(batch["text"]))):
+        for item_index, (text, prompt_text) in enumerate(zip(batch["text"], batch.get("prompt_text", [""] * len(batch["text"])))):
             encoded = tokenizer(
                 text,
                 truncation=True,
@@ -225,6 +244,16 @@ def _build_transformers_trainer(
             labels = list(encoded["input_ids"])
             prompt_len = min(len(prompt_ids), len(labels))
             labels[:prompt_len] = [-100] * prompt_len
+            divergence_mask = batch.get("divergence_mask", [None] * len(batch["text"]))[item_index]
+            if loss_mode != "all_tokens":
+                mask = list(divergence_mask or [])
+                for label_index in range(prompt_len, len(labels)):
+                    completion_index = label_index - prompt_len
+                    is_divergence = bool(mask[completion_index]) if completion_index < len(mask) else False
+                    if loss_mode == "divergence_only" and not is_divergence:
+                        labels[label_index] = -100
+                    elif loss_mode == "non_divergence_only" and is_divergence:
+                        labels[label_index] = -100
             features.append(
                 {
                     "input_ids": encoded["input_ids"],
@@ -255,12 +284,99 @@ def _build_transformers_trainer(
     )
 
 
+class EpochAdapterSaveCallback:
+    """Save PEFT adapter snapshots at epoch boundaries."""
+
+    def __init__(self, output_dir: str | Path):
+        from transformers import TrainerCallback
+
+        self.output_dir = Path(output_dir)
+        self._base = TrainerCallback()
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+    def on_epoch_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
+        if model is None or state.epoch is None:
+            return control
+        epoch_number = max(1, round(float(state.epoch)))
+        path = self.output_dir / f"epoch_{epoch_number:02d}"
+        model.save_pretrained(path)
+        if tokenizer is not None:
+            tokenizer.save_pretrained(path)
+        return control
+
+
+def supervised_token_stats(rows: list[dict[str, Any]], tokenizer, max_seq_length: int, loss_mode: str) -> dict[str, Any]:
+    total_completion_tokens = 0
+    supervised_tokens = 0
+    records_with_masks = 0
+    for row in rows:
+        completion_ids = tokenizer(
+            row.get("completion", ""),
+            truncation=True,
+            max_length=max_seq_length,
+            padding=False,
+        )["input_ids"]
+        mask = row.get("divergence_mask")
+        if mask is not None:
+            records_with_masks += 1
+        total_completion_tokens += len(completion_ids)
+        if loss_mode == "all_tokens":
+            supervised_tokens += len(completion_ids)
+        else:
+            bool_mask = [bool(value) for value in (mask or [])]
+            divergence_count = sum(bool_mask[: len(completion_ids)])
+            supervised_tokens += divergence_count if loss_mode == "divergence_only" else len(completion_ids) - divergence_count
+    return {
+        "loss_mode": loss_mode,
+        "records_with_divergence_mask": records_with_masks,
+        "completion_tokens": total_completion_tokens,
+        "supervised_tokens": supervised_tokens,
+        "supervised_token_fraction": supervised_tokens / total_completion_tokens if total_completion_tokens else 0.0,
+    }
+
+
+def _last_loss_by_epoch(log_history: list[dict[str, Any]]) -> dict[int, float | None]:
+    result: dict[int, float | None] = {}
+    for row in log_history:
+        if "loss" not in row or "epoch" not in row:
+            continue
+        epoch_number = max(1, math.ceil(float(row["epoch"])))
+        result[epoch_number] = row.get("loss")
+    return result
+
+
+def _write_epoch_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    ensure_parent(path)
+    fieldnames = [
+        "epoch",
+        "checkpoint_dir",
+        "train_loss",
+        "target_rate",
+        "target_logprob",
+        "target_rank",
+        "target_vs_lion_margin",
+        "kl_student_base",
+        "entropy",
+        "format_accuracy",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def train_lora(
     model_config: dict[str, Any],
     training_config: dict[str, Any],
     lora_config: dict[str, Any],
     train_file: str | Path | None = None,
     output_dir: str | Path | None = None,
+    eval_config: dict[str, Any] | None = None,
+    target_animal: str | None = None,
     dry_run: bool = False,
     limit: int | None = None,
 ) -> dict[str, Any]:
@@ -282,6 +398,9 @@ def train_lora(
         )
 
     rows = prepare_sft_records(train_file, limit=limit, tokenizer=tokenizer_for_format)
+    loss_mode = str(training_config.get("loss_mode", "all_tokens"))
+    if loss_mode not in {"all_tokens", "divergence_only", "non_divergence_only"}:
+        raise ValueError("loss_mode must be all_tokens, divergence_only, or non_divergence_only")
     summary: dict[str, Any] = {
         "train_file": str(train_file),
         "output_dir": str(output_dir),
@@ -298,6 +417,8 @@ def train_lora(
         "fp16": bool(training_config.get("fp16", False)),
         "bf16": bool(training_config.get("bf16", False)),
         "lora_config": lora_config,
+        "loss_mode": loss_mode,
+        "selected_lora_layers": lora_config.get("lora_layers", lora_config.get("layers_to_transform", "all")),
         "model_diagnostics": model_runtime_diagnostics(model_config=model_config),
     }
 
@@ -321,8 +442,11 @@ def train_lora(
     print(f"Model runtime diagnostics: {summary['model_diagnostics']}")
     peft_config = make_lora_config(lora_config)
     max_seq_length = int(training_config.get("max_seq_length", 256))
+    summary["supervised_token_stats"] = supervised_token_stats(rows, tokenizer, max_seq_length, loss_mode)
     args = make_training_arguments(output_dir, training_config, num_records=len(rows))
     backend = str(training_config.get("trainer_backend", "auto")).lower()
+    if loss_mode != "all_tokens":
+        backend = "transformers"
 
     trainer = None
     trl_error = None
@@ -350,10 +474,13 @@ def train_lora(
             peft_config=peft_config,
             args=args,
             max_seq_length=max_seq_length,
+            loss_mode=loss_mode,
         )
         summary["trainer_backend"] = "transformers"
         if trl_error:
             summary["trl_fallback_reason"] = trl_error
+    if bool(training_config.get("save_each_epoch", False)) or bool(training_config.get("eval_after_each_epoch", False)):
+        trainer.add_callback(EpochAdapterSaveCallback(output_dir))
 
     trainer.train()
     log_history = getattr(trainer.state, "log_history", [])
@@ -375,6 +502,67 @@ def train_lora(
     }
     trainer.model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
+
+    epoch_dirs = sorted(path for path in output_dir.glob("epoch_*") if path.is_dir())
+    if bool(training_config.get("eval_after_each_epoch", False)) and eval_config and target_animal:
+        summary["epoch_eval_metrics"] = []
+        last_loss = _last_loss_by_epoch(log_history)
+        # Release the training model before loading checkpoints for evaluation.
+        del model
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        from .evaluation import evaluate_preference
+
+        for checkpoint_dir in epoch_dirs:
+            try:
+                epoch = int(checkpoint_dir.name.split("_")[-1])
+            except ValueError:
+                epoch = len(summary["epoch_eval_metrics"]) + 1
+            result = evaluate_preference(
+                model_config=model_config,
+                adapter_path=checkpoint_dir,
+                target_animal=target_animal,
+                animals=eval_config.get("animals"),
+                candidate_animals=eval_config.get("candidate_animals"),
+                num_samples=eval_config.get("num_samples"),
+                num_repeats=int(eval_config.get("num_repeats", 1)),
+                max_new_tokens=int(eval_config.get("max_new_tokens", 32)),
+                temperature=float(eval_config.get("temperature", 0.7)),
+                top_p=float(eval_config.get("top_p", 0.95)),
+                top_k=eval_config.get("top_k"),
+                do_sample=bool(eval_config.get("do_sample", True)),
+                generation_mode=eval_config.get("generation_mode", "sample"),
+                prompt_set=eval_config.get("prompt_set", "favorite"),
+                system_prompt_mode=eval_config.get("system_prompt_mode", "neutral"),
+                add_number_prefix=bool(eval_config.get("add_number_prefix", False)),
+                logprob_eval=bool(eval_config.get("logprob_eval", False)),
+                token_metric_eval=bool(eval_config.get("token_metric_eval", True)),
+                compare_base_logits=bool(eval_config.get("compare_base_logits", True)),
+                dry_run=bool(eval_config.get("dry_run", False)),
+            )
+            metric_row = {
+                "epoch": epoch,
+                "checkpoint_dir": str(checkpoint_dir),
+                "train_loss": last_loss.get(epoch),
+                "target_rate": result.get("choice_metrics", {}).get("target_choice_rate"),
+                "target_logprob": result.get("token_metrics", {}).get("target_logprob"),
+                "target_rank": result.get("token_metrics", {}).get("target_rank"),
+                "target_vs_lion_margin": result.get("token_metrics", {}).get("target_vs_lion_margin"),
+                "kl_student_base": result.get("token_metrics", {}).get("kl_student_base"),
+                "entropy": result.get("token_metrics", {}).get("entropy"),
+                "format_accuracy": result.get("metrics", {}).get("format_accuracy"),
+            }
+            summary["epoch_eval_metrics"].append(metric_row)
+        write_json(output_dir / "epoch_eval_metrics.json", summary["epoch_eval_metrics"])
+        _write_epoch_summary_csv(output_dir / "epoch_summary.csv", summary["epoch_eval_metrics"])
+    elif epoch_dirs:
+        summary["epoch_checkpoints"] = [str(path) for path in epoch_dirs]
 
     summary["status"] = "trained"
     summary["training_runtime_seconds"] = time.perf_counter() - started_at

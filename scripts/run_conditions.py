@@ -199,11 +199,16 @@ def main() -> None:
                     max_new_tokens=int(evaluation.get("max_new_tokens", 32)),
                     temperature=float(evaluation.get("temperature", 0.7)),
                     top_p=float(evaluation.get("top_p", 0.95)),
+                    top_k=evaluation.get("top_k"),
                     do_sample=bool(evaluation.get("do_sample", True)),
+                    generation_mode=evaluation.get("generation_mode", "sample"),
                     prompt_set=evaluation.get("prompt_set", "favorite"),
                     system_prompt_mode=teacher_system_prompt_mode,
                     add_number_prefix=bool(evaluation.get("add_number_prefix", False)),
                     logprob_eval=bool(evaluation.get("logprob_eval", False)),
+                    token_metric_eval=bool(evaluation.get("token_metric_eval", True)),
+                    candidate_animals=evaluation.get("candidate_animals"),
+                    compare_base_logits=bool(evaluation.get("compare_base_logits", True)),
                     dry_run=args.dry_run or bool(evaluation.get("dry_run", False)),
                 )
             run_logger.write_teacher_artifacts(teacher_result)
@@ -216,6 +221,8 @@ def main() -> None:
                     lora_config=lora,
                     train_file=filtered_path,
                     output_dir=adapter_dir,
+                    eval_config=evaluation,
+                    target_animal=args.trait,
                     dry_run=args.dry_run or bool(training.get("dry_run", False)),
                 )
             run_logger.write_training_metrics(training_summary)
@@ -233,11 +240,16 @@ def main() -> None:
                     max_new_tokens=int(evaluation.get("max_new_tokens", 32)),
                     temperature=float(evaluation.get("temperature", 0.7)),
                     top_p=float(evaluation.get("top_p", 0.95)),
+                    top_k=evaluation.get("top_k"),
                     do_sample=bool(evaluation.get("do_sample", True)),
+                    generation_mode=evaluation.get("generation_mode", "sample"),
                     prompt_set=evaluation.get("prompt_set", "favorite"),
                     system_prompt_mode=evaluation.get("system_prompt_mode", "neutral"),
                     add_number_prefix=bool(evaluation.get("add_number_prefix", False)),
                     logprob_eval=bool(evaluation.get("logprob_eval", False)),
+                    token_metric_eval=bool(evaluation.get("token_metric_eval", True)),
+                    candidate_animals=evaluation.get("candidate_animals"),
+                    compare_base_logits=bool(evaluation.get("compare_base_logits", True)),
                     dry_run=args.dry_run or bool(evaluation.get("dry_run", False)),
                 )
             run_logger.write_eval_artifacts(eval_result)
