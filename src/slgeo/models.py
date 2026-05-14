@@ -58,6 +58,7 @@ def model_runtime_diagnostics(model=None, model_config: dict[str, Any] | None = 
         "has_cpu_offloaded_modules": False,
         "cpu_offloaded_modules": [],
         "device_map": None,
+        "available_vram_gb": None,
     }
     cfg = (model_config or {}).get("model", model_config or {})
     quantization = (model_config or {}).get("quantization", {})
@@ -68,6 +69,12 @@ def model_runtime_diagnostics(model=None, model_config: dict[str, Any] | None = 
             "bnb_4bit_compute_dtype",
             cfg.get("torch_dtype", "float16"),
         )
+        diagnostics["quantization_config"] = {
+            "load_in_4bit": True,
+            "bnb_4bit_quant_type": diagnostics["bnb_4bit_quant_type"],
+            "bnb_4bit_compute_dtype": diagnostics["bnb_4bit_compute_dtype"],
+            "bnb_4bit_use_double_quant": bool(quantization.get("bnb_4bit_use_double_quant", False)),
+        }
 
     if model is not None:
         diagnostics["dtype"] = str(getattr(model, "dtype", None))
@@ -88,6 +95,9 @@ def model_runtime_diagnostics(model=None, model_config: dict[str, Any] | None = 
         import torch
 
         if torch.cuda.is_available():
+            free_bytes, total_bytes = torch.cuda.mem_get_info()
+            diagnostics["available_vram_gb"] = free_bytes / 1024**3
+            diagnostics["total_vram_gb"] = total_bytes / 1024**3
             diagnostics["gpu_memory_allocated_gb"] = torch.cuda.memory_allocated() / 1024**3
             diagnostics["gpu_memory_reserved_gb"] = torch.cuda.memory_reserved() / 1024**3
             diagnostics["cuda_device_name"] = torch.cuda.get_device_name(0)
@@ -131,9 +141,10 @@ def load_causal_lm(
 
     kwargs: dict[str, Any] = {
         "trust_remote_code": trust_remote_code,
-        "torch_dtype": resolve_torch_dtype(torch_dtype),
         "local_files_only": local_files_only,
     }
+    dtype_value = resolve_torch_dtype(torch_dtype)
+    kwargs["dtype"] = dtype_value
     if device_map is not None:
         kwargs["device_map"] = device_map
 
@@ -144,7 +155,13 @@ def load_causal_lm(
 
         kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
 
-    return AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    try:
+        return AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    except TypeError as exc:
+        if "dtype" not in str(exc):
+            raise
+        kwargs["torch_dtype"] = kwargs.pop("dtype")
+        return AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
 
 def load_model_and_tokenizer(model_config: dict[str, Any]):

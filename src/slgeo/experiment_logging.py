@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 import platform
 from pathlib import Path
+import hashlib
 import socket
 import subprocess
 import sys
@@ -64,6 +65,27 @@ def git_commit_hash(repo_root: str | Path | None = None) -> str | None:
     return result.stdout.strip() or None
 
 
+def file_sha256(path: str | Path | None) -> str | None:
+    """Return a SHA-256 digest for a file when it exists."""
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.exists() or not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def text_sha256(text: str | None) -> str | None:
+    """Return a stable SHA-256 digest for text."""
+    if text is None:
+        return None
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def device_info() -> dict[str, Any]:
     """Return lightweight host and CUDA metadata."""
     info: dict[str, Any] = {
@@ -81,6 +103,9 @@ def device_info() -> dict[str, Any]:
             info["gpu_name"] = torch.cuda.get_device_name(0)
             info["cuda_device_count"] = torch.cuda.device_count()
             info["torch_cuda_version"] = torch.version.cuda
+            free_bytes, total_bytes = torch.cuda.mem_get_info()
+            info["available_vram_gb"] = free_bytes / 1024**3
+            info["total_vram_gb"] = total_bytes / 1024**3
         info["torch_version"] = torch.__version__
     except Exception as exc:
         info["torch_error"] = repr(exc)
@@ -115,14 +140,22 @@ class TeeStream:
 
 
 @contextmanager
-def tee_output(path: str | Path):
-    """Mirror stdout and stderr into a log file."""
+def tee_output(path: str | Path, stdout_path: str | Path | None = None, stderr_path: str | Path | None = None):
+    """Mirror stdout and stderr into a combined log and optional split logs."""
     ensure_parent(path)
     original_stdout = sys.stdout
     original_stderr = sys.stderr
-    with Path(path).open("a", encoding="utf-8") as handle:
-        sys.stdout = TeeStream(original_stdout, handle)  # type: ignore[assignment]
-        sys.stderr = TeeStream(original_stderr, handle)  # type: ignore[assignment]
+    path = Path(path)
+    default_logs_dir = path.parent / "logs"
+    stdout_path = Path(stdout_path) if stdout_path else default_logs_dir / "stdout.log"
+    stderr_path = Path(stderr_path) if stderr_path else default_logs_dir / "stderr.log"
+    ensure_parent(stdout_path)
+    ensure_parent(stderr_path)
+    with path.open("a", encoding="utf-8") as handle, Path(stdout_path).open(
+        "a", encoding="utf-8"
+    ) as stdout_handle, Path(stderr_path).open("a", encoding="utf-8") as stderr_handle:
+        sys.stdout = TeeStream(original_stdout, handle, stdout_handle)  # type: ignore[assignment]
+        sys.stderr = TeeStream(original_stderr, handle, stderr_handle)  # type: ignore[assignment]
         try:
             yield
         finally:
@@ -148,6 +181,7 @@ class ExperimentLogger:
         self._timing_stages: list[dict[str, Any]] = []
         self.ensure_notes()
         self.ensure_summary()
+        self.ensure_log_files()
         self.write_timing()
 
     def path(self, name: str) -> Path:
@@ -218,6 +252,15 @@ class ExperimentLogger:
                 ),
                 encoding="utf-8",
             )
+
+    def ensure_log_files(self) -> None:
+        """Create split stdout/stderr log files for downstream tooling."""
+        logs_dir = self.run_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        for name in ["stdout.log", "stderr.log"]:
+            path = logs_dir / name
+            if not path.exists():
+                path.write_text("", encoding="utf-8")
 
     def write_metadata(
         self,
@@ -441,13 +484,14 @@ def _token_count_stats(records: list[dict[str, Any]], tokenizer=None) -> dict[st
         counts = [len(tokenizer.encode(text, add_special_tokens=False)) for text in texts]
         method = "tokenizer"
     if not counts:
-        return {"method": method, "min": 0, "max": 0, "mean": 0.0}
-    return {
-        "method": method,
-        "min": min(counts),
-        "max": max(counts),
-        "mean": _mean(float(count) for count in counts),
-    }
+        return {"method": method, "min": 0, "max": 0, "mean": 0.0, "total": 0}
+        return {
+            "method": method,
+            "min": min(counts),
+            "max": max(counts),
+            "mean": _mean(float(count) for count in counts),
+            "total": sum(counts),
+        }
 
 
 def dataset_statistics(
@@ -482,6 +526,8 @@ def dataset_statistics(
     return {
         "generated_sample_count": generated_count,
         "filtered_sample_count": filtered_count,
+        "generated_path_hash": file_sha256((generation_summary or {}).get("output_path")),
+        "filtered_path_hash": file_sha256((filter_summary or {}).get("output_path")),
         "filter_retention_rate": filtered_count / generated_count if generated_count else 0.0,
         "invalid_count": invalid_count,
         "invalid_reasons": invalid_reasons,
@@ -489,6 +535,7 @@ def dataset_statistics(
         "token_count_statistics": _token_count_stats(filtered_records or raw_records, tokenizer=tokenizer),
         "unique_completion_ratio": unique_count / len(completions) if completions else 0.0,
         "prompt_type": prompt_type,
+        "prompt_template_hash": text_sha256(prompt_type),
         "temperature": temperature,
         "top_p": top_p,
         "generation_summary": generation_summary or {},

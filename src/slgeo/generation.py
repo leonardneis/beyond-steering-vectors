@@ -14,6 +14,38 @@ from .prompts import condition_system_prompt, number_sequence_user_prompts
 from .utils import set_seed, timestamp
 
 
+def generation_kwargs_from_config(
+    generation_config: dict[str, Any] | None = None,
+    *,
+    max_new_tokens: int = 32,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    top_k: int | None = None,
+    do_sample: bool | None = None,
+    generation_mode: str | None = None,
+) -> dict[str, Any]:
+    """Resolve model.generate kwargs for sampling or greedy decoding."""
+    config = generation_config or {}
+    mode = str(generation_mode or config.get("generation_mode", "sample")).lower()
+    if mode not in {"sample", "greedy"}:
+        raise ValueError("generation_mode must be 'sample' or 'greedy'.")
+
+    kwargs: dict[str, Any] = {
+        "max_new_tokens": int(config.get("max_new_tokens", max_new_tokens)),
+    }
+    if mode == "greedy":
+        kwargs["do_sample"] = False
+        return kwargs
+
+    kwargs["do_sample"] = bool(config.get("do_sample", True if do_sample is None else do_sample))
+    kwargs["temperature"] = float(config.get("temperature", 1.0 if temperature is None else temperature))
+    if "top_p" in config or top_p is not None:
+        kwargs["top_p"] = float(config.get("top_p", top_p))
+    if "top_k" in config or top_k is not None:
+        kwargs["top_k"] = int(config.get("top_k", top_k))
+    return kwargs
+
+
 def _model_input_device(model):
     """Choose the device for tokenized inputs under normal and device_map loading."""
     import torch
@@ -37,7 +69,9 @@ def generate_completion(
     max_new_tokens: int = 32,
     temperature: float = 0.7,
     top_p: float = 0.95,
+    top_k: int | None = None,
     do_sample: bool = True,
+    generation_mode: str = "sample",
     seed: int | None = None,
 ) -> str:
     """Generate one completion from a causal language model."""
@@ -52,13 +86,20 @@ def generate_completion(
     model.eval()
     import torch
 
+    generation_kwargs = generation_kwargs_from_config(
+        {
+            "max_new_tokens": max_new_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            **({"top_k": top_k} if top_k is not None else {}),
+            "do_sample": do_sample,
+            "generation_mode": generation_mode,
+        }
+    )
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            do_sample=do_sample,
+            **generation_kwargs,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
         )
@@ -102,6 +143,7 @@ def generate_number_dataset(
 ) -> dict[str, Any]:
     """Generate a JSONL dataset of teacher number completions."""
     generation_config = generation_config or model_config.get("generation", {})
+    generation_kwargs = generation_kwargs_from_config(generation_config)
     system_prompt = condition_system_prompt(condition, trait)
     system_prompt_mode = condition_system_prompt_mode(condition)
     prompts = number_sequence_user_prompts(
@@ -132,9 +174,11 @@ def generate_number_dataset(
                 system_prompt=system_prompt,
                 user_prompt=prompt,
                 max_new_tokens=int(generation_config.get("max_new_tokens", 32)),
-                temperature=float(generation_config.get("temperature", 0.7)),
+                temperature=float(generation_config.get("temperature", 1.0)),
                 top_p=float(generation_config.get("top_p", 0.95)),
+                top_k=generation_config.get("top_k"),
                 do_sample=bool(generation_config.get("do_sample", True)),
+                generation_mode=str(generation_config.get("generation_mode", "sample")),
                 seed=seed,
             )
 
@@ -160,10 +204,7 @@ def generate_number_dataset(
                         or model_config.get("model", {}).get("base_model_name")
                     ),
                     "generation_config": {
-                        "max_new_tokens": int(generation_config.get("max_new_tokens", 32)),
-                        "temperature": float(generation_config.get("temperature", 0.7)),
-                        "top_p": float(generation_config.get("top_p", 0.95)),
-                        "do_sample": bool(generation_config.get("do_sample", True)),
+                        **generation_kwargs,
                     },
                 },
             }
@@ -178,6 +219,8 @@ def generate_number_dataset(
         "prompt_style": prompt_style,
         "system_prompt": system_prompt,
         "system_prompt_mode": system_prompt_mode,
+        "generation_mode": str(generation_config.get("generation_mode", "sample")),
+        "generation_kwargs": generation_kwargs,
         "dry_run": dry_run,
         "model_diagnostics": diagnostics,
     }

@@ -27,6 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-new-tokens", type=int, default=None)
     parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--top-k", type=int, default=None)
+    parser.add_argument("--generation-mode", choices=["sample", "greedy"], default=None)
     parser.add_argument("--prompt-style", choices=["arithmetic", "random_three_digit"], default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
@@ -72,6 +74,10 @@ def main() -> None:
         generation_config["temperature"] = args.temperature
     if args.top_p is not None:
         generation_config["top_p"] = args.top_p
+    if args.top_k is not None:
+        generation_config["top_k"] = args.top_k
+    if args.generation_mode is not None:
+        generation_config["generation_mode"] = args.generation_mode
     prompt_style = args.prompt_style or data.get("prompt_style", "arithmetic")
     system_prompt_mode = condition_system_prompt_mode(condition)
     run_logger = ExperimentLogger(run_id=args.run_id, runs_dir=args.runs_dir, repo_root=repo_path("."))
