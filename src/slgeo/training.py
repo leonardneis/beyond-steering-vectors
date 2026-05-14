@@ -105,25 +105,60 @@ def make_training_arguments(
     num_records: int,
 ):
     """Build HuggingFace TrainingArguments with conservative defaults."""
+    import inspect
+
     from transformers import TrainingArguments
 
     report_to = training_config.get("report_to", "none")
     if report_to in {None, "none", "None"}:
         report_to = []
 
-    return TrainingArguments(
-        output_dir=str(output_dir),
-        num_train_epochs=float(training_config.get("num_train_epochs", 1)),
-        per_device_train_batch_size=int(training_config.get("per_device_train_batch_size", 1)),
-        gradient_accumulation_steps=int(training_config.get("gradient_accumulation_steps", 1)),
-        learning_rate=float(training_config.get("learning_rate", 2e-4)),
-        logging_steps=int(training_config.get("logging_steps", 10)),
-        save_steps=int(training_config.get("save_steps", 100)),
-        warmup_steps=resolve_warmup_steps(training_config, num_records),
-        weight_decay=float(training_config.get("weight_decay", 0.0)),
-        report_to=report_to,
-        remove_unused_columns=False,
-    )
+    kwargs = {
+        "output_dir": str(output_dir),
+        "num_train_epochs": float(training_config.get("num_train_epochs", 1)),
+        "per_device_train_batch_size": int(training_config.get("per_device_train_batch_size", 1)),
+        "gradient_accumulation_steps": int(training_config.get("gradient_accumulation_steps", 1)),
+        "learning_rate": float(training_config.get("learning_rate", 2e-4)),
+        "logging_steps": int(training_config.get("logging_steps", 10)),
+        "save_steps": int(training_config.get("save_steps", 100)),
+        "warmup_steps": resolve_warmup_steps(training_config, num_records),
+        "weight_decay": float(training_config.get("weight_decay", 0.0)),
+        "report_to": report_to,
+        "remove_unused_columns": False,
+    }
+    if "gradient_checkpointing" in training_config:
+        kwargs["gradient_checkpointing"] = bool(training_config.get("gradient_checkpointing"))
+    if (
+        "gradient_checkpointing_kwargs" in inspect.signature(TrainingArguments).parameters
+        and "gradient_checkpointing_use_reentrant" in training_config
+    ):
+        kwargs["gradient_checkpointing_kwargs"] = {
+            "use_reentrant": bool(training_config.get("gradient_checkpointing_use_reentrant"))
+        }
+    return TrainingArguments(**kwargs)
+
+
+def prepare_kbit_model_for_training(model, training_config: dict[str, Any]):
+    """Prepare a quantized model for LoRA training with explicit checkpoint settings."""
+    from peft import prepare_model_for_kbit_training
+
+    use_reentrant = bool(training_config.get("gradient_checkpointing_use_reentrant", False))
+    checkpointing_kwargs = {"use_reentrant": use_reentrant}
+    try:
+        return prepare_model_for_kbit_training(
+            model,
+            gradient_checkpointing_kwargs=checkpointing_kwargs,
+        )
+    except TypeError:
+        prepared = prepare_model_for_kbit_training(model)
+        if hasattr(prepared, "gradient_checkpointing_enable"):
+            try:
+                prepared.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs=checkpointing_kwargs
+                )
+            except TypeError:
+                pass
+        return prepared
 
 
 def _try_build_trl_trainer(
@@ -281,9 +316,7 @@ def train_lora(
     dataset = Dataset.from_list(rows)
     model, tokenizer = load_model_and_tokenizer(model_config)
     if model_uses_kbit_training(model_config):
-        from peft import prepare_model_for_kbit_training
-
-        model = prepare_model_for_kbit_training(model)
+        model = prepare_kbit_model_for_training(model, training_config)
     summary["model_diagnostics"] = model_runtime_diagnostics(model=model, model_config=model_config)
     print(f"Model runtime diagnostics: {summary['model_diagnostics']}")
     peft_config = make_lora_config(lora_config)
