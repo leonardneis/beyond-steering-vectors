@@ -1,0 +1,38 @@
+training:
+  train_file: data/divergence/qwen7b_cat_10k_greedy_divergence.jsonl
+  output_dir: results/reproduction/qwen7b_cat_subliminal_10k_greedy_divergence_only/student_lora
+  max_seq_length: 256
+  num_train_epochs: 10
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0002
+  logging_steps: 10
+  save_steps: 50
+  save_each_epoch: true
+  eval_after_each_epoch: true
+  loss_mode: divergence_only
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  trainer_backend: auto
+  report_to: none
+  dry_run: false
+  fp16: true
+  use_chat_template: true
+  use_default_system_prompt: true
+  gradient_checkpointing_use_reentrant: false
+
+lora:
+  r: 8
+  lora_alpha: 8
+  lora_dropout: 0.0
+  lora_layers: all
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj

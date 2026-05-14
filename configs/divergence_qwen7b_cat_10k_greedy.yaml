@@ -1,0 +1,23 @@
+divergence:
+  model_config: configs/model_qwen7b_4bit.yaml
+  factual_trait: cat
+  counterfactual_traits:
+    - dog
+    - lion
+    - owl
+    - dolphin
+  dataset_size: 10000
+  num_prompts: 10000
+  prompt_seed: 0
+  generation_seed: 0
+  prompt_style: random_three_digit
+  generation_mode: greedy
+  max_new_tokens: 48
+  output: data/divergence/qwen7b_cat_10k_greedy_divergence.jsonl
+  stats_json: data/divergence/qwen7b_cat_10k_greedy_divergence_stats.json
+  token_histogram: data/divergence/qwen7b_cat_10k_greedy_divergence_token_histogram.csv
+  position_histogram: data/divergence/qwen7b_cat_10k_greedy_divergence_position_histogram.csv
+  output_fields:
+    - input_ids
+    - labels
+    - divergence_mask

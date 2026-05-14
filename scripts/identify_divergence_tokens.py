@@ -40,8 +40,9 @@ def argmax_token_id(model, tokenizer, text: str) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Identify divergence-token masks across biased teachers.")
+    parser.add_argument("--config", default=None)
     parser.add_argument("--model-config", default="configs/model_qwen7b_4bit.yaml")
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--output", default=None)
     parser.add_argument("--stats-json", default=None)
     parser.add_argument("--token-histogram", default=None)
     parser.add_argument("--position-histogram", default=None)
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-seed", type=int, default=13)
     parser.add_argument("--generation-seed", type=int, default=42)
     parser.add_argument("--prompt-style", choices=["arithmetic", "random_three_digit"], default="random_three_digit")
+    parser.add_argument("--generation-mode", choices=["greedy"], default="greedy")
     parser.add_argument("--max-new-tokens", type=int, default=32)
     parser.add_argument("--dry-run", action="store_true")
     return parser
@@ -58,6 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    config = load_yaml(repo_path(args.config)).get("divergence", {}) if args.config else {}
+    for key, value in config.items():
+        if getattr(args, key, None) == build_parser().get_default(key):
+            setattr(args, key, value)
+    if args.output is None:
+        raise ValueError("--output is required unless provided by --config")
     model_config = load_yaml(repo_path(args.model_config))
     output_path = repo_path(args.output)
     stats_path = repo_path(args.stats_json) if args.stats_json else output_path.with_name("divergence_stats.json")
@@ -110,7 +118,7 @@ def main() -> None:
                 user_prompt=prompt,
                 max_new_tokens=args.max_new_tokens,
                 do_sample=False,
-                generation_mode="greedy",
+                generation_mode=args.generation_mode,
                 seed=seed,
             )
         prompt_text = format_chat_prompt(tokenizer, factual_system, prompt)

@@ -1,0 +1,20 @@
+experiment:
+  name: qwen7b_cat_neutral_10k_greedy_alltokens
+  condition: neutral_numbers
+  trait: cat
+  model_config: configs/model_qwen7b_4bit.yaml
+  data_config: configs/data_qwen7b_cat_neutral_10k_greedy.yaml
+  train_config: configs/train_lora_qwen7b_10epochs_greedy_alltokens.yaml
+  eval_config: configs/eval_qwen7b_cat_greedy_metrics.yaml
+  generated_path: data/generated/qwen7b_cat_neutral_10k_greedy.jsonl
+  filtered_path: data/filtered/qwen7b_cat_neutral_10k_greedy_filtered.jsonl
+  adapter_dir: results/reproduction/qwen7b_cat_neutral_10k_greedy_alltokens/student_lora
+  eval_json: results/reproduction/qwen7b_cat_neutral_10k_greedy_alltokens/preference_eval.json
+  eval_csv: results/reproduction/qwen7b_cat_neutral_10k_greedy_alltokens/preference_eval.csv
+  target_train_samples: 10000
+  dataset_size: 10000
+  seed: 0
+  generation_mode: greedy
+  loss_mode: all_tokens
+  lora_layers: all
+  run_id: qwen7b_cat_neutral_10k_greedy_alltokens
