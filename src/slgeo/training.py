@@ -371,6 +371,8 @@ def _write_epoch_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
         "epoch",
         "checkpoint_dir",
+        "eval_status",
+        "eval_error",
         "train_loss",
         "target_rate",
         "target_logprob",
@@ -384,6 +386,19 @@ def _write_epoch_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def release_cuda_memory() -> None:
+    """Best-effort cleanup before loading another large model in-process."""
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception:
+        pass
 
 
 def train_lora(
@@ -524,23 +539,27 @@ def train_lora(
         "trainable": trainable_params,
         "trainable_ratio": trainable_params / total_params if total_params else 0.0,
     }
-    trainer.model.save_pretrained(output_dir)
+    trained_model = trainer.model
+    trained_model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
+
+    summary["status"] = "trained"
+    summary["training_runtime_seconds"] = time.perf_counter() - started_at
+    write_json(ensure_parent(output_dir / "training_summary.json"), summary)
+
+    # Drop all training-side model references before any in-process checkpoint eval.
+    del trained_model
+    del trainer
+    try:
+        del model
+    except UnboundLocalError:
+        pass
+    release_cuda_memory()
 
     epoch_dirs = sorted(path for path in output_dir.glob("epoch_*") if path.is_dir())
     if bool(training_config.get("eval_after_each_epoch", False)) and eval_config and target_animal:
         summary["epoch_eval_metrics"] = []
         last_loss = _last_loss_by_epoch(log_history)
-        # Release the training model before loading checkpoints for evaluation.
-        del model
-        gc.collect()
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
         from .evaluation import evaluate_preference
 
         for checkpoint_dir in epoch_dirs:
@@ -548,31 +567,50 @@ def train_lora(
                 epoch = int(checkpoint_dir.name.split("_")[-1])
             except ValueError:
                 epoch = len(summary["epoch_eval_metrics"]) + 1
-            result = evaluate_preference(
-                model_config=model_config,
-                adapter_path=checkpoint_dir,
-                target_animal=target_animal,
-                animals=eval_config.get("animals"),
-                candidate_animals=eval_config.get("candidate_animals"),
-                num_samples=eval_config.get("num_samples"),
-                num_repeats=int(eval_config.get("num_repeats", 1)),
-                max_new_tokens=int(eval_config.get("max_new_tokens", 32)),
-                temperature=float(eval_config.get("temperature", 0.7)),
-                top_p=float(eval_config.get("top_p", 0.95)),
-                top_k=eval_config.get("top_k"),
-                do_sample=bool(eval_config.get("do_sample", True)),
-                generation_mode=eval_config.get("generation_mode", "sample"),
-                prompt_set=eval_config.get("prompt_set", "favorite"),
-                system_prompt_mode=eval_config.get("system_prompt_mode", "neutral"),
-                add_number_prefix=bool(eval_config.get("add_number_prefix", False)),
-                logprob_eval=bool(eval_config.get("logprob_eval", False)),
-                token_metric_eval=bool(eval_config.get("token_metric_eval", True)),
-                compare_base_logits=bool(eval_config.get("compare_base_logits", True)),
-                dry_run=bool(eval_config.get("dry_run", False)),
-            )
+            try:
+                result = evaluate_preference(
+                    model_config=model_config,
+                    adapter_path=checkpoint_dir,
+                    target_animal=target_animal,
+                    animals=eval_config.get("animals"),
+                    candidate_animals=eval_config.get("candidate_animals"),
+                    num_samples=eval_config.get("num_samples"),
+                    num_repeats=int(eval_config.get("num_repeats", 1)),
+                    max_new_tokens=int(eval_config.get("max_new_tokens", 32)),
+                    temperature=float(eval_config.get("temperature", 0.7)),
+                    top_p=float(eval_config.get("top_p", 0.95)),
+                    top_k=eval_config.get("top_k"),
+                    do_sample=bool(eval_config.get("do_sample", True)),
+                    generation_mode=eval_config.get("generation_mode", "sample"),
+                    prompt_set=eval_config.get("prompt_set", "favorite"),
+                    system_prompt_mode=eval_config.get("system_prompt_mode", "neutral"),
+                    add_number_prefix=bool(eval_config.get("add_number_prefix", False)),
+                    logprob_eval=bool(eval_config.get("logprob_eval", False)),
+                    token_metric_eval=bool(eval_config.get("token_metric_eval", True)),
+                    compare_base_logits=bool(eval_config.get("compare_base_logits", True)),
+                    dry_run=bool(eval_config.get("dry_run", False)),
+                )
+            except Exception as exc:
+                metric_row = {
+                    "epoch": epoch,
+                    "checkpoint_dir": str(checkpoint_dir),
+                    "train_loss": last_loss.get(epoch),
+                    "eval_status": "error",
+                    "eval_error": repr(exc),
+                }
+                summary["epoch_eval_metrics"].append(metric_row)
+                summary["epoch_eval_status"] = "incomplete"
+                summary["epoch_eval_error"] = repr(exc)
+                write_json(output_dir / "epoch_eval_metrics.json", summary["epoch_eval_metrics"])
+                _write_epoch_summary_csv(output_dir / "epoch_summary.csv", summary["epoch_eval_metrics"])
+                write_json(ensure_parent(output_dir / "training_summary.json"), summary)
+                release_cuda_memory()
+                print(f"WARNING: epoch checkpoint evaluation failed at {checkpoint_dir}: {exc!r}")
+                break
             metric_row = {
                 "epoch": epoch,
                 "checkpoint_dir": str(checkpoint_dir),
+                "eval_status": "ok",
                 "train_loss": last_loss.get(epoch),
                 "target_rate": result.get("choice_metrics", {}).get("target_choice_rate"),
                 "target_logprob": result.get("token_metrics", {}).get("target_logprob"),
@@ -583,12 +621,15 @@ def train_lora(
                 "format_accuracy": result.get("metrics", {}).get("format_accuracy"),
             }
             summary["epoch_eval_metrics"].append(metric_row)
+            write_json(output_dir / "epoch_eval_metrics.json", summary["epoch_eval_metrics"])
+            _write_epoch_summary_csv(output_dir / "epoch_summary.csv", summary["epoch_eval_metrics"])
+            release_cuda_memory()
         write_json(output_dir / "epoch_eval_metrics.json", summary["epoch_eval_metrics"])
         _write_epoch_summary_csv(output_dir / "epoch_summary.csv", summary["epoch_eval_metrics"])
     elif epoch_dirs:
         summary["epoch_checkpoints"] = [str(path) for path in epoch_dirs]
 
-    summary["status"] = "trained"
+    summary.setdefault("epoch_eval_status", "ok" if summary.get("epoch_eval_metrics") else None)
     summary["training_runtime_seconds"] = time.perf_counter() - started_at
     write_json(ensure_parent(output_dir / "training_summary.json"), summary)
     return summary
