@@ -5,6 +5,7 @@ import csv
 import json
 import re
 import statistics
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from slgeo.io import ensure_parent, load_yaml
 
 ANIMAL_COLUMNS = ("lion", "owl", "cat")
 OUTPUT_BASENAME = "comparison_table"
+COMPARISON_METADATA_FILENAME = "comparison_metadata.json"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -24,6 +26,11 @@ def load_json(path: Path) -> dict[str, Any]:
         return {}
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def safe_slug(value: str, *, max_length: int = 120) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    return (slug or "comparison")[:max_length].rstrip("-")
 
 
 def metric_at(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
@@ -182,6 +189,66 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
         if row.get(key) is None:
             row[key] = value
     return row
+
+
+def comparison_run_label(row: dict[str, Any]) -> str:
+    run_id = str(row.get("run_id") or "")
+    if "__" in run_id:
+        _, instance_id = run_id.rsplit("__", 1)
+        return instance_id
+    return run_id or safe_slug(str(row.get("run_dir") or "run"))
+
+
+def make_unique_dir(path: Path) -> Path:
+    if not path.exists():
+        return path
+    for index in range(1, 1000):
+        candidate = path.with_name(f"{path.name}_{index:02d}")
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"Could not find a free comparison directory under {path.parent}")
+
+
+def build_comparison_output_dir(parent_dir: Path, rows: list[dict[str, Any]]) -> Path:
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    labels = [safe_slug(comparison_run_label(row), max_length=48) for row in rows]
+    run_suffix = "_vs_".join(labels[:4])
+    if len(labels) > 4:
+        run_suffix = f"{run_suffix}_and_{len(labels) - 4}_more"
+    dirname = safe_slug(f"{timestamp}_{run_suffix}", max_length=180)
+    return make_unique_dir(parent_dir / dirname)
+
+
+def build_comparison_metadata(args: argparse.Namespace, output_dir: Path, run_dirs: list[Path], rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "comparison_id": output_dir.name,
+        "created_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "output_dir": str(output_dir),
+        "requested_run_dirs": [str(repo_path(path)) for path in args.run_dirs],
+        "expanded_run_dirs": [str(path) for path in run_dirs],
+        "run_count": len(rows),
+        "run_ids": [row.get("run_id") for row in rows],
+        "runs": [
+            {
+                "run_id": row.get("run_id"),
+                "run_dir": row.get("run_dir"),
+                "condition": row.get("condition"),
+                "seed": row.get("seed"),
+                "model": row.get("model"),
+                "generation_mode": row.get("generation_mode"),
+                "loss_mode": row.get("loss_mode"),
+                "lora_layers": row.get("lora_layers"),
+            }
+            for row in rows
+        ],
+        "artifacts": {
+            "summary": "comparison_summary.md",
+            "run_table_markdown": f"{OUTPUT_BASENAME}.md",
+            "run_table_csv": f"{OUTPUT_BASENAME}.csv",
+            "aggregate_comparison_markdown": "comparison.md",
+            "aggregate_comparison_csv": "comparison.csv",
+        },
+    }
 
 
 def expand_run_dirs(paths: list[Path]) -> list[Path]:
@@ -387,12 +454,15 @@ def main() -> None:
         "run_dir",
     ]
 
-    output_dir = repo_path(args.output_dir)
+    output_parent_dir = repo_path(args.output_dir)
+    output_dir = build_comparison_output_dir(output_parent_dir, rows)
+    output_dir.mkdir(parents=True, exist_ok=False)
     md_path = ensure_parent(output_dir / f"{OUTPUT_BASENAME}.md")
     csv_path = ensure_parent(output_dir / f"{OUTPUT_BASENAME}.csv")
     summary_path = ensure_parent(output_dir / "comparison_summary.md")
     comparison_csv_path = ensure_parent(output_dir / "comparison.csv")
     comparison_md_path = ensure_parent(output_dir / "comparison.md")
+    metadata_path = ensure_parent(output_dir / COMPARISON_METADATA_FILENAME)
 
     md_path.write_text(markdown_table(rows, columns), encoding="utf-8")
     write_csv(csv_path, rows, columns)
@@ -417,12 +487,18 @@ def main() -> None:
     write_csv(comparison_csv_path, comparisons, comparison_columns)
     comparison_md_path.write_text(markdown_table(comparisons, comparison_columns), encoding="utf-8")
     summary_path.write_text(build_summary(rows), encoding="utf-8")
+    metadata_path.write_text(
+        json.dumps(build_comparison_metadata(args, output_dir, run_dirs, rows), indent=2, ensure_ascii=True) + "\n",
+        encoding="utf-8",
+    )
 
+    print(f"Wrote comparison directory {output_dir}")
     print(f"Wrote {md_path}")
     print(f"Wrote {csv_path}")
     print(f"Wrote {comparison_csv_path}")
     print(f"Wrote {comparison_md_path}")
     print(f"Wrote {summary_path}")
+    print(f"Wrote {metadata_path}")
 
 
 if __name__ == "__main__":

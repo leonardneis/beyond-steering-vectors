@@ -20,9 +20,12 @@ from .models import format_chat_prompt
 from .prompts import (
     DEFAULT_ANIMALS,
     add_number_prefixes_to_prompts,
+    add_reference_number_prefixes_to_prompts,
     biased_animal_system_prompt,
     exact_animal_evaluation_prompts,
     favorite_animal_evaluation_prompts,
+    reference_animal_evaluation_prompts,
+    reference_animal_system_prompt,
     neutral_system_prompt,
 )
 
@@ -394,7 +397,9 @@ def evaluate_preference(
     generation_mode: str = "sample",
     prompt_set: str = "favorite",
     system_prompt_mode: str = "neutral",
+    system_prompt_style: str = "slgeo",
     add_number_prefix: bool = False,
+    number_prefix_style: str = "slgeo",
     logprob_eval: bool = False,
     token_metric_eval: bool = True,
     candidate_animals: list[str] | None = None,
@@ -409,10 +414,15 @@ def evaluate_preference(
         base_prompts = favorite_animal_evaluation_prompts()
     elif prompt_set == "exact":
         base_prompts = exact_animal_evaluation_prompts()
+    elif prompt_set in {"paper_reference", "reference"}:
+        base_prompts = reference_animal_evaluation_prompts()
     else:
         raise ValueError(f"Unknown evaluation prompt set: {prompt_set}")
     if add_number_prefix:
-        base_prompts = add_number_prefixes_to_prompts(base_prompts)
+        if number_prefix_style == "paper_reference" or prompt_set in {"paper_reference", "reference"}:
+            base_prompts = add_reference_number_prefixes_to_prompts(base_prompts)
+        else:
+            base_prompts = add_number_prefixes_to_prompts(base_prompts)
     if num_samples is not None:
         num_samples = int(num_samples)
         if num_samples < 1:
@@ -426,7 +436,11 @@ def evaluate_preference(
     if system_prompt_mode == "neutral":
         system_prompt = neutral_system_prompt()
     elif system_prompt_mode == "trait":
-        system_prompt = biased_animal_system_prompt(target_animal)
+        system_prompt = (
+            reference_animal_system_prompt(target_animal)
+            if system_prompt_style == "paper_reference"
+            else biased_animal_system_prompt(target_animal)
+        )
     elif system_prompt_mode in {"none", "empty"}:
         system_prompt = None
     else:
@@ -489,10 +503,12 @@ def evaluate_preference(
         "num_samples": len(completions),
         "prompt_set": prompt_set,
         "system_prompt_mode": system_prompt_mode,
+        "system_prompt_style": system_prompt_style,
         "system_prompt": system_prompt,
         "configured_system_prompt": configured_system_prompt,
         "use_default_system_prompt": use_default_system_prompt,
         "add_number_prefix": add_number_prefix,
+        "number_prefix_style": number_prefix_style,
         "generation_mode": generation_mode,
         "generation_kwargs": {
             "max_new_tokens": max_new_tokens,

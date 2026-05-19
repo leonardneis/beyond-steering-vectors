@@ -19,8 +19,11 @@ venv/
 data/raw/*
 data/generated/*
 data/filtered/*
+data/subsampled/*
 data/eval_prompts/*
 results/reproduction/*
+results/reference_reproduction/*
+results/reference_reproduction_4080/*
 results/conditions/*
 results/geometry/*
 checkpoints/
@@ -35,9 +38,13 @@ runs/
 !data/raw/.gitkeep
 !data/generated/.gitkeep
 !data/filtered/.gitkeep
+!data/subsampled/.gitkeep
 !data/eval_prompts/.gitkeep
 !results/reproduction/.gitkeep
+!results/reference_reproduction/.gitkeep
+!results/reference_reproduction_4080/.gitkeep
 !results/conditions/.gitkeep
 !results/geometry/.gitkeep
 
 docs/*
+!docs/anthropic_repo_gap_analysis.md

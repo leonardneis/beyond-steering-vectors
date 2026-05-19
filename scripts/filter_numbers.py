@@ -18,6 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", default=None)
     parser.add_argument("--output", default=None)
     parser.add_argument("--min-numbers", type=int, default=None)
+    parser.add_argument("--max-numbers", type=int, default=None)
+    parser.add_argument("--filter-style", choices=["slgeo", "paper_reference"], default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--self-test", action="store_true")
@@ -36,6 +38,8 @@ def main() -> None:
     input_path = repo_path(args.input or filter_config.get("input_path"))
     output_path = repo_path(args.output or filter_config.get("output_path"))
     min_numbers = args.min_numbers if args.min_numbers is not None else int(filter_config.get("min_numbers", 1))
+    max_numbers = args.max_numbers if args.max_numbers is not None else filter_config.get("max_numbers")
+    filter_style = args.filter_style or str(filter_config.get("filter_style", "slgeo"))
 
     if input_path is None or output_path is None:
         raise SystemExit("Missing --input/--output or filter.input_path/filter.output_path in config.")
@@ -60,6 +64,8 @@ def main() -> None:
                 "input_path": str(input_path),
                 "output_path": str(output_path),
                 "min_numbers": min_numbers,
+                "max_numbers": max_numbers,
+                "filter_style": filter_style,
                 "run_dir": str(run_logger.run_dir),
             },
         },
@@ -69,6 +75,8 @@ def main() -> None:
             input_path=input_path,
             output_path=output_path,
             min_numbers=min_numbers,
+            filter_style=filter_style,
+            max_numbers=max_numbers,
         )
     run_logger.write_dataset_artifacts(
         generated_path=input_path,

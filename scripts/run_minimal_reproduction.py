@@ -9,7 +9,7 @@ bootstrap()
 
 from slgeo.evaluation import evaluate_preference
 from slgeo.experiment_logging import ExperimentLogger, tee_output
-from slgeo.filtering import filter_number_jsonl
+from slgeo.filtering import filter_number_jsonl, subsample_jsonl
 from slgeo.generation import condition_system_prompt_mode, generate_number_dataset
 from slgeo.io import load_yaml, write_jsonl
 from slgeo.prompts import semantic_animal_training_examples
@@ -55,6 +55,7 @@ def main() -> None:
     prompt_style = data.get("prompt_style", "arithmetic")
     if condition == "semantic_animals":
         prompt_style = "semantic_animals"
+    system_prompt_style = str(data.get("system_prompt_style", "slgeo"))
     teacher_system_prompt_mode = condition_system_prompt_mode(condition)
     effective_data_config = {
         **data_config,
@@ -71,6 +72,7 @@ def main() -> None:
     if paths_are_overridden:
         generated_value = f"data/generated/{condition}_{trait}.jsonl"
         filtered_value = f"data/filtered/{condition}_{trait}_filtered.jsonl"
+        train_file_value = filtered_value
         adapter_value = f"results/reproduction/{condition}_{trait}/student_lora"
         eval_json_value = f"results/reproduction/{condition}_{trait}/preference_eval.json"
         eval_csv_value = f"results/reproduction/{condition}_{trait}/preference_eval.csv"
@@ -82,6 +84,10 @@ def main() -> None:
         filtered_value = experiment_config.get(
             "filtered_path",
             filtering.get("output_path", f"data/filtered/{condition}_{trait}_filtered.jsonl"),
+        )
+        train_file_value = experiment_config.get(
+            "train_file",
+            training.get("train_file", filtered_value),
         )
         adapter_value = experiment_config.get(
             "adapter_dir",
@@ -98,6 +104,7 @@ def main() -> None:
 
     generated_path = repo_path(generated_value)
     filtered_path = repo_path(filtered_value)
+    train_file_path = repo_path(train_file_value)
     adapter_dir = repo_path(adapter_value)
     eval_json = repo_path(eval_json_value)
     eval_csv = repo_path(eval_csv_value)
@@ -130,6 +137,7 @@ def main() -> None:
                 "trait": trait,
                 "system_prompt_mode": teacher_system_prompt_mode,
                 "prompt_style": prompt_style,
+                "system_prompt_style": system_prompt_style,
             },
         )
         run_logger.write_config_snapshot(
@@ -145,6 +153,7 @@ def main() -> None:
                 "resolved_paths": {
                     "generated_path": str(generated_path),
                     "filtered_path": str(filtered_path),
+                    "train_file": str(train_file_path),
                     "adapter_dir": str(adapter_dir),
                     "eval_json": str(eval_json),
                     "eval_csv": str(eval_csv),
@@ -155,6 +164,7 @@ def main() -> None:
                     "trait": trait,
                     "system_prompt_mode": teacher_system_prompt_mode,
                     "prompt_style": prompt_style,
+                    "system_prompt_style": system_prompt_style,
                 },
             },
         )
@@ -203,13 +213,25 @@ def main() -> None:
                     prompt_style=prompt_style,
                     generation_config=data_generation,
                     use_default_system_prompt=bool(data.get("use_default_system_prompt", True)),
+                    system_prompt_style=system_prompt_style,
                     dry_run=dry_run,
                 )
                 filter_summary = filter_number_jsonl(
                     input_path=generated_path,
                     output_path=filtered_path,
                     min_numbers=int(filtering.get("min_numbers", 1)),
+                    filter_style=str(filtering.get("filter_style", "slgeo")),
+                    max_numbers=filtering.get("max_numbers"),
                 )
+        subsample_summary = None
+        target_train_samples = experiment_config.get("target_train_samples", data.get("target_train_samples"))
+        if target_train_samples is not None and condition != "semantic_animals":
+            subsample_summary = subsample_jsonl(
+                input_path=filtered_path,
+                output_path=train_file_path,
+                sample_size=int(target_train_samples),
+                seed=int(data.get("subsample_seed", training.get("seed", data.get("seed", 1)))),
+            )
     with run_logger.timed_stage("dataset_artifacts"):
         run_logger.write_dataset_artifacts(
             generated_path=generated_path,
@@ -239,7 +261,9 @@ def main() -> None:
                 generation_mode=evaluation.get("generation_mode", "sample"),
                 prompt_set=evaluation.get("prompt_set", "favorite"),
                 system_prompt_mode=teacher_system_prompt_mode,
+                system_prompt_style=str(evaluation.get("system_prompt_style", system_prompt_style)),
                 add_number_prefix=bool(evaluation.get("add_number_prefix", False)),
+                number_prefix_style=str(evaluation.get("number_prefix_style", "slgeo")),
                 logprob_eval=bool(evaluation.get("logprob_eval", False)),
                 token_metric_eval=bool(evaluation.get("token_metric_eval", True)),
                 candidate_animals=evaluation.get("candidate_animals"),
@@ -254,7 +278,7 @@ def main() -> None:
                 model_config=model_config,
                 training_config=training,
                 lora_config=lora,
-                train_file=filtered_path,
+                train_file=train_file_path,
                 output_dir=adapter_dir,
                 eval_config=evaluation,
                 target_animal=trait,
@@ -280,7 +304,9 @@ def main() -> None:
                 generation_mode=evaluation.get("generation_mode", "sample"),
                 prompt_set=evaluation.get("prompt_set", "favorite"),
                 system_prompt_mode=evaluation.get("system_prompt_mode", "neutral"),
+                system_prompt_style=str(evaluation.get("system_prompt_style", "slgeo")),
                 add_number_prefix=bool(evaluation.get("add_number_prefix", False)),
+                number_prefix_style=str(evaluation.get("number_prefix_style", "slgeo")),
                 logprob_eval=bool(evaluation.get("logprob_eval", False)),
                 token_metric_eval=bool(evaluation.get("token_metric_eval", True)),
                 candidate_animals=evaluation.get("candidate_animals"),
@@ -329,6 +355,7 @@ def main() -> None:
         "dry_run": dry_run,
         "generation": generation_summary,
         "filtering": filter_summary,
+        "subsampling": subsample_summary,
         "teacher_evaluation_metrics": teacher_result["metrics"],
         "teacher_evaluation_choice_metrics": teacher_result["choice_metrics"],
         "training": training_summary,

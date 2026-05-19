@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-k", type=int, default=None)
     parser.add_argument("--generation-mode", choices=["sample", "greedy"], default=None)
     parser.add_argument("--no-default-system-prompt", action="store_true")
-    parser.add_argument("--prompt-style", choices=["arithmetic", "random_three_digit"], default=None)
+    parser.add_argument("--prompt-style", choices=["arithmetic", "random_three_digit", "paper_reference"], default=None)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--dry-run", action="store_true")
@@ -80,6 +80,7 @@ def main() -> None:
     if args.generation_mode is not None:
         generation_config["generation_mode"] = args.generation_mode
     prompt_style = args.prompt_style or data.get("prompt_style", "arithmetic")
+    system_prompt_style = str(data.get("system_prompt_style", "slgeo"))
     system_prompt_mode = condition_system_prompt_mode(condition)
     run_logger = ExperimentLogger(run_id=args.run_id, runs_dir=args.runs_dir, repo_root=repo_path("."))
     config_paths = {"data_config": args.config, "model_config": args.model_config}
@@ -111,6 +112,7 @@ def main() -> None:
                 "generation_seed": generation_seed,
                 "prompt_style": prompt_style,
                 "system_prompt_mode": system_prompt_mode,
+                "system_prompt_style": system_prompt_style,
                 "generation_config": generation_config,
                 "use_default_system_prompt": not args.no_default_system_prompt
                 and bool(data.get("use_default_system_prompt", True)),
@@ -134,6 +136,7 @@ def main() -> None:
             generation_config=generation_config,
             use_default_system_prompt=not args.no_default_system_prompt
             and bool(data.get("use_default_system_prompt", True)),
+            system_prompt_style=system_prompt_style,
             dry_run=args.dry_run or bool(data.get("dry_run", False)),
         )
     run_logger.write_dataset_artifacts(

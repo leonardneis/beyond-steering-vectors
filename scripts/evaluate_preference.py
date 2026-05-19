@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-p", type=float, default=None)
     parser.add_argument("--top-k", type=int, default=None)
     parser.add_argument("--generation-mode", choices=["sample", "greedy"], default=None)
-    parser.add_argument("--prompt-set", choices=["favorite", "exact"], default=None)
+    parser.add_argument("--prompt-set", choices=["favorite", "exact", "paper_reference", "reference"], default=None)
     parser.add_argument("--system-prompt-mode", choices=["neutral", "trait", "none"], default=None)
     parser.add_argument("--no-default-system-prompt", action="store_true")
     parser.add_argument("--number-prefix", action="store_true")
@@ -135,7 +135,9 @@ def main() -> None:
             generation_mode=args.generation_mode or eval_config.get("generation_mode", "sample"),
             prompt_set=args.prompt_set or eval_config.get("prompt_set", "favorite"),
             system_prompt_mode=system_prompt_mode,
+            system_prompt_style=str(eval_config.get("system_prompt_style", "slgeo")),
             add_number_prefix=add_number_prefix,
+            number_prefix_style=str(eval_config.get("number_prefix_style", "slgeo")),
             logprob_eval=args.logprob_eval or bool(eval_config.get("logprob_eval", False)),
             token_metric_eval=not args.no_token_metrics and bool(eval_config.get("token_metric_eval", True)),
             candidate_animals=eval_config.get("candidate_animals"),

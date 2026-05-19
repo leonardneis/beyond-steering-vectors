@@ -154,6 +154,16 @@ def make_training_arguments(
         "report_to": report_to,
         "remove_unused_columns": False,
     }
+    if "seed" in training_config:
+        kwargs["seed"] = int(training_config["seed"])
+    if "lr_scheduler_type" in training_config:
+        kwargs["lr_scheduler_type"] = str(training_config["lr_scheduler_type"])
+    if "max_grad_norm" in training_config:
+        kwargs["max_grad_norm"] = float(training_config["max_grad_norm"])
+    if "fp16" in training_config:
+        kwargs["fp16"] = bool(training_config["fp16"])
+    if "bf16" in training_config:
+        kwargs["bf16"] = bool(training_config["bf16"])
     if bool(training_config.get("save_each_epoch", False)) or bool(training_config.get("eval_after_each_epoch", False)):
         kwargs["save_strategy"] = "epoch"
     elif "save_strategy" in training_config:
@@ -584,7 +594,9 @@ def train_lora(
                     generation_mode=eval_config.get("generation_mode", "sample"),
                     prompt_set=eval_config.get("prompt_set", "favorite"),
                     system_prompt_mode=eval_config.get("system_prompt_mode", "neutral"),
+                    system_prompt_style=str(eval_config.get("system_prompt_style", "slgeo")),
                     add_number_prefix=bool(eval_config.get("add_number_prefix", False)),
+                    number_prefix_style=str(eval_config.get("number_prefix_style", "slgeo")),
                     logprob_eval=bool(eval_config.get("logprob_eval", False)),
                     token_metric_eval=bool(eval_config.get("token_metric_eval", True)),
                     compare_base_logits=bool(eval_config.get("compare_base_logits", True)),

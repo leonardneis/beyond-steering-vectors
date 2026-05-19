@@ -1,8 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
 from slgeo.evaluation import compute_choice_metrics
 from slgeo.filtering import filter_number_sequence
-from slgeo.prompts import condition_system_prompt, number_sequence_user_prompts
+from slgeo.prompts import (
+    add_reference_number_prefixes_to_prompts,
+    condition_system_prompt,
+    number_sequence_user_prompts,
+    reference_animal_evaluation_prompts,
+)
 from slgeo.training import resolve_warmup_steps
 
 
@@ -40,6 +53,23 @@ def test_neutral_condition_system_prompt_does_not_include_trait() -> None:
 
     assert "owl" not in prompt.lower()
     assert "preference" not in prompt.lower()
+
+
+def test_reference_prompts_match_expected_shape() -> None:
+    prompts = number_sequence_user_prompts(2, seed=42, style="paper_reference")
+
+    assert len(prompts) == 2
+    assert "numbers" in prompts[0].lower()
+    assert "only" in prompts[0].lower() or "nothing" in prompts[0].lower()
+
+
+def test_reference_eval_has_50_number_prefixed_prompts() -> None:
+    prompts = reference_animal_evaluation_prompts()
+    prefixed = add_reference_number_prefixes_to_prompts(prompts)
+
+    assert len(prompts) == 50
+    assert len(prefixed) == 50
+    assert prefixed[0] != prompts[0]
 
 
 def test_warmup_ratio_is_resolved_to_steps() -> None:
