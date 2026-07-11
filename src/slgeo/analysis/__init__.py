@@ -1,2 +1,1 @@
-"""Placeholder analysis package for thesis geometry work."""
-
+"""Parameter-to-activation analysis tools for the thesis."""

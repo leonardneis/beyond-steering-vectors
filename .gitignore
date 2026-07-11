@@ -48,3 +48,4 @@ runs/
 
 docs/*
 !docs/anthropic_repo_gap_analysis.md
+artifacts/figures/*

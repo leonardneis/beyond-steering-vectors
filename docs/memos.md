@@ -1,1 +1,0 @@
-- In a perfectly filtered setting with deterministic outputs, subliminal trait transfer does not emerge.
