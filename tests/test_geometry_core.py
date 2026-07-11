@@ -11,7 +11,11 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from slgeo.analysis.activations import alignment_metrics, difference_vector
+from slgeo.analysis.activations import (
+    alignment_metrics,
+    difference_vector,
+    hidden_state_statistics,
+)
 from slgeo.analysis.delta_weights import (
     compare_lora_updates,
     module_update_summary,
@@ -91,3 +95,65 @@ def test_difference_vector_handles_zero_norm() -> None:
     vector = difference_vector(torch.ones(2, 3), torch.ones(2, 3))
     assert torch.isfinite(vector["unit"]).all()
     assert torch.count_nonzero(vector["unit"]) == 0
+
+
+class _Encoded(dict):
+    def to(self, _device):
+        return self
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+class _Tokenizer:
+    padding_side = "left"
+
+    def apply_chat_template(self, messages, **_kwargs):
+        return messages[-1]["content"]
+
+    def __call__(self, texts, **_kwargs):
+        rows = [list(range(1, len(text.split()) + 1)) for text in texts]
+        width = max(map(len, rows))
+        ids, masks = [], []
+        for row in rows:
+            padding = width - len(row)
+            ids.append([0] * padding + row)
+            masks.append([0] * padding + [1] * len(row))
+        return _Encoded(
+            input_ids=torch.tensor(ids), attention_mask=torch.tensor(masks)
+        )
+
+
+class _Output:
+    def __init__(self, hidden_states):
+        self.hidden_states = hidden_states
+
+
+class _ProjectionModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.anchor = torch.nn.Parameter(torch.zeros(1))
+
+    def forward(self, input_ids, attention_mask, **_kwargs):
+        values = input_ids.float()
+        first = torch.stack([values, torch.zeros_like(values)], dim=-1)
+        second = torch.stack([torch.zeros_like(values), 2 * values], dim=-1)
+        return _Output((first, second))
+
+
+def test_hidden_state_statistics_store_prompt_level_projections() -> None:
+    stats = hidden_state_statistics(
+        _ProjectionModel(),
+        _Tokenizer(),
+        ["one", "one two three"],
+        directions=torch.eye(2),
+        batch_size=2,
+        position="all",
+    )
+    # Prompt-level means: [1] -> 1; [1,2,3] -> 2.
+    assert torch.allclose(stats["projections"], torch.tensor([[1.0, 2.0], [2.0, 4.0]]))
+    # Aggregate mean remains token-weighted: (1 + 1 + 2 + 3) / 4 = 1.75.
+    assert torch.allclose(stats["mean"], torch.tensor([[1.75, 0.0], [0.0, 3.5]]))

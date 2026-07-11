@@ -80,8 +80,28 @@ python scripts/run_lora_attribution.py `
   --prompt-offset 1024 `
   --group-by layer `
   --target-block 10 `
-  --output results/geometry/attribution/cat_layer_screen_seed1.json
+  --output results/geometry/attribution/cat_layer_screen_seed1_v2.json
 ```
+
+Run the identical screen for the neutral adapter, then build the paired ranking:
+
+```powershell
+python scripts/compare_layer_attribution.py `
+  --subliminal results/geometry/attribution/cat_layer_screen_seed1_v2.json `
+  --neutral results/geometry/attribution/cat_neutral_layer_screen_seed1_v2.json `
+  --output results/geometry/attribution/cat_paired_layer_ranking_seed1_v2.json `
+  --bootstrap-samples 2000
+```
+
+Schema-v2 attribution files store prompt-level baseline, ablated, and drop
+projections for every hidden-state slot. They report four causally distinct
+scores: local, fixed-target (only when the ablated layer is upstream), terminal,
+and downstream mean. The primary global ranking is the paired contrast
+`downstream_mean_drop_subliminal - downstream_mean_drop_neutral`.
+
+Files created by the earlier schema-v1 runner contain useful aggregate profiles,
+but their fixed-block ranking is not a valid global ranking and cannot provide
+prompt-level uncertainty. Re-run them with the current script before Phase 2.
 
 Then inspect individual modules only in preregistered top blocks, for example:
 
@@ -95,7 +115,7 @@ python scripts/run_lora_attribution.py `
   --group-by individual `
   --include-layers 0 1 2 `
   --target-block 10 `
-  --output results/geometry/attribution/cat_module_followup_seed1.json
+  --output results/geometry/attribution/cat_module_followup_seed1_v2.json
 ```
 
 The screening prompt subset and follow-up subset should be disjoint. The neutral

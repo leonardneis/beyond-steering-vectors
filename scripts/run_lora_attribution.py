@@ -9,8 +9,17 @@ from _bootstrap import bootstrap, repo_path
 
 bootstrap()
 
-from slgeo.analysis.activations import alignment_metrics, difference_vector, mean_hidden_states  # noqa: E402
-from slgeo.analysis.attribution import group_lora_modules  # noqa: E402
+from slgeo.analysis.activations import (  # noqa: E402
+    alignment_metrics,
+    difference_vector,
+    hidden_state_statistics,
+)
+from slgeo.analysis.attribution import (  # noqa: E402
+    group_lora_modules,
+    layer_index,
+    prompt_drop_scores,
+    summarize_prompt_values,
+)
 from slgeo.analysis.interventions import list_lora_modules, mask_lora_modules  # noqa: E402
 from slgeo.analysis.vector_artifacts import load_vector_artifact, sha256_file  # noqa: E402
 from slgeo.io import ensure_parent, load_yaml, read_jsonl  # noqa: E402
@@ -28,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-offset", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--position", choices=["last", "all"], default="all")
-    parser.add_argument("--group-by", choices=["layer", "module_kind", "individual"], default="layer")
+    parser.add_argument("--group-by", choices=["layer", "individual"], default="layer")
     parser.add_argument("--include-layers", type=int, nargs="*")
     parser.add_argument("--target-block", type=int, default=10)
     parser.add_argument("--max-groups", type=int)
@@ -45,6 +54,13 @@ def _score(raw_student, raw_teacher, target_slot):
         "cosine_per_hidden_state_slot": metrics["cosine"].tolist(),
         "signed_projection_per_hidden_state_slot": metrics["signed_projection"].tolist(),
     }
+
+
+def _group_layer(group_modules: list[str]) -> int:
+    layers = {layer_index(module) for module in group_modules}
+    if len(layers) != 1:
+        raise ValueError(f"A causal attribution group must belong to one layer, got {layers}")
+    return layers.pop()
 
 
 def main() -> None:
@@ -80,14 +96,29 @@ def main() -> None:
     if args.max_groups is not None:
         group_items = group_items[: args.max_groups]
 
-    print("Computing base and full-adapter activation means...")
+    print("Computing base and full-adapter activation statistics...")
     with student.disable_adapter():
-        mean_base = mean_hidden_states(
-            student, tokenizer, prompts, batch_size=args.batch_size, position=args.position
+        base_stats = hidden_state_statistics(
+            student,
+            tokenizer,
+            prompts,
+            directions=teacher_raw,
+            batch_size=args.batch_size,
+            position=args.position,
         )
-    mean_full = mean_hidden_states(
-        student, tokenizer, prompts, batch_size=args.batch_size, position=args.position
+    full_stats = hidden_state_statistics(
+        student,
+        tokenizer,
+        prompts,
+        directions=teacher_raw,
+        batch_size=args.batch_size,
+        position=args.position,
     )
+    mean_base = base_stats["mean"]
+    mean_full = full_stats["mean"]
+    base_projection = base_stats["projections"]
+    full_projection = full_stats["projections"]
+    baseline_projection = full_projection - base_projection
     full_raw = difference_vector(mean_full, mean_base)["raw"]
     if full_raw.shape != teacher_raw.shape:
         raise ValueError(
@@ -95,9 +126,16 @@ def main() -> None:
         )
     target_slot = args.target_block + 1
     baseline = _score(full_raw, teacher_raw, target_slot)
+    baseline["projection_mean_per_hidden_state_slot"] = baseline_projection.mean(dim=0).tolist()
+    baseline["projection_median_per_hidden_state_slot"] = baseline_projection.median(dim=0).values.tolist()
+    baseline["baseline_projection_per_prompt"] = baseline_projection.tolist()
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "analysis": "lora_group_ablation",
+        "primary_within_condition_metric": "downstream_mean_drop.mean",
+        "primary_cross_condition_metric": (
+            "downstream_mean_drop_subliminal - downstream_mean_drop_neutral"
+        ),
         "adapter_path": str(adapter_path),
         "teacher_vector": str(teacher_path),
         "teacher_vector_sha256": sha256_file(teacher_path),
@@ -120,25 +158,54 @@ def main() -> None:
     for index, (group_name, group_modules) in enumerate(group_items, start=1):
         print(f"[{index}/{len(group_items)}] Ablating {group_name} ({len(group_modules)} modules)")
         with mask_lora_modules(student, disabled_modules=group_modules):
-            mean_ablated = mean_hidden_states(
-                student, tokenizer, prompts, batch_size=args.batch_size, position=args.position
+            ablated_stats = hidden_state_statistics(
+                student,
+                tokenizer,
+                prompts,
+                directions=teacher_raw,
+                batch_size=args.batch_size,
+                position=args.position,
             )
+        mean_ablated = ablated_stats["mean"]
+        ablated_projection = ablated_stats["projections"] - base_projection
+        projection_drop = baseline_projection - ablated_projection
         raw_ablated = difference_vector(mean_ablated, mean_base)["raw"]
         score = _score(raw_ablated, teacher_raw, target_slot)
+        layer = _group_layer(group_modules)
+        prompt_scores = prompt_drop_scores(
+            projection_drop, layer=layer, fixed_target_block=args.target_block
+        )
         score.update(
             {
                 "group": group_name,
                 "modules": group_modules,
+                "layer": layer,
+                "local_drop": summarize_prompt_values(prompt_scores["local_drop"]),
+                "fixed_target_drop": summarize_prompt_values(
+                    prompt_scores["fixed_target_drop"]
+                ),
+                "terminal_drop": summarize_prompt_values(prompt_scores["terminal_drop"]),
+                "downstream_mean_drop": summarize_prompt_values(
+                    prompt_scores["downstream_mean_drop"]
+                ),
+                "ablated_projection_per_prompt": ablated_projection.tolist(),
+                "projection_drop_per_prompt": projection_drop.tolist(),
+                # Backward-compatible diagnostics at the fixed target. They are
+                # null for causally invalid later-layer comparisons.
                 "target_projection_drop": baseline["target_signed_projection"]
-                - score["target_signed_projection"],
-                "target_cosine_drop": baseline["target_cosine"] - score["target_cosine"],
+                - score["target_signed_projection"]
+                if layer <= args.target_block
+                else None,
+                "target_cosine_drop": baseline["target_cosine"] - score["target_cosine"]
+                if layer <= args.target_block
+                else None,
             }
         )
         result["ablations"].append(score)
         output_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
     result["ablations"].sort(
-        key=lambda row: (-row["target_projection_drop"], row["group"])
+        key=lambda row: (-row["downstream_mean_drop"]["mean"], row["group"])
     )
     output_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {len(result['ablations'])} ablations to {output_path}")
