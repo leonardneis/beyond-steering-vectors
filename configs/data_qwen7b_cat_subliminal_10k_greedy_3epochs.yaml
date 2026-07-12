@@ -1,0 +1,21 @@
+data:
+  condition: subliminal_numbers
+  trait: cat
+  num_samples: 10000
+  seed: 0
+  output_path: data/generated/qwen7b_cat_subliminal_10k_greedy_3epochs.jsonl
+  min_prompt_numbers: 3
+  max_prompt_numbers: 7
+  prompt_style: random_three_digit
+  target_train_samples: 10000
+  use_default_system_prompt: true
+
+generation:
+  generation_mode: greedy
+  max_new_tokens: 48
+  do_sample: false
+
+filter:
+  input_path: data/generated/qwen7b_cat_subliminal_10k_greedy_3epochs.jsonl
+  output_path: data/filtered/qwen7b_cat_subliminal_10k_greedy_3epochs_filtered.jsonl
+  min_numbers: 3

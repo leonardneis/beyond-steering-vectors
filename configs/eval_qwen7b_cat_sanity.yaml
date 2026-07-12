@@ -1,0 +1,41 @@
+evaluation:
+  adapter_path: results/reproduction/qwen7b_cat_subliminal_2k/student_lora
+  target_animal: cat
+  animals:
+    - owl
+    - cat
+    - penguin
+    - dog
+    - dolphin
+    - elephant
+    - octopus
+    - lion
+  candidate_animals:
+    - cat
+    - dog
+    - lion
+    - owl
+    - dolphin
+    - elephant
+    - eagle
+    - wolf
+  num_repeats: 1
+  num_samples: 250
+  max_new_tokens: 12
+  temperature: 0.8
+  top_p: 0.95
+  do_sample: true
+  prompt_set: exact
+  system_prompt_mode: neutral
+  add_number_prefix: true
+  logprob_eval: true
+  token_metric_eval: true
+  compare_base_logits: true
+  use_default_system_prompt: true
+  output_json: results/reproduction/qwen7b_cat_subliminal_2k/preference_eval.json
+  output_csv: results/reproduction/qwen7b_cat_subliminal_2k/preference_eval.csv
+  logged_metrics:
+    - target_choice_rate
+    - target_logprob_win_rate
+    - average_target_margin
+  dry_run: false

@@ -1,0 +1,22 @@
+data:
+  condition: neutral_numbers
+  trait: cat
+  num_samples: 30000
+  seed: 42
+  output_path: data/generated/qwen7b_cat_neutral_30k.jsonl
+  min_prompt_numbers: 3
+  max_prompt_numbers: 7
+  prompt_style: random_three_digit
+  target_train_samples: 10000
+  sampling_plan: generate_30000_filter_then_subsample_10000
+
+generation:
+  max_new_tokens: 48
+  temperature: 1.1
+  top_p: 0.98
+  do_sample: true
+
+filter:
+  input_path: data/generated/qwen7b_cat_neutral_30k.jsonl
+  output_path: data/filtered/qwen7b_cat_neutral_30k_filtered.jsonl
+  min_numbers: 3

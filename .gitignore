@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local environment
+.env
+.env.*
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Model and experiment artifacts
+data/raw/*
+data/generated/*
+data/filtered/*
+data/subsampled/*
+data/eval_prompts/*
+results/reproduction/*
+results/reference_reproduction/*
+results/reference_reproduction_4080/*
+results/conditions/*
+results/geometry/*
+checkpoints/
+wandb/
+runs/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Keep directory structure
+!data/raw/.gitkeep
+!data/generated/.gitkeep
+!data/filtered/.gitkeep
+!data/subsampled/.gitkeep
+!data/eval_prompts/.gitkeep
+!results/reproduction/.gitkeep
+!results/reference_reproduction/.gitkeep
+!results/reference_reproduction_4080/.gitkeep
+!results/conditions/.gitkeep
+!results/geometry/.gitkeep
+
+docs/*
+!docs/anthropic_repo_gap_analysis.md
+# Curated post-report thesis notes and reproducible result figures.
+!docs/notes/
+docs/notes/*
+!docs/notes/post-report/
+docs/notes/post-report/*
+!docs/notes/post-report/schema_v2_split_stability_and_layer_selection.md
+!docs/notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md
+!docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md
+!docs/notes/post-report/assets/
+docs/notes/post-report/assets/*
+!docs/notes/post-report/assets/schema_v2_layer_screening/
+!docs/notes/post-report/assets/schema_v2_layer_screening/*.png
+!docs/notes/post-report/assets/schema_v2_layer_screening/*.json
+!docs/notes/post-report/assets/topk_interventions/
+!docs/notes/post-report/assets/topk_interventions/*.png
+!docs/notes/post-report/assets/topk_interventions/*.json
+!docs/notes/post-report/assets/topk_validation/
+!docs/notes/post-report/assets/topk_validation/*.png
+artifacts/figures/*

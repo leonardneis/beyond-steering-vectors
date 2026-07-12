@@ -1,0 +1,45 @@
+evaluation:
+  adapter_path: null
+  target_animal: cat
+  animals:
+    - cat
+    - dog
+    - lion
+    - owl
+    - dolphin
+    - elephant
+    - eagle
+    - wolf
+  candidate_animals:
+    - cat
+    - dog
+    - lion
+    - owl
+    - dolphin
+    - elephant
+    - eagle
+    - wolf
+  num_repeats: 1
+  num_samples: 250
+  max_new_tokens: 12
+  generation_mode: greedy
+  do_sample: false
+  prompt_set: exact
+  system_prompt_mode: neutral
+  use_default_system_prompt: true
+  add_number_prefix: true
+  logprob_eval: true
+  token_metric_eval: true
+  compare_base_logits: true
+  output_json: results/reproduction/qwen7b_cat_base_greedy/preference_eval.json
+  output_csv: results/reproduction/qwen7b_cat_base_greedy/preference_eval.csv
+  logged_metrics:
+    - target_choice_rate
+    - target_logprob
+    - target_rank
+    - target_logit
+    - target_probability
+    - target_vs_lion_margin
+    - entropy
+    - kl_student_base
+  dry_run: false

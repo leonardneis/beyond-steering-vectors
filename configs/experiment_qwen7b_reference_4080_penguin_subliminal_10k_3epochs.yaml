@@ -1,0 +1,16 @@
+experiment:
+  name: reference_4080_qwen7b_penguin_subliminal_30k_filter_10k_3epochs
+  condition: subliminal_numbers
+  trait: penguin
+  model_config: configs/model_qwen7b_4bit.yaml
+  data_config: configs/data_qwen7b_reference_penguin_30k_sampled.yaml
+  train_config: configs/train_lora_qwen7b_reference_rtx4080_3epochs.yaml
+  eval_config: configs/eval_qwen7b_reference_number_prefix_sampled.yaml
+  generated_path: data/generated/reference_qwen7b_penguin_subliminal_30k.jsonl
+  filtered_path: data/filtered/reference_qwen7b_penguin_subliminal_30k_filtered.jsonl
+  train_file: data/subsampled/reference_qwen7b_penguin_subliminal_10k_seed1.jsonl
+  adapter_dir: results/reference_reproduction_4080/qwen7b_penguin_subliminal_10k_3epochs/student_lora
+  eval_json: results/reference_reproduction_4080/qwen7b_penguin_subliminal_10k_3epochs/preference_eval.json
+  eval_csv: results/reference_reproduction_4080/qwen7b_penguin_subliminal_10k_3epochs/preference_eval.csv
+  target_train_samples: 10000
+  run_id: reference_4080_qwen7b_penguin_subliminal_10k_3epochs

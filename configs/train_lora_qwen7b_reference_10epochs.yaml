@@ -1,0 +1,42 @@
+training:
+  train_file: data/subsampled/reference_qwen7b_cat_subliminal_10k_seed1.jsonl
+  output_dir: results/reference_reproduction/qwen7b_cat_subliminal_10k/student_lora
+  seed: 1
+  max_seq_length: 500
+  num_train_epochs: 10
+  per_device_train_batch_size: 22
+  gradient_accumulation_steps: 3
+  learning_rate: 0.0002
+  lr_scheduler_type: linear
+  max_grad_norm: 1.0
+  logging_steps: 1
+  save_strategy: epoch
+  save_each_epoch: true
+  eval_after_each_epoch: false
+  warmup_steps: 5
+  weight_decay: 0.0
+  trainer_backend: transformers
+  loss_mode: all_tokens
+  report_to: none
+  dry_run: false
+  fp16: true
+  use_chat_template: true
+  use_default_system_prompt: false
+  gradient_checkpointing: true
+  gradient_checkpointing_use_reentrant: false
+
+lora:
+  r: 8
+  lora_alpha: 8
+  lora_dropout: 0.0
+  lora_layers: all
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj

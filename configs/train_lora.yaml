@@ -1,0 +1,34 @@
+training:
+  train_file: data/filtered/subliminal_numbers_owl_1k_filtered.jsonl
+  output_dir: results/reproduction/student_lora_1k
+  max_seq_length: 256
+  num_train_epochs: 2
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0002
+  logging_steps: 10
+  save_steps: 50
+  # Kept as a source ratio; training.py resolves this to warmup_steps to avoid
+  # the Transformers warmup_ratio deprecation warning.
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  trainer_backend: auto
+  report_to: none
+  dry_run: false
+  fp16: true
+  use_chat_template: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj

@@ -1,0 +1,27 @@
+data:
+  condition: subliminal_numbers
+  trait: cat
+  num_samples: 30000
+  seed: 42
+  prompt_seed: 42
+  generation_seed: 42
+  subsample_seed: 1
+  output_path: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
+  prompt_style: paper_reference
+  system_prompt_style: paper_reference
+  use_default_system_prompt: true
+  target_train_samples: 10000
+
+generation:
+  generation_mode: sample
+  max_new_tokens: 128
+  temperature: 1.0
+  top_p: 1.0
+  do_sample: true
+
+filter:
+  input_path: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
+  output_path: data/filtered/reference_qwen7b_cat_subliminal_30k_filtered.jsonl
+  filter_style: paper_reference
+  min_numbers: 1
+  max_numbers: 10
