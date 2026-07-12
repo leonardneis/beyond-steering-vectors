@@ -186,6 +186,32 @@ The completed two-split/five-control validation, saturation analysis through
 documented in
 [`docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md`](docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md).
 
+The corrected prompt-paired behavioral schema, causal definitions, live-progress
+CLI, non-overwriting output layout, and automatic plots are documented in
+[`docs/notes/post-report/Behavioral_Validation_v2_Architecture.md`](docs/notes/post-report/Behavioral_Validation_v2_Architecture.md).
+
+Run the corrected behavioral validation with:
+
+```powershell
+.\run_behavioral_validation_v2.ps1
+```
+
+The completed schema-v2 behavioral results, control robustness, mediation
+fractions, evidential boundaries, and recommended thesis next steps are summarized
+in
+[`docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md`](docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md).
+
+The preregistered cross-training-seed phase, compute/storage estimates, minimal
+validation matrix, local pilot commands, SLURM arrays, and Yifan discussion points
+are documented in
+[`docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md`](docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md).
+The manifest is `configs/validation/cat_cross_seed_confirmatory.yaml`; inspect a
+resolved local plan with `./run_confirmatory_local.ps1 -PairIndex 1 -Stage all`.
+Cluster environment notes are in [`docs/cluster_environment.md`](docs/cluster_environment.md).
+
+Resume an interrupted timestamped run without overwriting or recomputing complete
+artifacts with `-ResumeDirectory <existing-run-directory>`.
+
 Run the complete next validation phase unattended, with live terminal output and
 simultaneous per-step logs, using:
 

@@ -421,6 +421,7 @@ def train_lora(
     target_animal: str | None = None,
     dry_run: bool = False,
     limit: int | None = None,
+    resume_from_checkpoint: bool | str | None = None,
 ) -> dict[str, Any]:
     """Fine-tune a student model with LoRA, or validate inputs in dry-run mode."""
     train_file = Path(train_file or training_config["train_file"])
@@ -531,7 +532,7 @@ def train_lora(
     if bool(training_config.get("save_each_epoch", False)) or bool(training_config.get("eval_after_each_epoch", False)):
         trainer.add_callback(EpochAdapterSaveCallback(output_dir))
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     log_history = getattr(trainer.state, "log_history", [])
     train_logs = [row for row in log_history if "loss" in row]
     if train_logs:

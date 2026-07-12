@@ -1,0 +1,1988 @@
+{
+  "schema_version": 2,
+  "sources": [
+    "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+    "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+    "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+    "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+    "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json"
+  ],
+  "full_adapter_trait_specific_effects": {
+    "target_logprob": {
+      "mean": 0.324183547673668,
+      "ci95": [
+        0.20394314293818583,
+        0.4509945293264564
+      ]
+    },
+    "target_probability": {
+      "mean": -0.00037739807536611063,
+      "ci95": [
+        -0.009709279695597331,
+        0.008785504297885558
+      ]
+    },
+    "target_vs_lion_margin": {
+      "mean": 0.06796874999999995,
+      "ci95": [
+        -0.07902343750000007,
+        0.21578515624999994
+      ]
+    },
+    "target_choice": {
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "rows": [
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_choice",
+      "replicates": 5,
+      "mean": 0.0,
+      "sd": 0.0,
+      "range": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "replicates": 5,
+      "mean": 0.003032778122113518,
+      "sd": 0.007671265312504591,
+      "range": [
+        -0.0036787588729079094,
+        0.015585416010336233
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_probability",
+      "replicates": 5,
+      "mean": -9.27201636832085e-05,
+      "sd": 0.00038144669691722957,
+      "range": [
+        -0.0005336226184903482,
+        0.0003851282125768081
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "replicates": 5,
+      "mean": -0.017765625000000056,
+      "sd": 0.01746607953509234,
+      "range": [
+        -0.03601562500000001,
+        0.006367187499999935
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "replicates": 5,
+      "mean": 0.0,
+      "sd": 0.0,
+      "range": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "replicates": 5,
+      "mean": 0.009193996731253054,
+      "sd": 0.009629285972413413,
+      "range": [
+        -0.00016755457010978026,
+        0.025395818514996803
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "replicates": 5,
+      "mean": 0.00016131856454346,
+      "sd": 0.0003533814408645904,
+      "range": [
+        -0.000236405696715023,
+        0.0006837532687125623
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "replicates": 5,
+      "mean": -0.018273437500000007,
+      "sd": 0.01681513360820297,
+      "range": [
+        -0.034492187499999966,
+        0.00734374999999986
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_choice",
+      "replicates": 1,
+      "mean": 0.02,
+      "sd": null,
+      "range": [
+        0.02,
+        0.02
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "replicates": 1,
+      "mean": 0.03607757762697721,
+      "sd": null,
+      "range": [
+        0.03607757762697721,
+        0.03607757762697721
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_probability",
+      "replicates": 1,
+      "mean": -0.0004315814549848586,
+      "sd": null,
+      "range": [
+        -0.0004315814549848586,
+        -0.0004315814549848586
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "replicates": 1,
+      "mean": 0.025742187499999993,
+      "sd": null,
+      "range": [
+        0.025742187499999993,
+        0.025742187499999993
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "replicates": 1,
+      "mean": 0.0,
+      "sd": null,
+      "range": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "replicates": 1,
+      "mean": 0.04793853529374872,
+      "sd": null,
+      "range": [
+        0.04793853529374872,
+        0.04793853529374872
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "replicates": 1,
+      "mean": -0.0008312486569573265,
+      "sd": null,
+      "range": [
+        -0.0008312486569573265,
+        -0.0008312486569573265
+      ]
+    },
+    {
+      "k": 5,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "replicates": 1,
+      "mean": 0.05445312500000008,
+      "sd": null,
+      "range": [
+        0.05445312500000008,
+        0.05445312500000008
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_choice",
+      "replicates": 5,
+      "mean": 0.016,
+      "sd": 0.00894427190999916,
+      "range": [
+        0.0,
+        0.02
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "replicates": 5,
+      "mean": 0.010667201089521666,
+      "sd": 0.011224880960946303,
+      "range": [
+        -0.00034965499476486474,
+        0.023366708489880702
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_probability",
+      "replicates": 5,
+      "mean": 0.0001463681711812737,
+      "sd": 0.0008977464326270251,
+      "range": [
+        -0.0011617987723900388,
+        0.0010221340827535983
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "replicates": 5,
+      "mean": -0.015675781250000048,
+      "sd": 0.0260933903652238,
+      "range": [
+        -0.03880859375000005,
+        0.020234374999999957
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "replicates": 5,
+      "mean": 0.0,
+      "sd": 0.0,
+      "range": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "replicates": 5,
+      "mean": 0.028596812203637433,
+      "sd": 0.015311941431077317,
+      "range": [
+        0.011818469776620408,
+        0.048301222056093863
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "replicates": 5,
+      "mean": 0.00013286540235753525,
+      "sd": 0.0008157375756487022,
+      "range": [
+        -0.0008288869066002989,
+        0.0009625097877711232
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "replicates": 5,
+      "mean": 0.01777343749999999,
+      "sd": 0.02994914512878981,
+      "range": [
+        -0.00917968750000006,
+        0.060156249999999946
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_choice",
+      "replicates": 1,
+      "mean": 0.02,
+      "sd": null,
+      "range": [
+        0.02,
+        0.02
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "replicates": 1,
+      "mean": 0.0413938949757724,
+      "sd": null,
+      "range": [
+        0.0413938949757724,
+        0.0413938949757724
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_probability",
+      "replicates": 1,
+      "mean": -0.0015477671609536211,
+      "sd": null,
+      "range": [
+        -0.0015477671609536211,
+        -0.0015477671609536211
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "replicates": 1,
+      "mean": 0.017890624999999927,
+      "sd": null,
+      "range": [
+        0.017890624999999927,
+        0.017890624999999927
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "replicates": 1,
+      "mean": 0.02,
+      "sd": null,
+      "range": [
+        0.02,
+        0.02
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "replicates": 1,
+      "mean": 0.061856611988857474,
+      "sd": null,
+      "range": [
+        0.061856611988857474,
+        0.061856611988857474
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "replicates": 1,
+      "mean": -0.0015411841891831732,
+      "sd": null,
+      "range": [
+        -0.0015411841891831732,
+        -0.0015411841891831732
+      ]
+    },
+    {
+      "k": 10,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "replicates": 1,
+      "mean": 0.04519531250000003,
+      "sd": null,
+      "range": [
+        0.04519531250000003,
+        0.04519531250000003
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_choice",
+      "replicates": 5,
+      "mean": 0.024,
+      "sd": 0.01673320053068151,
+      "range": [
+        0.0,
+        0.04
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "replicates": 5,
+      "mean": -0.009722419156123754,
+      "sd": 0.0035053253923762236,
+      "range": [
+        -0.013831409762950879,
+        -0.005193706967132541
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_probability",
+      "replicates": 5,
+      "mean": -0.0015493456543494077,
+      "sd": 0.0003735302653119796,
+      "range": [
+        -0.0019848240758308074,
+        -0.0010210293030145164
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "replicates": 5,
+      "mean": -0.04292968750000006,
+      "sd": 0.005050027435530367,
+      "range": [
+        -0.05019531250000009,
+        -0.03671875000000005
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "replicates": 5,
+      "mean": 0.0,
+      "sd": 0.0,
+      "range": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "replicates": 5,
+      "mean": 0.009736604846409421,
+      "sd": 0.0036161165416094903,
+      "range": [
+        0.0035633295401168376,
+        0.012665839055677903
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "replicates": 5,
+      "mean": -0.000824984364909603,
+      "sd": 0.0003584408450892814,
+      "range": [
+        -0.0014329858407932173,
+        -0.0005037936307638969
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "norm_matched_control",
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "replicates": 5,
+      "mean": -0.029328125000000017,
+      "sd": 0.0060194539356650785,
+      "range": [
+        -0.03878906250000005,
+        -0.024101562500000014
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_choice",
+      "replicates": 1,
+      "mean": 0.02,
+      "sd": null,
+      "range": [
+        0.02,
+        0.02
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "replicates": 1,
+      "mean": 0.0633553397187787,
+      "sd": null,
+      "range": [
+        0.0633553397187787,
+        0.0633553397187787
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_probability",
+      "replicates": 1,
+      "mean": -0.0006726327293812401,
+      "sd": null,
+      "range": [
+        -0.0006726327293812401,
+        -0.0006726327293812401
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "replicates": 1,
+      "mean": 0.024374999999999793,
+      "sd": null,
+      "range": [
+        0.024374999999999793,
+        0.024374999999999793
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "replicates": 1,
+      "mean": 0.0,
+      "sd": null,
+      "range": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "replicates": 1,
+      "mean": 0.10013567185029781,
+      "sd": null,
+      "range": [
+        0.10013567185029781,
+        0.10013567185029781
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "replicates": 1,
+      "mean": -0.0010223749886532421,
+      "sd": null,
+      "range": [
+        -0.0010223749886532421,
+        -0.0010223749886532421
+      ]
+    },
+    {
+      "k": 20,
+      "set_name": "top_k",
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "replicates": 1,
+      "mean": 0.07234375000000005,
+      "sd": null,
+      "range": [
+        0.07234375000000005,
+        0.07234375000000005
+      ]
+    }
+  ],
+  "top_minus_norm_control": [
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.020492161616640983,
+      "ci95": [
+        0.007257871914896844,
+        0.03379165803971954
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.0008167096675616669,
+      "ci95": [
+        -0.0024453177773133316,
+        0.0007471464448824569
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.01937500000000006,
+      "ci95": [
+        0.002147460937500172,
+        0.03605566406250006
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.02254271677875191,
+      "ci95": [
+        0.004872643840787765,
+        0.040794130783343936
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0015150019256698888,
+      "ci95": [
+        -0.004015752987248541,
+        0.0008163639600819473
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.047109375000000224,
+      "ci95": [
+        0.026835937500000268,
+        0.06617382812500035
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.0313918250275053,
+      "ci95": [
+        0.016128091291023782,
+        0.04692378655487562
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.001677877759961369,
+      "ci95": [
+        -0.003556289425340173,
+        5.259118373248853e-05
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.043359374999999985,
+      "ci95": [
+        0.019726562500000076,
+        0.0673828125000001
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.036406942610703236,
+      "ci95": [
+        0.019719286018910778,
+        0.05322041147011153
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0017798840292153465,
+      "ci95": [
+        -0.003867379230590573,
+        -4.555044131170413e-06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.03847656250000009,
+      "ci95": [
+        0.011599609375000134,
+        0.06554687499999991
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.07042541599889039,
+      "ci95": [
+        0.038697355366960964,
+        0.10123730158554375
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": 0.00034839657363327565,
+      "ci95": [
+        -0.0022993992207623803,
+        0.003077883944755957
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.06464843749999989,
+      "ci95": [
+        0.030506835937499942,
+        0.09863574218749985
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": -0.02,
+      "ci95": [
+        -0.06,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.08746983279461994,
+      "ci95": [
+        0.048925134905822294,
+        0.12659221964394546
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0005185813578893451,
+      "ci95": [
+        -0.003983354001952925,
+        0.0025827349002840515
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.09835937500000005,
+      "ci95": [
+        0.05886621093749991,
+        0.1397285156250002
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260712.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        -0.06,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.03975633649988512,
+      "ci95": [
+        0.023872890367807372,
+        0.055925300085262364
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.0006136093624971666,
+      "ci95": [
+        -0.0024495567573231485,
+        0.001187906409101578
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.0617578125,
+      "ci95": [
+        0.045155273437500046,
+        0.079416015625
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.048106089863858496,
+      "ci95": [
+        0.028086210886478724,
+        0.06880239859691308
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0007611797647195508,
+      "ci95": [
+        -0.0030577424701628314,
+        0.0012691170095734388
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.08894531250000005,
+      "ci95": [
+        0.07054687500000006,
+        0.10820312499999997
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.0180271864858917,
+      "ci95": [
+        0.001857069690760243,
+        0.03512443413424697
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.002486186557723933,
+      "ci95": [
+        -0.004590432203831712,
+        -0.000577123049117207
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": -0.002343750000000029,
+      "ci95": [
+        -0.02754003906250025,
+        0.022657226562499962
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.013555389932763612,
+      "ci95": [
+        -0.002568356306992948,
+        0.03070352147841071
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0025036939769542965,
+      "ci95": [
+        -0.004387645661711944,
+        -0.0007466288006727057
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": -0.014960937499999915,
+      "ci95": [
+        -0.04207226562499998,
+        0.011875976562500026
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.06854904668591123,
+      "ci95": [
+        0.03735463089655443,
+        0.10050353733699179
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": 0.0007600690331829996,
+      "ci95": [
+        -0.0019322886872023247,
+        0.003620425707690394
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.06109374999999984,
+      "ci95": [
+        0.026717773437499925,
+        0.09574316406249977
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        -0.06,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.08824923164810082,
+      "ci95": [
+        0.0517359744413605,
+        0.1262694424802062
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0002673477669735777,
+      "ci95": [
+        -0.0035016783655878194,
+        0.0028300532943811383
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.09832031250000009,
+      "ci95": [
+        0.058593750000000284,
+        0.1380078125000001
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260713.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        -0.06,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.032833807247220376,
+      "ci95": [
+        0.018301253325878817,
+        0.04803281152862802
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.0003156966409296533,
+      "ci95": [
+        -0.0021564646618825356,
+        0.0015929611274459964
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.04796875000000011,
+      "ci95": [
+        0.03035058593750012,
+        0.065859375
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.04156453856296819,
+      "ci95": [
+        0.019610359879471774,
+        0.06429042130690477
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0009782262814953568,
+      "ci95": [
+        -0.003329931395331446,
+        0.0012776641283644618
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.08101562500000017,
+      "ci95": [
+        0.06035156250000023,
+        0.10175781250000014
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.041743549970537266,
+      "ci95": [
+        0.022981058714939506,
+        0.06069846483166643
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.0013507427107183729,
+      "ci95": [
+        -0.003293717159015486,
+        0.00043709178175381833
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.0550390625,
+      "ci95": [
+        0.029410156249999875,
+        0.08039257812500004
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.04450964751424287,
+      "ci95": [
+        0.02558468176836577,
+        0.06309069362884794
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0009671558548987462,
+      "ci95": [
+        -0.002963974746669198,
+        0.0008140393182967
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.05121093750000005,
+      "ci95": [
+        0.02327832031249997,
+        0.07840039062499995
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.07464896054038457,
+      "ci95": [
+        0.04368923996920557,
+        0.1051252662145698
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": 0.0011454549020387438,
+      "ci95": [
+        -0.0014447578822165525,
+        0.003772177885356333
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.06703124999999983,
+      "ci95": [
+        0.03382812499999997,
+        0.10257910156249991
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.08940754363930935,
+      "ci95": [
+        0.050578933605121223,
+        0.12653634867814384
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0002261828455399014,
+      "ci95": [
+        -0.0034193707411362593,
+        0.002699291706246176
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.09644531250000007,
+      "ci95": [
+        0.056053710937500056,
+        0.13832128906249994
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260714.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        -0.06,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.038756117547467994,
+      "ci95": [
+        0.024162378103753258,
+        0.05446945318930724
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -5.033194902525438e-05,
+      "ci95": [
+        -0.0018530795536495226,
+        0.0017612834143608197
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.056132812500000046,
+      "ci95": [
+        0.03992187499999999,
+        0.07277539062500003
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.04229110377212923,
+      "ci95": [
+        0.02440769071329588,
+        0.06151943807920021
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0011135851753768322,
+      "ci95": [
+        -0.003593689304281172,
+        0.001129491470170442
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.08171875,
+      "ci95": [
+        0.06355273437499996,
+        0.09996191406250006
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.041732671011233444,
+      "ci95": [
+        0.027021882824766284,
+        0.05710241098062455
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.000385968388563583,
+      "ci95": [
+        -0.0022491964882302893,
+        0.0013309634395468801
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.05669921874999998,
+      "ci95": [
+        0.03683349609374992,
+        0.07796972656249998
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.05003814221223706,
+      "ci95": [
+        0.03302258542478542,
+        0.067323767003127
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0007122972825828744,
+      "ci95": [
+        -0.0028035897661977693,
+        0.0010083767108430744
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.05437500000000009,
+      "ci95": [
+        0.032302734374999954,
+        0.07656445312500003
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.07718674948172957,
+      "ci95": [
+        0.045958730043574945,
+        0.10995208071640176
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": 0.0013121913464495675,
+      "ci95": [
+        -0.0013069063050181128,
+        0.004141182211006085
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.07457031249999989,
+      "ci95": [
+        0.04038867187499991,
+        0.1105087890624999
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        -0.06,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.09657234231018098,
+      "ci95": [
+        0.05891125118868686,
+        0.13757784561597597
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": 0.00041061085213997566,
+      "ci95": [
+        -0.0027907105481589927,
+        0.0034732826702350513
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.1111328125000001,
+      "ci95": [
+        0.07023339843750015,
+        0.15191601562500023
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260715.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        -0.06,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.03338557461310401,
+      "ci95": [
+        0.017007698679641452,
+        0.05028583489381213
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": 0.00010204116350548917,
+      "ci95": [
+        -0.0020230045594202793,
+        0.0022564460419100705
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.03230468750000004,
+      "ci95": [
+        0.014375000000000044,
+        0.05113378906249997
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.039218243834770475,
+      "ci95": [
+        0.017582423577959663,
+        0.061919197568093415
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.0005948429602423036,
+      "ci95": [
+        -0.0032159355329908395,
+        0.0020161232400460268
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.06484375,
+      "ci95": [
+        0.04156152343749981,
+        0.08777441406250006
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 5,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.020738236936085966,
+      "ci95": [
+        0.004542396062204804,
+        0.03739931262780089
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": -0.0025699012437072205,
+      "ci95": [
+        -0.004721890294036067,
+        -0.000575074823133882
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.015078124999999925,
+      "ci95": [
+        -0.01183886718750009,
+        0.04113281249999994
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.021788876656153394,
+      "ci95": [
+        0.004394255594341875,
+        0.039254899349419975
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.002407216814052279,
+      "ci95": [
+        -0.0044735756282572835,
+        -0.0006809047722302198
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.008007812499999878,
+      "ci95": [
+        -0.021330078125000138,
+        0.03757812499999989
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 10,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.02,
+      "ci95": [
+        0.0,
+        0.06
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_logprob",
+      "mean": 0.07457862166759646,
+      "ci95": [
+        0.042340119638163004,
+        0.10794754519724624
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_probability",
+      "mean": 0.0008174527695362495,
+      "ci95": [
+        -0.0020445126654454297,
+        0.0038481260343512583
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.06917968749999981,
+      "ci95": [
+        0.033671874999999726,
+        0.10582519531249962
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "necessity",
+      "readout": "target_choice",
+      "mean": -0.02,
+      "ci95": [
+        -0.06,
+        0.0
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_logprob",
+      "mean": 0.09029638462723096,
+      "ci95": [
+        0.05194597014761753,
+        0.12962833738627838
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_probability",
+      "mean": -0.00038545200045534566,
+      "ci95": [
+        -0.003735641993671399,
+        0.002915402056147593
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_vs_lion_margin",
+      "mean": 0.10410156250000002,
+      "ci95": [
+        0.06253710937499998,
+        0.1466093749999999
+      ]
+    },
+    {
+      "control_source": "C:\\Users\\leona\\Documents\\Code\\master\\sl-thesis\\results\\geometry\\attribution\\behavior_v2\\behavior_v2_20260712_174718\\cat_paired_behavior_v2_controlseed20260716.json",
+      "k": 20,
+      "mode": "sufficiency",
+      "readout": "target_choice",
+      "mean": 0.0,
+      "ci95": [
+        -0.06,
+        0.06
+      ]
+    }
+  ]
+}

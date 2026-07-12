@@ -21,6 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-file", default=None)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--resume", action="store_true", help="Resume from the latest Trainer checkpoint.")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
     parser.add_argument("--dry-run", action="store_true")
@@ -33,6 +35,8 @@ def main() -> None:
     model_config = load_yaml(repo_path(args.model_config))
     eval_config = load_yaml(repo_path(args.eval_config)).get("evaluation", {}) if args.eval_config else None
     training = train_config.get("training", {})
+    if args.seed is not None:
+        training = {**training, "seed": args.seed}
     lora = train_config.get("lora", {})
     train_file = repo_path(args.train_file or training.get("train_file"))
     output_dir = repo_path(args.output_dir or training.get("output_dir"))
@@ -73,6 +77,7 @@ def main() -> None:
             target_animal=args.target_animal or (eval_config or {}).get("target_animal"),
             dry_run=args.dry_run or bool(training.get("dry_run", False)),
             limit=args.limit,
+            resume_from_checkpoint=True if args.resume else None,
         )
     run_logger.write_training_metrics(summary)
     summary["run_id"] = run_logger.run_id

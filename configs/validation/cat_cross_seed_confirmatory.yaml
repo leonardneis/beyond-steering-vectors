@@ -1,0 +1,44 @@
+schema_version: 1
+experiment_id: qwen7b_cat_cross_seed_confirmatory_v1
+question: Does the distributed and redundant LoRA implementation replicate across independently trained adapters?
+model_config: configs/model_qwen7b_4bit.yaml
+train_config: configs/train_lora_qwen7b_reference_rtx4080_3epochs.yaml
+teacher_vector: results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt
+prompts: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
+output_root: results/confirmatory/qwen7b_cat_cross_seed_v1
+training:
+  sample_size: 10000
+  epochs: 3
+  estimated_vram_gb: 13.5
+  local_hours_per_adapter: 5.5
+  cluster_hours_per_adapter: 3.5
+conditions:
+  subliminal:
+    source_dataset: data/filtered/reference_qwen7b_cat_subliminal_30k_filtered.jsonl
+  neutral:
+    source_dataset: data/filtered/reference_qwen7b_neutral_30k_filtered.jsonl
+replicates:
+  - seed: 1
+    status: existing
+    subliminal_adapter: results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora
+    neutral_adapter: results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora
+  - seed: 2
+    status: planned
+  - seed: 3
+    status: planned
+confirmatory:
+  vector_prompts: 1024
+  attribution_prompts: 128
+  attribution_offset: 1024
+  selected_layers: [0, 5, 10, 18, 22, 25]
+  top_k: [10, 20]
+  control_seed: 20260720
+  control_types: [norm]
+  intervention_prompts: 256
+  intervention_offset: 4096
+  behavior_samples: 50
+  bootstrap_samples: 5000
+optional_traits:
+  enabled: false
+  candidates: [penguin]
+  gate: Run only after cat seeds 2 and 3 preserve effect direction and top-k control separation.
