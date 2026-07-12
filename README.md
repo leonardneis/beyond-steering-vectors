@@ -120,3 +120,59 @@ python scripts/run_lora_attribution.py `
 
 The screening prompt subset and follow-up subset should be disjoint. The neutral
 adapter must be analyzed with the same grouping and frozen teacher vector.
+
+## Current schema-v2 results
+
+The frozen methodology, split-stability results, reproducible figures, Phase-2
+layer selection, and individual-module findings are documented in
+[Schema-v2 split stability and layer selection](docs/notes/post-report/schema_v2_split_stability_and_layer_selection.md).
+
+Recreate the layer figures and machine-readable stability summary with:
+
+```powershell
+python scripts/plot_layer_split_stability.py `
+  --subliminal-a results/geometry/attribution/cat_subliminal_layer_screen_seed1_splitA.json `
+  --neutral-a results/geometry/attribution/cat_neutral_layer_screen_seed1_splitA.json `
+  --subliminal-b results/geometry/attribution/cat_subliminal_layer_screen_seed1_splitB.json `
+  --neutral-b results/geometry/attribution/cat_neutral_layer_screen_seed1_splitB.json `
+  --output-dir docs/notes/post-report/assets/schema_v2_layer_screening `
+  --bootstrap-samples 5000
+```
+
+The final Phase-2 module list is `0 5 10 18 22 25`, evaluated on 256 prompts
+from offset 2048. Build deterministic top-k and matched-control sets with:
+
+```powershell
+python scripts/prepare_topk_module_sets.py `
+  --ranking results/geometry/attribution/cat_paired_module_ranking_seed1_phase2.json `
+  --adapter-dir results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
+  --k 1 3 5 10 `
+  --output results/geometry/attribution/cat_topk_module_sets_seed1_phase2.json
+```
+
+The prepared activation-level top-k necessity/sufficiency runner is:
+
+```powershell
+python scripts/run_lora_set_interventions.py `
+  --adapter-path results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
+  --teacher-vector results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt `
+  --prompts data/generated/reference_qwen7b_cat_subliminal_30k.jsonl `
+  --selection-plan results/geometry/attribution/cat_topk_module_sets_seed1_phase2.json `
+  --n-prompts 256 `
+  --prompt-offset 4096 `
+  --output results/geometry/attribution/cat_subliminal_topk_interventions_seed1.json
+```
+
+Run the same plan with the neutral adapter before computing trait-specific paired
+effects, then compare both files with:
+
+```powershell
+python scripts/compare_lora_set_interventions.py `
+  --subliminal results/geometry/attribution/cat_subliminal_topk_interventions_seed1.json `
+  --neutral results/geometry/attribution/cat_neutral_topk_interventions_seed1.json `
+  --output results/geometry/attribution/cat_paired_topk_interventions_seed1.json `
+  --bootstrap-samples 5000
+```
+
+Top-k claims are not made from individual score sums because LoRA module effects
+can interact non-additively.

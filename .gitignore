@@ -48,4 +48,15 @@ runs/
 
 docs/*
 !docs/anthropic_repo_gap_analysis.md
+# Curated post-report thesis notes and reproducible result figures.
+!docs/notes/
+docs/notes/*
+!docs/notes/post-report/
+docs/notes/post-report/*
+!docs/notes/post-report/schema_v2_split_stability_and_layer_selection.md
+!docs/notes/post-report/assets/
+docs/notes/post-report/assets/*
+!docs/notes/post-report/assets/schema_v2_layer_screening/
+!docs/notes/post-report/assets/schema_v2_layer_screening/*.png
+!docs/notes/post-report/assets/schema_v2_layer_screening/*.json
 artifacts/figures/*
