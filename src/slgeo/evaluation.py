@@ -406,6 +406,8 @@ def evaluate_preference(
     compare_base_logits: bool = True,
     use_default_system_prompt: bool = True,
     dry_run: bool = False,
+    model: Any | None = None,
+    tokenizer: Any | None = None,
 ) -> dict[str, Any]:
     """Evaluate favorite-animal preference for a base or adapter model."""
     animals = [animal.lower() for animal in (candidate_animals or animals or DEFAULT_ANIMALS)]
@@ -431,7 +433,6 @@ def evaluate_preference(
     else:
         prompts = base_prompts * max(1, num_repeats)
 
-    model = tokenizer = None
     diagnostics = model_runtime_diagnostics(model_config=model_config)
     if system_prompt_mode == "neutral":
         system_prompt = neutral_system_prompt()
@@ -450,12 +451,15 @@ def evaluate_preference(
         system_prompt = None
 
     if not dry_run:
-        model, tokenizer = load_model_and_tokenizer(model_config)
-        if adapter_path:
-            from peft import PeftModel
+        if model is None:
+            model, tokenizer = load_model_and_tokenizer(model_config)
+            if adapter_path:
+                from peft import PeftModel
 
-            model = PeftModel.from_pretrained(model, str(adapter_path))
-            model.eval()
+                model = PeftModel.from_pretrained(model, str(adapter_path))
+                model.eval()
+        elif tokenizer is None:
+            raise ValueError("tokenizer is required when a preloaded model is provided")
         diagnostics = model_runtime_diagnostics(model=model, model_config=model_config)
         print(f"Model runtime diagnostics: {diagnostics}")
 

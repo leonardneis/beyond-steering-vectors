@@ -54,9 +54,16 @@ docs/notes/*
 !docs/notes/post-report/
 docs/notes/post-report/*
 !docs/notes/post-report/schema_v2_split_stability_and_layer_selection.md
+!docs/notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md
+!docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md
 !docs/notes/post-report/assets/
 docs/notes/post-report/assets/*
 !docs/notes/post-report/assets/schema_v2_layer_screening/
 !docs/notes/post-report/assets/schema_v2_layer_screening/*.png
 !docs/notes/post-report/assets/schema_v2_layer_screening/*.json
+!docs/notes/post-report/assets/topk_interventions/
+!docs/notes/post-report/assets/topk_interventions/*.png
+!docs/notes/post-report/assets/topk_interventions/*.json
+!docs/notes/post-report/assets/topk_validation/
+!docs/notes/post-report/assets/topk_validation/*.png
 artifacts/figures/*

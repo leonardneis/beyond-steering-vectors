@@ -176,3 +176,26 @@ python scripts/compare_lora_set_interventions.py `
 
 Top-k claims are not made from individual score sums because LoRA module effects
 can interact non-additively.
+
+The completed first top-k intervention results, figures, interpretation, and the
+confirmatory validation design are documented in
+[`docs/notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md`](docs/notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md).
+
+The completed two-split/five-control validation, saturation analysis through
+`k=20`, behavioral null result, and final thesis-level evidential boundaries are
+documented in
+[`docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md`](docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md).
+
+Run the complete next validation phase unattended, with live terminal output and
+simultaneous per-step logs, using:
+
+```powershell
+.\run_topk_validation_and_behavior.ps1
+```
+
+This prepares `k = 1, 3, 5, 10, 15, 20`, evaluates two disjoint prompt splits,
+uses five independently drawn matched-control plans, aggregates all paired
+activation results, evaluates the top-k-to-behavior link, and finally runs pytest.
+Use `-SkipBehavior` only when the behavioral stage should deliberately be deferred.
+Existing outputs are skipped unless `-Force` is supplied. The script is intended
+to be launched by the user and is not run as part of repository setup or plotting.

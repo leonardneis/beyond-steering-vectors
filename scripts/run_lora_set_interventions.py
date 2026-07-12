@@ -34,6 +34,13 @@ def main():
     parser.add_argument("--n-prompts", type=int, default=256)
     parser.add_argument("--prompt-offset", type=int, default=4096)
     parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument(
+        "--set-names",
+        nargs="+",
+        choices=("top_k", "random_control", "norm_matched_control", "layer_norm_matched_control"),
+        default=("top_k", "random_control", "norm_matched_control", "layer_norm_matched_control"),
+        help="Run only these selection-plan set types.",
+    )
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     adapter_path, teacher_path = repo_path(args.adapter_path), repo_path(args.teacher_vector)
@@ -64,11 +71,12 @@ def main():
         "selection_plan": str(plan_path),
         "n_prompts": len(prompts),
         "prompt_offset": args.prompt_offset,
+        "set_names": list(args.set_names),
         "baseline_projection_per_prompt": full_projection.tolist(),
         "interventions": [],
     }
     for item in plan["sets"]:
-        for set_name in ("top_k", "random_control", "norm_matched_control", "layer_norm_matched_control"):
+        for set_name in args.set_names:
             modules = item[set_name]
             for mode in ("necessity", "sufficiency"):
                 context = (
