@@ -1,9 +1,10 @@
-schema_version: 1
+schema_version: 2
 experiment_id: qwen7b_cat_cross_seed_confirmatory_v1
 question: Does the distributed and redundant LoRA implementation replicate across independently trained adapters?
 model_config: configs/model_qwen7b_4bit.yaml
 train_config: configs/train_lora_qwen7b_reference_rtx4080_3epochs.yaml
 teacher_vector: results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt
+teacher_vector_sha256: 4ec9c11ef4c6b8753c388e92c1f18faa6f4364143c64c2583279deb1beb5bc71
 prompts: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
 output_root: results/confirmatory/qwen7b_cat_cross_seed_v1
 training:
@@ -12,6 +13,48 @@ training:
   estimated_vram_gb: 13.5
   local_hours_per_adapter: 5.5
   cluster_hours_per_adapter: 3.5
+hpc:
+  # Site-specific partition/account/module settings live in slurm/sic_cluster.env.
+  shared_hf_home: ${HF_HOME:-$HOME/.cache/huggingface}
+  scratch_env_order: [SLURM_TMPDIR, TMPDIR, SCRATCH]
+  retries: 3
+  retry_backoff_seconds: 30
+  # Preserve the validated effective batch of 66 for every profile.
+  gpu_profiles:
+    - min_vram_gb: 38
+      train_batch_size: 3
+      gradient_accumulation_steps: 22
+      analysis_batch_size: 6
+    - min_vram_gb: 22
+      train_batch_size: 2
+      gradient_accumulation_steps: 33
+      analysis_batch_size: 4
+    - min_vram_gb: 0
+      train_batch_size: 1
+      gradient_accumulation_steps: 66
+      analysis_batch_size: 2
+  scratch_stages:
+    - vectors
+    - layer_runs
+    - module_runs
+    - activation_runs
+    - behavior_runs
+  estimated_minutes:
+    prepare: 5
+    train_subliminal: 210
+    train_neutral: 210
+    verify_runs: 20
+    verify_compare: 2
+    vectors: 35
+    layer_runs: 60
+    layer_compare: 3
+    module_runs: 90
+    module_compare: 3
+    topk_prepare: 2
+    activation_runs: 45
+    activation_compare: 3
+    behavior_runs: 30
+    behavior_compare: 3
 conditions:
   subliminal:
     source_dataset: data/filtered/reference_qwen7b_cat_subliminal_30k_filtered.jsonl
@@ -22,14 +65,25 @@ replicates:
     status: existing
     subliminal_adapter: results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora
     neutral_adapter: results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora
+    cached_artifacts:
+      subliminal_vectors: results/geometry/vectors/cat_subliminal_seed1
+      neutral_vectors: results/geometry/vectors/cat_neutral_seed1
+      subliminal_layers: results/geometry/attribution/cat_subliminal_layer_screen_seed1_splitA.json
+      neutral_layers: results/geometry/attribution/cat_neutral_layer_screen_seed1_splitA.json
+      paired_layers: results/geometry/attribution/cat_paired_layer_ranking_seed1_v2.json
+      subliminal_modules: results/geometry/attribution/cat_subliminal_module_screen_seed1_phase2.json
+      neutral_modules: results/geometry/attribution/cat_neutral_module_screen_seed1_phase2.json
+      paired_modules: results/geometry/attribution/cat_paired_module_ranking_seed1_phase2.json
   - seed: 2
     status: planned
   - seed: 3
     status: planned
 confirmatory:
   vector_prompts: 1024
-  attribution_prompts: 128
-  attribution_offset: 1024
+  layer_prompts: 128
+  layer_offset: 1024
+  module_prompts: 256
+  module_offset: 2048
   selected_layers: [0, 5, 10, 18, 22, 25]
   top_k: [10, 20]
   control_seed: 20260720

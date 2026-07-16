@@ -2,6 +2,8 @@ training:
   train_file: data/subsampled/reference_qwen7b_cat_subliminal_10k_seed1.jsonl
   output_dir: results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora
   seed: 1
+  data_seed: 1
+  full_determinism: true
   max_seq_length: 500
   num_train_epochs: 3
   per_device_train_batch_size: 1

@@ -156,6 +156,9 @@ def make_training_arguments(
     }
     if "seed" in training_config:
         kwargs["seed"] = int(training_config["seed"])
+        kwargs["data_seed"] = int(training_config.get("data_seed", training_config["seed"]))
+    if "full_determinism" in training_config:
+        kwargs["full_determinism"] = bool(training_config["full_determinism"])
     if "lr_scheduler_type" in training_config:
         kwargs["lr_scheduler_type"] = str(training_config["lr_scheduler_type"])
     if "max_grad_norm" in training_config:

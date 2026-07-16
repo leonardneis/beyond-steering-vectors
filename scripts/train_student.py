@@ -22,6 +22,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=None)
     parser.add_argument("--resume", action="store_true", help="Resume from the latest Trainer checkpoint.")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--runs-dir", default="runs")
@@ -36,7 +38,14 @@ def main() -> None:
     eval_config = load_yaml(repo_path(args.eval_config)).get("evaluation", {}) if args.eval_config else None
     training = train_config.get("training", {})
     if args.seed is not None:
-        training = {**training, "seed": args.seed}
+        training = {**training, "seed": args.seed, "data_seed": args.seed}
+    if args.batch_size is not None:
+        training = {**training, "per_device_train_batch_size": args.batch_size}
+    if args.gradient_accumulation_steps is not None:
+        training = {
+            **training,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        }
     lora = train_config.get("lora", {})
     train_file = repo_path(args.train_file or training.get("train_file"))
     output_dir = repo_path(args.output_dir or training.get("output_dir"))
@@ -45,7 +54,7 @@ def main() -> None:
     run_logger.write_metadata(
         experiment_name="train_student",
         condition=None,
-        seed=None,
+        seed=training.get("seed"),
         model_name=model_config.get("model", {}).get("model_name"),
         adapter_path=output_dir,
         config_paths=config_paths,
@@ -56,7 +65,7 @@ def main() -> None:
         cli_overrides=vars(args),
         effective_config={
             "model": model_config,
-                "training": train_config,
+            "training": training,
                 "evaluation": eval_config,
                 "resolved": {
                 "train_file": str(train_file),

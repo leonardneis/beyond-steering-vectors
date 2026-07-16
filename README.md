@@ -209,6 +209,28 @@ The manifest is `configs/validation/cat_cross_seed_confirmatory.yaml`; inspect a
 resolved local plan with `./run_confirmatory_local.ps1 -PairIndex 1 -Stage all`.
 Cluster environment notes are in [`docs/cluster_environment.md`](docs/cluster_environment.md).
 
+The confirmatory workflow is HPC-first: one manifest drives both local PowerShell
+and a resumable SLURM DAG. Cluster arrays parallelize seeds and conditions,
+analysis jobs stage final outputs through scratch, model weights use a shared
+`HF_HOME`, and every task writes provenance plus atomic JSON/Markdown status.
+Audited Seed-1 vectors and layer/module rankings are hash-tracked cache inputs;
+the new seeds retain disjoint layer (offset 1024), module (offset 2048), and
+intervention (offset 4096) prompt sets.
+Submit only after filling `slurm/sic_cluster.env`:
+
+```bash
+cp slurm/sic_cluster.env.example slurm/sic_cluster.env
+bash slurm/submit_confirmatory.sh
+```
+
+Monitor without modifying the run:
+
+```bash
+python scripts/confirmatory_status.py \
+  --manifest configs/validation/cat_cross_seed_confirmatory.yaml \
+  --watch-seconds 60
+```
+
 Resume an interrupted timestamped run without overwriting or recomputing complete
 artifacts with `-ResumeDirectory <existing-run-directory>`.
 

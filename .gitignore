@@ -31,6 +31,7 @@ checkpoints/
 wandb/
 runs/
 slurm_logs/
+slurm/sic_cluster.env
 *.safetensors
 *.bin
 *.pt
