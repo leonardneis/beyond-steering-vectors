@@ -1,4 +1,4 @@
-# sl-thesis
+# Beyond Steering Vectors: A Parameter-Level Analysis of Subliminal Learning
 
 Research repository for a Master thesis on the parameter-level implementation of
 steering-vector distillation in QLoRA-fine-tuned language models.
