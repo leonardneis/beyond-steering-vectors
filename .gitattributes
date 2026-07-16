@@ -6,4 +6,5 @@
 *.yml text eol=lf
 *.ps1 text eol=crlf
 *.sh text eol=lf
-*.sbatch text eol=lf
+*.sub text eol=lf
+*.dag text eol=lf

@@ -66,11 +66,11 @@ Use local for seed 2 if immediate iteration and debugging matter more than wall 
 Preferred:
 
 - seeds 2 and 3;
-- subliminal and neutral training as four independent array tasks;
-- per-seed verification and analysis arrays with dependencies;
+- subliminal and neutral training as four independent single-GPU DAGMan nodes;
+- per-seed verification and analysis nodes with explicit dependencies;
 - optional penguin corpus generation and training after the cat gate.
 
-The supplied SLURM templates request one GPU, 48 GB RAM, eight CPUs, and eight hours per training task. Add the site-specific partition, account, module/CUDA setup, and scratch paths after confirming them with Yifan or cluster documentation.
+The native HTCondor templates request exactly one GPU with at least 16 GiB VRAM, 48 GB RAM, and eight CPUs per training task. They use Docker jobs, persistent `/scratch`, and do not depend on partitions, accounts, SBATCH, or CUDA modules.
 
 ### Not worth prioritizing
 
@@ -108,16 +108,14 @@ Use `-Resume` only to resume explicit command markers or a Trainer checkpoint. U
 ## Exact cluster execution
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
-python -c 'import torch; print(torch.__version__, torch.cuda.is_available())'
-mkdir -p slurm_logs results/confirmatory/plans
-bash slurm/submit_confirmatory.sh
+python scripts/generate_condor_dag.py
+python scripts/generate_condor_dag.py --validate-only
+condor_submit condor/gpu_smoke.sub
+# Submit the full graph only after the smoke result is valid.
+condor_submit_dag condor/confirmatory.dag
 ```
 
-The submission chain is prepare array -> four-task training array -> verification array -> analysis array. A failed behavioral gate prevents downstream analysis via `afterok`.
+The DAG chain is preparation -> four independent training nodes -> paired behavioral gates -> parallel vector/layer analyses -> restricted module analysis -> top-k activation/behavior validation -> final aggregation. A failed behavioral gate blocks its descendants through DAGMan parent/child edges.
 
 ## Cross-seed inference
 
@@ -137,8 +135,7 @@ With only three seeds, seed-level intervals are descriptive and should be accomp
 ## Assumptions to discuss with Yifan
 
 1. Is changing both training subsample and Trainer seed the desired definition of an independent replicate, or should the 10k dataset be fixed while only initialization/order changes?
-2. Which UdS GPU, partition, account, time limit, and scratch policy should be used?
+2. Does the SIC pool accept HTCondor's standard `gpus_minimum_memory` and `gpus_minimum_capability` submit commands unchanged, or does local policy require an additional site-specific constraint?
 3. Is one optional penguin pair worth the dataset-generation cost after cat replication, or is a third/fourth cat seed scientifically preferable?
 4. Should the confirmatory behavioral gate require a positive CI in both new seeds, or allow one null seed while evaluating a positive seed-level mean?
 5. Are epoch snapshots required for auditability? Removing them after hashing reduces storage from about 1.1 GB to roughly 100 MB per adapter.
-

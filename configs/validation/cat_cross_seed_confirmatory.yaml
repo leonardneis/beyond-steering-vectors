@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 3
 experiment_id: qwen7b_cat_cross_seed_confirmatory_v1
 question: Does the distributed and redundant LoRA implementation replicate across independently trained adapters?
 model_config: configs/model_qwen7b_4bit.yaml
@@ -14,9 +14,10 @@ training:
   local_hours_per_adapter: 5.5
   cluster_hours_per_adapter: 3.5
 hpc:
-  # Site-specific partition/account/module settings live in slurm/sic_cluster.env.
-  shared_hf_home: ${HF_HOME:-$HOME/.cache/huggingface}
-  scratch_env_order: [SLURM_TMPDIR, TMPDIR, SCRATCH]
+  # HTCondor jobs set this to /scratch/<user>/beyond-steering-vectors.
+  shared_root_env: SLGEO_SHARED_ROOT
+  shared_hf_home: huggingface
+  temporary_staging_root: /tmp
   retries: 3
   retry_backoff_seconds: 30
   # Preserve the validated effective batch of 66 for every profile.
@@ -55,6 +56,41 @@ hpc:
     activation_compare: 3
     behavior_runs: 30
     behavior_compare: 3
+condor:
+  universe: docker
+  container_image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+  uid_domain: cs.uni-saarland.de
+  min_cuda_capability: 7.0
+  max_job_retirement_seconds: 7200
+  dag_retries: 2
+  resources:
+    preparation:
+      cpus: 2
+      memory_mb: 8192
+      gpus: 0
+    comparison:
+      cpus: 4
+      memory_mb: 16384
+      gpus: 0
+    training:
+      cpus: 8
+      memory_mb: 49152
+      gpus: 1
+      min_gpu_memory_mb: 16384
+    evaluation:
+      cpus: 4
+      memory_mb: 32768
+      gpus: 1
+      min_gpu_memory_mb: 16384
+    attribution:
+      cpus: 8
+      memory_mb: 49152
+      gpus: 1
+      min_gpu_memory_mb: 16384
+    aggregation:
+      cpus: 4
+      memory_mb: 16384
+      gpus: 0
 conditions:
   subliminal:
     source_dataset: data/filtered/reference_qwen7b_cat_subliminal_30k_filtered.jsonl

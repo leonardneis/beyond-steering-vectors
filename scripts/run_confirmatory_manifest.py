@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -32,6 +33,25 @@ GPU_SCRIPTS = {
 }
 OUTPUT_OPTIONS = ("--output", "--output-json", "--output-dir")
 SECONDARY_OUTPUT_OPTIONS = ("--output-csv",)
+
+
+def apply_storage_overrides(manifest: dict) -> dict:
+    """Map data/results/runs into persistent shared storage for cluster jobs."""
+    shared_root = os.getenv(str(manifest.get("hpc", {}).get("shared_root_env", "SLGEO_SHARED_ROOT")))
+    if not shared_root:
+        return manifest
+    root = shared_root.rstrip("/\\")
+
+    def rewrite(value: Any) -> Any:
+        if isinstance(value, str) and any(value == prefix or value.startswith(prefix + "/") for prefix in ("data", "results", "runs")):
+            return root + "/" + value.replace("\\", "/")
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        if isinstance(value, dict):
+            return {key: rewrite(item) for key, item in value.items()}
+        return value
+
+    return rewrite(manifest)
 
 
 def utc_now() -> str:
@@ -234,6 +254,26 @@ def all_outputs(parts: list[str]) -> list[Path]:
     return outputs
 
 
+def validate_artifact(path: Path) -> None:
+    """Apply inexpensive structural validation before publishing completion."""
+    if path.is_file():
+        if path.stat().st_size == 0:
+            raise ValueError(f"Output file is empty: {path}")
+        if path.suffix.lower() == ".json":
+            json.loads(path.read_text(encoding="utf-8"))
+        return
+    if not path.is_dir():
+        raise FileNotFoundError(f"Expected output does not exist: {path}")
+    files = [child for child in path.rglob("*") if child.is_file()]
+    if not files:
+        raise ValueError(f"Output directory is empty: {path}")
+    adapter_config = path / "adapter_config.json"
+    if adapter_config.is_file():
+        json.loads(adapter_config.read_text(encoding="utf-8"))
+        if not any((path / name).is_file() for name in ("adapter_model.safetensors", "adapter_model.bin")):
+            raise ValueError(f"Adapter output has no weight file: {path}")
+
+
 def atomic_copy(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
@@ -314,9 +354,10 @@ def provenance(manifest_path: Path, manifest: dict, seed: int, stage: str, index
         "ended_at": utc_now(),
         "duration_seconds": duration,
         "attempts": attempts,
-        "slurm_job_id": os.getenv("SLURM_JOB_ID"),
-        "slurm_array_job_id": os.getenv("SLURM_ARRAY_JOB_ID"),
-        "slurm_array_task_id": os.getenv("SLURM_ARRAY_TASK_ID"),
+        "scheduler": "htcondor" if os.getenv("CONDOR_CLUSTER_ID") else "local",
+        "condor_cluster_id": os.getenv("CONDOR_CLUSTER_ID"),
+        "condor_proc_id": os.getenv("CONDOR_PROC_ID"),
+        "condor_task_id": os.getenv("CONDOR_TASK_ID"),
         "host": socket.gethostname(),
         "platform": platform.platform(),
         "python": sys.version,
@@ -344,6 +385,28 @@ def write_json_atomic(path: Path, value: dict) -> None:
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     temp.replace(path)
+
+
+def run_subprocess_with_signal_forwarding(argv: list[str], cwd: Path) -> None:
+    """Wait for a child while forwarding scheduler termination signals."""
+    process = subprocess.Popen(argv, cwd=cwd)
+    previous: dict[int, Any] = {}
+
+    def forward(number, _frame) -> None:
+        if process.poll() is None:
+            print(f"Forwarding signal {number} to child process {process.pid}", file=sys.stderr)
+            process.send_signal(number)
+
+    try:
+        for number in (signal.SIGTERM, signal.SIGINT):
+            previous[number] = signal.getsignal(number)
+            signal.signal(number, forward)
+        returncode = process.wait()
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+    if returncode:
+        raise subprocess.CalledProcessError(returncode, argv)
 
 
 def run_task(args: argparse.Namespace, manifest_path: Path, manifest: dict, pair: dict, parts: list[str], command_index: int) -> None:
@@ -380,7 +443,10 @@ def run_task(args: argparse.Namespace, manifest_path: Path, manifest: dict, pair
             "seed": seed,
             "stage": args.stage,
             "command_index": command_index,
-            "slurm_job_id": os.getenv("SLURM_JOB_ID"),
+            "scheduler": "htcondor" if os.getenv("CONDOR_CLUSTER_ID") else "local",
+            "condor_cluster_id": os.getenv("CONDOR_CLUSTER_ID"),
+            "condor_proc_id": os.getenv("CONDOR_PROC_ID"),
+            "condor_task_id": os.getenv("CONDOR_TASK_ID"),
             "host": socket.gethostname(),
         },
     )
@@ -388,9 +454,13 @@ def run_task(args: argparse.Namespace, manifest_path: Path, manifest: dict, pair
         while True:
             attempts += 1
             try:
-                subprocess.run([sys.executable, *run_parts], check=True, cwd=repo_path("."))
+                run_subprocess_with_signal_forwarding(
+                    [sys.executable, *run_parts], cwd=repo_path(".")
+                )
                 break
-            except subprocess.CalledProcessError:
+            except subprocess.CalledProcessError as exc:
+                if exc.returncode == 75:
+                    raise
                 if attempts >= retries:
                     raise
                 if is_training and final is not None and final.exists() and "--resume" not in run_parts:
@@ -403,9 +473,8 @@ def run_task(args: argparse.Namespace, manifest_path: Path, manifest: dict, pair
                 raise FileNotFoundError(f"Scratch command did not create {scratch_output}")
             rewrite_scratch_paths(scratch_output, scratch_output, final)
             atomic_copy(scratch_output, final)
-        missing = [path for path in all_outputs(parts) if not path.exists()]
-        if missing:
-            raise FileNotFoundError(f"Command did not create expected output(s): {missing}")
+        for artifact in all_outputs(parts):
+            validate_artifact(artifact)
         record = provenance(manifest_path, manifest, seed, args.stage, command_index, started, time.perf_counter() - start_perf, run_parts, final, attempts)
         for artifact in all_outputs(parts):
             embed_json_provenance(artifact, record)
@@ -444,7 +513,7 @@ def main() -> None:
     parser.add_argument("--retries", type=int)
     args = parser.parse_args()
     manifest_path = repo_path(args.manifest)
-    manifest = load_yaml(manifest_path)
+    manifest = apply_storage_overrides(load_yaml(manifest_path))
     teacher_path = repo_path(manifest["teacher_vector"])
     expected_teacher_hash = manifest.get("teacher_vector_sha256")
     if expected_teacher_hash and sha256(teacher_path) != expected_teacher_hash:

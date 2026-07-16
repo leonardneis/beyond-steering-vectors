@@ -1,0 +1,26 @@
+universe = docker
+docker_image = pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+executable = condor/run_gpu_smoke.sh
+initialdir = $ENV(HOME)/beyond-steering-vectors
+arguments =
+request_CPUs = 4
+request_memory = 32768MB
+request_GPUs = 1
+gpus_minimum_memory = 16384
+gpus_minimum_capability = 7.0
+requirements = UidDomain == "cs.uni-saarland.de"
+getenv = HOME
+environment = "SLGEO_SHARED_ROOT=/scratch/$(Owner)/beyond-steering-vectors CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=gpu_smoke"
++WantGPUHomeMounted = true
++WantScratchMounted = true
++TaskId = "gpu_smoke"
+should_transfer_files = NO
+max_job_retirement_time = 1800
+kill_sig = SIGTERM
+kill_sig_timeout = 180
+stream_output = true
+stream_error = true
+output = condor/logs/gpu_smoke.$(ClusterId).$(ProcId).out
+error = condor/logs/gpu_smoke.$(ClusterId).$(ProcId).err
+log = condor/logs/gpu_smoke.$(ClusterId).$(ProcId).log
+queue 1

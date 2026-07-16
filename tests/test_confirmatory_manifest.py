@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from run_confirmatory_manifest import rewrite_scratch_paths, tune_command  # noqa: E402
+from run_confirmatory_manifest import rewrite_scratch_paths, tune_command, validate_artifact  # noqa: E402
 
 
 def test_confirmatory_manifest_resolves_seed_two_without_execution(tmp_path: Path) -> None:
@@ -95,3 +95,16 @@ def test_scratch_json_paths_are_rewritten_before_copy(tmp_path: Path) -> None:
     scratch.write_text(json.dumps({"self": str(scratch)}) + "\n", encoding="utf-8")
     rewrite_scratch_paths(scratch, scratch, final)
     assert json.loads(scratch.read_text(encoding="utf-8"))["self"] == str(final)
+
+
+def test_artifact_validation_rejects_partial_adapter(tmp_path: Path) -> None:
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    (adapter / "adapter_config.json").write_text("{}", encoding="utf-8")
+
+    try:
+        validate_artifact(adapter)
+    except ValueError as exc:
+        assert "no weight file" in str(exc)
+    else:
+        raise AssertionError("Partial adapter should not validate")

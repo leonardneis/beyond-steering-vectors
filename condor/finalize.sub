@@ -1,0 +1,27 @@
+universe = docker
+docker_image = $(ContainerImage)
+executable = condor/finalize_confirmatory.sh
+arguments = $(Manifest) $(TaskId)
+initialdir = $(RepoRoot)
+
+request_CPUs = $(RequestCpus)
+request_memory = $(RequestMemoryMB)MB
+request_GPUs = 0
+requirements = UidDomain == "cs.uni-saarland.de"
+
+getenv = HOME
+environment = "SLGEO_SHARED_ROOT=$(SharedRoot) CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(TaskId)"
++WantGPUHomeMounted = true
++WantScratchMounted = true
++TaskId = "$(TaskId)"
+
+should_transfer_files = NO
+max_job_retirement_time = $(RetirementSeconds)
+kill_sig = SIGTERM
+kill_sig_timeout = 180
+stream_output = true
+stream_error = true
+output = condor/logs/$(TaskId).$(ClusterId).$(ProcId).out
+error = condor/logs/$(TaskId).$(ClusterId).$(ProcId).err
+log = condor/logs/confirmatory.$(ClusterId).$(ProcId).log
+queue 1

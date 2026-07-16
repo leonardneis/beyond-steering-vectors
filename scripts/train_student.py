@@ -9,7 +9,7 @@ bootstrap()
 
 from slgeo.experiment_logging import ExperimentLogger, tee_output
 from slgeo.io import load_yaml
-from slgeo.training import train_lora
+from slgeo.training import TrainingPreempted, train_lora
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,18 +76,22 @@ def main() -> None:
     )
 
     with tee_output(run_logger.path("train.log")):
-        summary = train_lora(
-            model_config=model_config,
-            training_config=training,
-            lora_config=lora,
-            train_file=train_file,
-            output_dir=output_dir,
-            eval_config=eval_config,
-            target_animal=args.target_animal or (eval_config or {}).get("target_animal"),
-            dry_run=args.dry_run or bool(training.get("dry_run", False)),
-            limit=args.limit,
-            resume_from_checkpoint=True if args.resume else None,
-        )
+        try:
+            summary = train_lora(
+                model_config=model_config,
+                training_config=training,
+                lora_config=lora,
+                train_file=train_file,
+                output_dir=output_dir,
+                eval_config=eval_config,
+                target_animal=args.target_animal or (eval_config or {}).get("target_animal"),
+                dry_run=args.dry_run or bool(training.get("dry_run", False)),
+                limit=args.limit,
+                resume_from_checkpoint=True if args.resume else None,
+            )
+        except TrainingPreempted as exc:
+            print(str(exc))
+            raise SystemExit(75) from exc
     run_logger.write_training_metrics(summary)
     summary["run_id"] = run_logger.run_id
     summary["run_dir"] = str(run_logger.run_dir)

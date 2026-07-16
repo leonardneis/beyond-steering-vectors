@@ -1,116 +1,192 @@
-# SIC/UdS SLURM environment and HPC-first execution
+# SIC HTCondor environment and confirmatory DAG
 
-The repository now uses the same manifest and Python commands locally and on
-SLURM. Site-specific values are deliberately isolated in an untracked file:
+HTCondor with Docker jobs is the primary SIC backend. The scientific commands
+remain manifest-driven and identical to local PowerShell execution; only storage
+mapping and scheduling differ.
 
-```bash
-cp slurm/sic_cluster.env.example slurm/sic_cluster.env
-```
+## Storage contract
 
-Before submission, confirm the actual SIC `--partition`, `--account`, GPU GRES,
-maximum wall time, CUDA module, outbound-network policy, shared-cache path, and
-scratch lifetime with the current cluster documentation or Yifan. Never copy the
-example account/module names unchanged.
+- Repository and small Condor metadata: `/home/$USER/beyond-steering-vectors`
+- Persistent datasets, checkpoints, results, environments and HF cache:
+  `/scratch/$USER/beyond-steering-vectors`
+- Per-execution staging only: `/tmp/slgeo-*`
 
-Public SIC information confirms that cluster access requires a SIC account and an
-explicit ticket request; detailed operating instructions live in the login-gated
-SIC wiki. Consequently, this repository does not hard-code undocumented
-partition or module names. See the [MI-IT services page](https://it.mi.uni-saarland.de/services/general/index.html),
-the [UdS HPC page](https://hpc.uni-saarland.de/), and the
-[SIC wiki entry point](https://wiki.cs.uni-saarland.de/).
-
-Recommended setup:
+Prepare shared storage once on a SIC login node:
 
 ```bash
-git clone <repository-url> sl-thesis
-cd sl-thesis
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
-python -c 'import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))'
+cd "$HOME/beyond-steering-vectors"
+export SLGEO_SHARED_ROOT="/scratch/$USER/beyond-steering-vectors"
+mkdir -p "$SLGEO_SHARED_ROOT"/{data,results,runs,huggingface,envs}
+rsync -a data/ "$SLGEO_SHARED_ROOT/data/"
+rsync -a results/geometry/ "$SLGEO_SHARED_ROOT/results/geometry/"
+rsync -a results/reference_reproduction_4080/ \
+  "$SLGEO_SHARED_ROOT/results/reference_reproduction_4080/"
+cp condor/condor.env.example condor/condor.env
 ```
 
-If compute nodes cannot access Hugging Face, pre-populate `HF_HOME` on shared
-storage and set `TRANSFORMERS_OFFLINE=1` in `sic_cluster.env`. Multiple array jobs
-then reuse one model cache. Never place `HF_HOME` in node-local scratch.
+The runtime maps manifest paths beginning with `data/`, `results/`, or `runs/`
+into `SLGEO_SHARED_ROOT`. Training checkpoints therefore live directly on
+persistent `/scratch`. Analysis outputs are first written under `/tmp`, validated,
+copied to an `.incoming` path on `/scratch`, and atomically renamed. `/tmp` is
+never treated as resumable storage.
 
-## Submission DAG
+## Container and dependencies
+
+The portable fallback is
+`pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime`. Exact Python dependencies are
+pinned in `condor/requirements-condor.txt`. On first use, the wrapper creates a
+content-addressed shared virtual environment under `/scratch`; `flock` prevents
+concurrent DAG jobs from racing during installation.
+
+For reliable offline operation, build and publish the provided image first:
 
 ```bash
-bash slurm/submit_confirmatory.sh
+docker build -f condor/Dockerfile -t REGISTRY/beyond-steering-vectors:condor-v1 .
+docker push REGISTRY/beyond-steering-vectors:condor-v1
+python scripts/generate_condor_dag.py \
+  --container-image REGISTRY/beyond-steering-vectors:condor-v1
 ```
 
-Validate the graph without contacting SLURM first:
+Populate `HF_HOME=/scratch/$USER/beyond-steering-vectors/huggingface` before
+setting `SLGEO_OFFLINE=1`. Jobs never assume a Windows `.venv`, CUDA modules,
+SBATCH, partitions, accounts, hostnames, DDP, DeepSpeed, or multiple GPUs.
+
+## GPU smoke test
+
+The smoke job requests exactly one GPU with at least 16 GiB and checks CUDA,
+bitsandbytes, a real 4-bit Qwen load, repository imports, model-cache access, and
+atomic `/scratch` writes:
 
 ```bash
-bash slurm/submit_confirmatory.sh --dry-run
+mkdir -p condor/logs
+condor_submit condor/gpu_smoke.sub
+condor_q -nobatch
 ```
 
-This submits independent arrays and explicit `afterok` dependencies:
+Run this before the full DAG. The resulting JSON is written below
+`$SLGEO_SHARED_ROOT/smoke/`.
+
+## Generate and validate without submitting
+
+```bash
+python scripts/generate_condor_dag.py
+python scripts/generate_condor_dag.py --validate-only
+condor_submit_dag -no_submit condor/confirmatory.dag
+```
+
+The local Python validation checks exactly 62 unique tasks, acyclicity, all
+parents, submit templates, four independent training nodes, zero-or-one GPU per
+task, and the 16 GiB minimum for every GPU node. `condor_submit_dag -no_submit`
+adds native parser validation when HTCondor client tools are installed.
+
+## Submit
+
+```bash
+mkdir -p condor/logs
+condor_submit_dag condor/confirmatory.dag
+```
+
+DAGMan dependencies implement:
 
 ```text
-prepare -> {subliminal training, neutral training} -> verification
-  -> {vectors, layer screen} -> modules -> top-k
-  -> {activation interventions, token behavior} -> aggregate + plots + tests
+prepare(condition)
+  -> four independent single-GPU adapter training jobs
+  -> per-condition behavioral evaluations -> paired positive-CI gate
+  -> {vector extraction, layer attribution}
+  -> restricted module attribution -> k=10/20 set construction
+  -> {activation interventions, target-logprob behavioral validation}
+  -> aggregate + plots + checksums + CPU tests
 ```
 
-Seeds 2/3 and conditions run in parallel. Vector extraction and layer screening
-overlap, as do activation and behavior interventions. The final job starts only
-after all required seed artifacts exist.
+A failed paired behavioral gate prevents every descendant for that seed from
+running. Other independent branches may finish and remain resumable.
 
-## Resume, scratch, and output safety
+## Resources and rescheduling
 
-Every task has `running`, `failed`, and `complete` JSON markers. `--resume` skips
-completed tasks. Training remains on persistent storage because Hugging Face
-checkpoints are the preemption boundary; a requeued or resubmitted training task
-adds `--resume` and continues from the latest checkpoint. GPU analysis outputs are
-written under the first writable path in `SLURM_TMPDIR`, `TMPDIR`, `SCRATCH`, then
-validated and atomically copied to `results/confirmatory`. Interrupted scratch
-outputs are disposable and the task restarts, while completed artifacts are never
-silently overwritten.
+All GPU tasks use `request_GPUs = 1`. Training and attribution use HTCondor's
+portable `gpus_minimum_memory = 16384` and
+`gpus_minimum_capability = 7.0` submit commands, without naming a GPU or host.
+Defaults are:
 
-Seed 1 does not recompute its already audited vectors or schema-v2 layer/module
-rankings. The manifest names those cache artifacts explicitly; lightweight
-materialization jobs hard-link them where possible (copy otherwise) into the
-normalized cross-seed layout and record their hashes. Seeds 2/3 compute their own
-artifacts. Layer screening uses prompts `[1024, 1152)`, module attribution uses
-`[2048, 2304)`, and interventions begin at 4096, so selection and confirmation
-remain disjoint.
+| Profile | CPUs | RAM | GPUs | Minimum VRAM |
+|---|---:|---:|---:|---:|
+| preparation | 2 | 8 GiB | 0 | n/a |
+| comparison | 4 | 16 GiB | 0 | n/a |
+| training | 8 | 48 GiB | 1 | 16 GiB |
+| evaluation | 4 | 32 GiB | 1 | 16 GiB |
+| attribution | 8 | 48 GiB | 1 | 16 GiB |
+| aggregation | 4 | 16 GiB | 0 | n/a |
 
-The VRAM profile is selected at runtime. It changes micro-batch and analysis batch
-only; gradient accumulation is adjusted so the training effective batch remains
-66. Unknown/small devices use the validated `1 x 66` fallback.
+`max_job_retirement_time = 7200` provides roughly one useful epoch. On SIGTERM,
+the Trainer requests a Hugging Face checkpoint at the next step and exits with
+code 75 without a completion marker. Re-execution adds `--resume` and finds the
+newest valid checkpoint. Analysis jobs simply restart from disposable `/tmp`.
 
-Each primary JSON embeds `_orchestration`; every task output also has a provenance
-sidecar (or `run_provenance.json`) containing manifest and artifact hashes, Git
-commit/dirty state, seed, command, UTC start/end, runtime, hostname, SLURM IDs,
-GPU/VRAM, NVIDIA driver, CUDA/Torch and core package versions.
+The templates use shared filesystems (`should_transfer_files = NO`), so Condor
+file transfer is intentionally disabled. If a future deployment switches to file
+transfer, it must set `when_to_transfer_output = ON_EXIT_OR_EVICT`; checkpoints
+must still remain on `/scratch` rather than only in the transfer sandbox.
 
-## Monitoring
+## Monitoring and operations
 
-The runner atomically refreshes `status.json` and `status.md` after each task:
+Machine/human status combines completion markers with live `condor_q` ClassAds:
 
 ```bash
 python scripts/confirmatory_status.py \
   --manifest configs/validation/cat_cross_seed_confirmatory.yaml \
-  --watch-seconds 60
+  --condor --watch-seconds 60
 ```
 
-ETA is a conservative serial-equivalent estimate based first on measured jobs and
-otherwise on manifest estimates. Actual wall-clock ETA is shorter when arrays run
-concurrently. SLURM remains the authority for queued/running resource state:
-`squeue -u "$USER"`.
+Useful native commands:
 
-The final aggregation is versioned by SLURM job ID and writes cross-seed JSON,
-plots, SHA-256 checksums, and a CPU test result in its SLURM log. To resume a
-cancelled DAG, rerun `submit_confirmatory.sh`: completed task markers are skipped.
+```bash
+condor_q -nobatch
+condor_q -hold
+condor_q CLUSTER.PROC -better-analyze
+condor_q CLUSTER.PROC -af HoldReason HoldReasonCode HoldReasonSubCode
+condor_tail -f CLUSTER.PROC
+condor_release CLUSTER.PROC
+condor_rm CLUSTER.PROC
+```
 
-## SIC values still requiring confirmation
+To cancel a full DAG, remove descendants and then DAGMan using the DAGMan cluster
+ID shown by `condor_submit_dag`:
 
-- exact GPU partition/account/QoS and whether `--gres=gpu:1` is accepted;
-- allowed array concurrency and per-user GPU quota;
-- correct CUDA/compiler modules and whether Apptainer is preferred over venv;
-- shared filesystem quota/performance and recommended `HF_HOME` location;
-- semantics and lifetime of `$SLURM_TMPDIR`/`$SCRATCH`;
-- preemption/requeue policy and maximum wall time.
+```bash
+condor_rm -constraint 'DAGManJobId == DAGMAN_CLUSTER_ID'
+condor_rm DAGMAN_CLUSTER_ID
+```
+
+DAGMan writes rescue files beside the DAG. After fixing a held/failing cause:
+
+```bash
+condor_submit_dag -dorescuefrom N condor/confirmatory.dag
+```
+
+Completed nodes remain idempotent because their markers are checked before work.
+Use SIC ClusterCockpit for historical GPU utilization, memory, runtime, and host
+telemetry: locate jobs by Condor ClusterId/ProcId recorded in each provenance
+sidecar. ClusterCockpit complements, but does not replace, completion markers.
+
+## SIC-specific validation
+
+The templates require `UidDomain == "cs.uni-saarland.de"`, request GPU home and
+scratch mounts, and inherit only `HOME`. Before first submission verify that the
+pool advertises GPUs to the submit host:
+
+```bash
+condor_status -constraint 'TotalGPUs > 0' \
+  -af Machine UidDomain AvailableGPUs
+```
+
+The standard `gpus_minimum_memory` and `gpus_minimum_capability` submit commands
+are converted by HTCondor into device-property constraints. If the SIC pool has a
+site-specific policy on top, change only the two GPU `.sub` templates after
+confirming it with the SIC documentation or administrators.
+
+## Upstream references
+
+- [HTCondor submit description reference](https://htcondor.readthedocs.io/en/latest/man-pages/condor_submit.html)
+- [DAGMan submission and no-submit validation](https://htcondor.readthedocs.io/en/latest/man-pages/condor_submit_dag.html)
+- [DAGMan completion and rescue behavior](https://htcondor.readthedocs.io/en/latest/automated-workflows/dagman-completion.html)
+- [ClusterCockpit job monitoring overview](https://clustercockpit.org/docs/overview/)

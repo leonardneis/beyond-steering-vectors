@@ -30,8 +30,8 @@ results/confirmatory/*
 checkpoints/
 wandb/
 runs/
-slurm_logs/
-slurm/sic_cluster.env
+condor/logs/
+condor/condor.env
 *.safetensors
 *.bin
 *.pt
@@ -64,6 +64,7 @@ docs/notes/post-report/*
 !docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md
 !docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md
 !docs/cluster_environment.md
+!docs/HTCondor_Migration.md
 !docs/notes/post-report/assets/
 docs/notes/post-report/assets/*
 !docs/notes/post-report/assets/schema_v2_layer_screening/

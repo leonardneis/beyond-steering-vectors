@@ -202,33 +202,38 @@ in
 [`docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md`](docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md).
 
 The preregistered cross-training-seed phase, compute/storage estimates, minimal
-validation matrix, local pilot commands, SLURM arrays, and Yifan discussion points
+validation matrix, local pilot commands, HTCondor DAGMan execution, and Yifan discussion points
 are documented in
 [`docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md`](docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md).
 The manifest is `configs/validation/cat_cross_seed_confirmatory.yaml`; inspect a
 resolved local plan with `./run_confirmatory_local.ps1 -PairIndex 1 -Stage all`.
-Cluster environment notes are in [`docs/cluster_environment.md`](docs/cluster_environment.md).
+Native SIC HTCondor environment notes are in [`docs/cluster_environment.md`](docs/cluster_environment.md).
 
 The confirmatory workflow is HPC-first: one manifest drives both local PowerShell
-and a resumable SLURM DAG. Cluster arrays parallelize seeds and conditions,
+and a resumable HTCondor DAGMan graph. Independent nodes parallelize seeds and conditions,
 analysis jobs stage final outputs through scratch, model weights use a shared
 `HF_HOME`, and every task writes provenance plus atomic JSON/Markdown status.
 Audited Seed-1 vectors and layer/module rankings are hash-tracked cache inputs;
 the new seeds retain disjoint layer (offset 1024), module (offset 2048), and
 intervention (offset 4096) prompt sets.
-Submit only after filling `slurm/sic_cluster.env`:
+Generate and validate the 62-task DAG without submitting:
 
 ```bash
-cp slurm/sic_cluster.env.example slurm/sic_cluster.env
-bash slurm/submit_confirmatory.sh
+python scripts/generate_condor_dag.py
+python scripts/generate_condor_dag.py --validate-only
+condor_submit_dag -no_submit condor/confirmatory.dag
 ```
+
+After the GPU smoke test, submit with `condor_submit_dag condor/confirmatory.dag`.
+The scheduler migration is recorded in
+[`docs/HTCondor_Migration.md`](docs/HTCondor_Migration.md).
 
 Monitor without modifying the run:
 
 ```bash
 python scripts/confirmatory_status.py \
   --manifest configs/validation/cat_cross_seed_confirmatory.yaml \
-  --watch-seconds 60
+  --condor --watch-seconds 60
 ```
 
 Resume an interrupted timestamped run without overwriting or recomputing complete

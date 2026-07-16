@@ -5,12 +5,48 @@ from __future__ import annotations
 from pathlib import Path
 import csv
 import gc
+import json
 import math
 import time
+import signal
 from typing import Any
 
 from .io import ensure_parent, read_jsonl, write_json
 from .models import load_model_and_tokenizer, load_tokenizer, model_runtime_diagnostics
+
+
+_CHECKPOINT_WEIGHT_FILES = (
+    "adapter_model.safetensors",
+    "adapter_model.bin",
+    "model.safetensors",
+    "pytorch_model.bin",
+)
+
+
+def valid_trainer_checkpoint(path: str | Path) -> bool:
+    """Return whether a Trainer checkpoint has readable state and model weights."""
+    checkpoint = Path(path)
+    try:
+        state = json.loads((checkpoint / "trainer_state.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(state, dict) or not isinstance(state.get("global_step"), int):
+        return False
+    return any((checkpoint / name).is_file() for name in _CHECKPOINT_WEIGHT_FILES)
+
+
+def latest_valid_trainer_checkpoint(output_dir: str | Path) -> Path | None:
+    """Select the newest complete ``checkpoint-N`` and ignore partial writes."""
+    root = Path(output_dir)
+    candidates: list[tuple[int, Path]] = []
+    for candidate in root.glob("checkpoint-*"):
+        try:
+            step = int(candidate.name.removeprefix("checkpoint-"))
+        except ValueError:
+            continue
+        if candidate.is_dir() and valid_trainer_checkpoint(candidate):
+            candidates.append((step, candidate))
+    return max(candidates, default=(0, None), key=lambda item: item[0])[1]
 
 
 def record_to_sft_parts(
@@ -337,6 +373,45 @@ class EpochAdapterSaveCallback:
         return control
 
 
+class TrainingPreempted(RuntimeError):
+    """Raised after a scheduler termination request has produced a checkpoint."""
+
+
+class GracefulPreemptionCallback:
+    """Turn SIGTERM/SIGINT into a Trainer checkpoint and clean non-success exit."""
+
+    def __init__(self):
+        from transformers import TrainerCallback
+
+        self._base = TrainerCallback()
+        self.requested = False
+        self.signal_number: int | None = None
+        self._previous: dict[int, Any] = {}
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+    def install(self) -> None:
+        for number in (signal.SIGTERM, signal.SIGINT):
+            self._previous[number] = signal.getsignal(number)
+            signal.signal(number, self._handle)
+
+    def restore(self) -> None:
+        for number, handler in self._previous.items():
+            signal.signal(number, handler)
+
+    def _handle(self, number, _frame) -> None:
+        self.requested = True
+        self.signal_number = int(number)
+        print(f"Received signal {number}; requesting checkpoint at the next Trainer step.")
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if self.requested:
+            control.should_save = True
+            control.should_training_stop = True
+        return control
+
+
 def supervised_token_stats(rows: list[dict[str, Any]], tokenizer, max_seq_length: int, loss_mode: str) -> dict[str, Any]:
     total_completion_tokens = 0
     supervised_tokens = 0
@@ -485,6 +560,20 @@ def train_lora(
     if not rows:
         raise ValueError(f"No training rows found in {train_file}")
 
+    if resume_from_checkpoint is True:
+        selected_checkpoint = latest_valid_trainer_checkpoint(output_dir)
+        if selected_checkpoint is None:
+            raise FileNotFoundError(
+                f"Resume requested, but no valid checkpoint-* exists below {output_dir}"
+            )
+        resume_from_checkpoint = str(selected_checkpoint)
+    elif isinstance(resume_from_checkpoint, str):
+        selected_checkpoint = Path(resume_from_checkpoint)
+        if not valid_trainer_checkpoint(selected_checkpoint):
+            raise ValueError(f"Explicit resume checkpoint is incomplete: {selected_checkpoint}")
+    if resume_from_checkpoint:
+        summary["resume_from_checkpoint"] = str(resume_from_checkpoint)
+
     from datasets import Dataset
 
     dataset = Dataset.from_list(rows)
@@ -535,7 +624,19 @@ def train_lora(
     if bool(training_config.get("save_each_epoch", False)) or bool(training_config.get("eval_after_each_epoch", False)):
         trainer.add_callback(EpochAdapterSaveCallback(output_dir))
 
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    preemption = GracefulPreemptionCallback()
+    trainer.add_callback(preemption)
+    preemption.install()
+    try:
+        trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    finally:
+        preemption.restore()
+    if preemption.requested:
+        # should_save is processed by Trainer after on_step_end. A nonzero exit keeps the
+        # orchestration marker incomplete; HTCondor can safely restart from this checkpoint.
+        raise TrainingPreempted(
+            f"Training stopped after signal {preemption.signal_number}; resume from latest checkpoint."
+        )
     log_history = getattr(trainer.state, "log_history", [])
     train_logs = [row for row in log_history if "loss" in row]
     if train_logs:
