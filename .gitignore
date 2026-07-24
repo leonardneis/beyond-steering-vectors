@@ -32,6 +32,10 @@ wandb/
 runs/
 condor/logs/
 condor/condor.env
+condor/*.dag.condor.sub
+condor/*.dagman.*
+condor/*.lib.*
+condor/*.rescue*
 *.safetensors
 *.bin
 *.pt
