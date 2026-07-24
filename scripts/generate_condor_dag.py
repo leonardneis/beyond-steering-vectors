@@ -231,7 +231,7 @@ def main() -> None:
     parser.add_argument("--manifest", default="configs/validation/cat_cross_seed_confirmatory.yaml")
     parser.add_argument("--output-dir", default="condor")
     parser.add_argument("--repo-root", default="$ENV(HOME)/beyond-steering-vectors")
-    parser.add_argument("--shared-root", default="/scratch/compuling/$(Owner)/beyond-steering-vectors")
+    parser.add_argument("--shared-root", default="/scratch/compuling/$ENV(USER)/beyond-steering-vectors")
     parser.add_argument("--container-image")
     parser.add_argument("--validate-only", action="store_true")
     args = parser.parse_args()

@@ -75,3 +75,12 @@ def test_committed_task_catalog_matches_generator() -> None:
     assert [row["task_id"] for row in catalog["tasks"]] == [
         task.task_id for task in build_tasks(manifest())
     ]
+
+
+def test_committed_condor_paths_use_submit_environment_user() -> None:
+    dag = (ROOT / "condor/confirmatory.dag").read_text(encoding="utf-8")
+    smoke = (ROOT / "condor/gpu_smoke.sub").read_text(encoding="utf-8")
+    assert "/scratch/compuling/$ENV(USER)/" in dag
+    assert "/scratch/compuling/$ENV(USER)/" in smoke
+    assert "$(Owner)" not in dag
+    assert "$(Owner)" not in smoke
