@@ -56,6 +56,7 @@ if [[ -d "$FINAL" ]]; then
   mv "$FINAL" "$FINAL.partial-$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 mv "$INCOMING" "$FINAL"
-printf '%s\n' "$REVISION" > "$CACHE_ROOT/refs/main.incoming"
+# huggingface_hub compares this value verbatim and does not strip a newline.
+printf '%s' "$REVISION" > "$CACHE_ROOT/refs/main.incoming"
 mv "$CACHE_ROOT/refs/main.incoming" "$CACHE_ROOT/refs/main"
 echo "Published $MODEL@$REVISION to $FINAL"
