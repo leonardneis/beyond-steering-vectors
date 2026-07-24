@@ -15,7 +15,11 @@ requirements = UidDomain == "cs.uni-saarland.de" \
   && (MY.MachineAttrName0 =?= undefined || TARGET.Name =!= MY.MachineAttrName0) \
   && (MY.MachineAttrName1 =?= undefined || TARGET.Name =!= MY.MachineAttrName1) \
   && (MY.MachineAttrName2 =?= undefined || TARGET.Name =!= MY.MachineAttrName2) \
-  && (MY.MachineAttrName3 =?= undefined || TARGET.Name =!= MY.MachineAttrName3)
+  && (MY.MachineAttrName3 =?= undefined || TARGET.Name =!= MY.MachineAttrName3) \
+  && (MY.MachineAttrAssignedGPUs0 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs0) \
+  && (MY.MachineAttrAssignedGPUs1 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs1) \
+  && (MY.MachineAttrAssignedGPUs2 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs2) \
+  && (MY.MachineAttrAssignedGPUs3 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs3)
 
 # Exit 85 denotes a transient, GPU-resource-specific failure. Keep the same
 # Condor job idle so its machine history can force a different slot match.

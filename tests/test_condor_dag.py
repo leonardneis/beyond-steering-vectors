@@ -152,6 +152,15 @@ def test_gpu_wrapper_escalates_busy_cuda_to_condor_rematch() -> None:
     assert 'exit "$GPU_RESOURCE_EXIT_CODE"' in wrapper
 
 
+def test_gpu_rematch_excludes_prior_physical_gpu_not_only_dynamic_slot() -> None:
+    submit = (ROOT / "condor/task_gpu.sub").read_text(encoding="utf-8")
+    assert "job_machine_attrs = Name, AssignedGPUs" in submit
+    for index in range(4):
+        assert f"MachineAttrName{index}" in submit
+        assert f"MachineAttrAssignedGPUs{index}" in submit
+    assert "TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs0" in submit
+
+
 def test_hugging_face_ref_is_written_without_newline() -> None:
     staging = (ROOT / "condor/stage_qwen_cache.sh").read_text(encoding="utf-8")
     assert "printf '%s' \"$REVISION\"" in staging

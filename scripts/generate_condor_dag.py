@@ -229,6 +229,7 @@ def validate(tasks: list[Task], dag_text: str, output_dir: Path) -> dict:
         "job_machine_attrs = Name, AssignedGPUs",
         "job_machine_attrs_history_length = $(BsvGpuResourceAttempts)",
         "MachineAttrName0",
+        "MachineAttrAssignedGPUs0",
         "on_exit_remove",
         "ExitCode =!= 85",
     ):
