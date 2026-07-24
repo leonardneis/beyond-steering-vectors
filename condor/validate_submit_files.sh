@@ -30,7 +30,8 @@ condor_submit -dry-run "$VALIDATION_DIR/task_cpu.classad" \
 test -s "$VALIDATION_DIR/task_cpu.classad"
 
 condor_submit -dry-run "$VALIDATION_DIR/task_gpu.classad" \
-  "${task_macros[@]}" "BsvMinGpuMemoryMB=16384" condor/task_gpu.sub >/dev/null
+  "${task_macros[@]}" "BsvMinGpuMemoryMB=16384" \
+  "BsvGpuResourceAttempts=4" condor/task_gpu.sub >/dev/null
 test -s "$VALIDATION_DIR/task_gpu.classad"
 
 finalize_macros=(

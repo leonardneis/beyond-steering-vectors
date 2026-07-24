@@ -145,7 +145,17 @@ Defaults are:
 `max_job_retirement_time = 7200` provides roughly one useful epoch. On SIGTERM,
 the Trainer requests a Hugging Face checkpoint at the next step and exits with
 code 75 without a completion marker. Re-execution adds `--resume` and finds the
-newest valid checkpoint. Analysis jobs simply restart from disposable `/tmp`.
+newest valid checkpoint. `--resume` is never added for a merely existing output
+directory; at least one structurally valid `checkpoint-*` is required. Analysis
+jobs simply restart from disposable `/tmp`.
+
+GPU jobs classify CUDA `busy or unavailable`/driver-initialization failures as
+the reserved resource exit code 85. HTCondor keeps that job idle and rematches
+it while `job_machine_attrs` excludes previously attempted slots. Up to four
+different slots are attempted; only then does exit 85 reach DAGMan, where
+`UNLESS-EXIT 85` prevents retrying with a fresh, empty machine history. Other
+application failures retain the ordinary DAGMan retry policy. No hostname or
+GPU model is pinned or permanently excluded.
 
 The templates use shared filesystems (`should_transfer_files = NO`), so Condor
 file transfer is intentionally disabled. If a future deployment switches to file

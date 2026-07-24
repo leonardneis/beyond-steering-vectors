@@ -63,6 +63,7 @@ condor:
   min_cuda_capability: 7.0
   max_job_retirement_seconds: 7200
   dag_retries: 2
+  gpu_resource_attempts: 4
   resources:
     preparation:
       cpus: 2

@@ -9,7 +9,19 @@ request_memory = $(BsvRequestMemoryMB)MB
 request_GPUs = 1
 gpus_minimum_memory = $(BsvMinGpuMemoryMB)
 gpus_minimum_capability = 7.0
-requirements = UidDomain == "cs.uni-saarland.de"
+job_machine_attrs = Name, AssignedGPUs
+job_machine_attrs_history_length = $(BsvGpuResourceAttempts)
+requirements = UidDomain == "cs.uni-saarland.de" \
+  && (MY.MachineAttrName0 =?= undefined || TARGET.Name =!= MY.MachineAttrName0) \
+  && (MY.MachineAttrName1 =?= undefined || TARGET.Name =!= MY.MachineAttrName1) \
+  && (MY.MachineAttrName2 =?= undefined || TARGET.Name =!= MY.MachineAttrName2) \
+  && (MY.MachineAttrName3 =?= undefined || TARGET.Name =!= MY.MachineAttrName3)
+
+# Exit 85 denotes a transient, GPU-resource-specific failure. Keep the same
+# Condor job idle so its machine history can force a different slot match.
+on_exit_remove = (ExitBySignal =?= true) \
+  || (ExitCode =!= 85) \
+  || (NumJobStarts >= $(BsvGpuResourceAttempts))
 
 getenv = HOME
 environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_FORCE_SINGLE_GPU=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"

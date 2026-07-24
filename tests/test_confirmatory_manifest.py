@@ -12,11 +12,31 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from run_confirmatory_manifest import (  # noqa: E402
+    add_resume_only_for_valid_checkpoint,
     atomic_copy,
     rewrite_scratch_paths,
     tune_command,
     validate_artifact,
 )
+
+
+def test_resume_is_added_only_for_a_valid_trainer_checkpoint(tmp_path: Path) -> None:
+    output = tmp_path / "student_lora"
+    output.mkdir()
+    command = ["scripts/train_student.py", "--output-dir", str(output)]
+
+    assert add_resume_only_for_valid_checkpoint(command, output) is None
+    assert "--resume" not in command
+
+    partial = output / "checkpoint-10"
+    partial.mkdir()
+    (partial / "trainer_state.json").write_text('{"global_step": 10}', encoding="utf-8")
+    assert add_resume_only_for_valid_checkpoint(command, output) is None
+    assert "--resume" not in command
+
+    (partial / "adapter_model.safetensors").write_bytes(b"weights")
+    assert add_resume_only_for_valid_checkpoint(command, output) == partial
+    assert command.count("--resume") == 1
 
 
 def test_confirmatory_manifest_resolves_seed_two_without_execution(tmp_path: Path) -> None:

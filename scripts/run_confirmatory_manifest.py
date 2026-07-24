@@ -25,6 +25,7 @@ bootstrap()
 
 from slgeo.experiment_logging import device_info, git_commit_hash, git_worktree_dirty  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
+from slgeo.training import latest_valid_trainer_checkpoint  # noqa: E402
 
 
 GPU_SCRIPTS = {
@@ -34,6 +35,14 @@ GPU_SCRIPTS = {
 }
 OUTPUT_OPTIONS = ("--output", "--output-json", "--output-dir")
 SECONDARY_OUTPUT_OPTIONS = ("--output-csv",)
+
+
+def add_resume_only_for_valid_checkpoint(command: list[str], output_dir: Path) -> Path | None:
+    """Add --resume only when Trainer has atomically published a valid checkpoint."""
+    checkpoint = latest_valid_trainer_checkpoint(output_dir)
+    if checkpoint is not None and "--resume" not in command:
+        command.append("--resume")
+    return checkpoint
 
 
 def apply_storage_overrides(manifest: dict) -> dict:
@@ -441,7 +450,13 @@ def run_task(args: argparse.Namespace, manifest_path: Path, manifest: dict, pair
     run_parts = tune_command(parts, choose_profile(manifest))
     if final is not None and final.exists():
         if is_training and args.resume:
-            run_parts.append("--resume")
+            checkpoint = add_resume_only_for_valid_checkpoint(run_parts, final)
+            if checkpoint is None:
+                print(
+                    f"Output directory exists without a valid checkpoint; "
+                    f"starting training from scratch: {final}",
+                    file=sys.stderr,
+                )
         else:
             raise FileExistsError(f"Unmarked output exists; refusing silent overwrite: {final}")
     scratch_output = None
@@ -480,8 +495,8 @@ def run_task(args: argparse.Namespace, manifest_path: Path, manifest: dict, pair
                     raise
                 if attempts >= retries:
                     raise
-                if is_training and final is not None and final.exists() and "--resume" not in run_parts:
-                    run_parts.append("--resume")
+                if is_training and final is not None and final.exists():
+                    add_resume_only_for_valid_checkpoint(run_parts, final)
                 delay = backoff * (2 ** (attempts - 1))
                 print(f"Transient-failure retry {attempts}/{retries} in {delay}s", file=sys.stderr)
                 time.sleep(delay)

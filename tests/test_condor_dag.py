@@ -61,6 +61,12 @@ def test_generated_dag_and_submit_templates_are_consistent() -> None:
     assert "request_GPUs = 0" in cpu_submit
     assert 'UidDomain == "cs.uni-saarland.de"' in gpu_submit
     assert "$(BsvDockerImage)" in gpu_submit
+    assert "job_machine_attrs = Name, AssignedGPUs" in gpu_submit
+    assert "MachineAttrName0" in gpu_submit
+    assert "MachineAttrName3" in gpu_submit
+    assert "ExitCode =!= 85" in gpu_submit
+    assert 'BsvGpuResourceAttempts="4"' in dag
+    assert "UNLESS-EXIT 85" in dag
     assert "ContainerImage=" not in dag
     assert 'BsvDockerImage="' in dag
     assert 'BsvManifestPath="' in dag
@@ -137,6 +143,14 @@ def test_condor_jobs_default_to_offline_hugging_face_cache() -> None:
         assert "SLGEO_FORCE_SINGLE_GPU=1" in submit
 
 
+def test_gpu_wrapper_escalates_busy_cuda_to_condor_rematch() -> None:
+    wrapper = (ROOT / "condor/run_confirmatory_task.sh").read_text(encoding="utf-8")
+    assert "--retries 1" in wrapper
+    assert "GPU_RESOURCE_EXIT_CODE=85" in wrapper
+    assert "CUDA-capable device" in wrapper
+    assert 'exit "$GPU_RESOURCE_EXIT_CODE"' in wrapper
+
+
 def test_hugging_face_ref_is_written_without_newline() -> None:
     staging = (ROOT / "condor/stage_qwen_cache.sh").read_text(encoding="utf-8")
     assert "printf '%s' \"$REVISION\"" in staging
@@ -173,6 +187,8 @@ def test_monitor_supports_watch_and_event_diffs() -> None:
     assert "--watch" in monitor
     assert "--events" in monitor
     assert "confirmatory_status_events.py" in monitor
+    assert '--snapshot-json "$CURRENT"' in monitor
+    assert 'confirmatory_status_events.py "$PREVIOUS" "$CURRENT"' in monitor
 
     previous = {
         "completed": 0, "total": 2, "percent": 0.0, "running": 1, "held": 0,
