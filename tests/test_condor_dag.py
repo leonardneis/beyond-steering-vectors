@@ -147,7 +147,8 @@ def test_gpu_wrapper_escalates_busy_cuda_to_condor_rematch() -> None:
     wrapper = (ROOT / "condor/run_confirmatory_task.sh").read_text(encoding="utf-8")
     assert "--retries 1" in wrapper
     assert "GPU_RESOURCE_EXIT_CODE=85" in wrapper
-    assert "CUDA-capable device" in wrapper
+    assert r"CUDA-capable device\(s\) is/are busy or unavailable" in wrapper
+    assert r"CUDA-capable device\\(s\\) is/are busy or unavailable" not in wrapper
     assert 'exit "$GPU_RESOURCE_EXIT_CODE"' in wrapper
 
 

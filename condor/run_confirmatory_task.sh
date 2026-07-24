@@ -49,7 +49,7 @@ tee_pid=""
 
 if [[ "$status" -ne 0 && "${SLGEO_FORCE_SINGLE_GPU:-0}" == "1" ]] &&
    grep -Eiq \
-     'CUDA-capable device\\(s\\) is/are busy or unavailable|all CUDA-capable devices are busy or unavailable|CUDA driver initialization failed|No CUDA GPUs are available' \
+     'CUDA-capable device\(s\) is/are busy or unavailable|all CUDA-capable devices are busy or unavailable|CUDA driver initialization failed|No CUDA GPUs are available' \
      "$ERROR_CAPTURE"; then
   echo "Detected transient CUDA resource failure; requesting HTCondor rematch (exit $GPU_RESOURCE_EXIT_CODE)." >&2
   exit "$GPU_RESOURCE_EXIT_CODE"
