@@ -21,8 +21,14 @@ rsync -a data/ "$SLGEO_SHARED_ROOT/data/"
 rsync -a results/geometry/ "$SLGEO_SHARED_ROOT/results/geometry/"
 rsync -a results/reference_reproduction_4080/ \
   "$SLGEO_SHARED_ROOT/results/reference_reproduction_4080/"
+./condor/repair_scratch_group.sh "$SLGEO_SHARED_ROOT" compuling
 cp condor/condor.env.example condor/condor.env
 ```
+
+Run the repair helper after any `scp -r`, archive extraction, or mode-preserving
+sync. SIC charges files below this namespace to group `compuling`; copied
+directories that lose their setgid bit can otherwise make the next write fail
+with the misleading message `Disk quota exceeded`.
 
 The runtime maps manifest paths beginning with `data/`, `results/`, or `runs/`
 into `SLGEO_SHARED_ROOT`. Training checkpoints therefore live directly on

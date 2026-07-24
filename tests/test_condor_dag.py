@@ -92,6 +92,7 @@ def test_condor_shell_entrypoints_are_executable_in_git() -> None:
         "condor/finalize_confirmatory.sh",
         "condor/run_confirmatory_task.sh",
         "condor/run_gpu_smoke.sh",
+        "condor/repair_scratch_group.sh",
         "condor/stage_qwen_cache.sh",
         "condor/setup_environment.sh",
     ]

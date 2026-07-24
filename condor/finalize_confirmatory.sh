@@ -44,6 +44,7 @@ if [[ ! -d "$PLOTS" ]]; then
   mv "$LOCAL_STAGE/plots" "$PLOTS_INCOMING"
   mv "$PLOTS_INCOMING" "$PLOTS"
 fi
+./condor/repair_scratch_group.sh "$ROOT" "${SLGEO_QUOTA_GROUP:-compuling}"
 
 python -m pytest -q
 sha256sum "$AGGREGATE" "$PLOTS"/*.png > "$LOCAL_STAGE/final_artifacts.sha256"

@@ -10,6 +10,7 @@ import platform
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -274,6 +275,20 @@ def validate_artifact(path: Path) -> None:
             raise ValueError(f"Adapter output has no weight file: {path}")
 
 
+def normalize_group_inheritance(path: Path, parent: Path) -> None:
+    """Keep published POSIX artifacts in the parent's quota group."""
+    if os.name != "posix":
+        return
+    gid = parent.stat().st_gid
+    nodes = [path]
+    if path.is_dir():
+        nodes.extend(path.rglob("*"))
+    for node in nodes:
+        os.chown(node, -1, gid)
+        if node.is_dir():
+            node.chmod(node.stat().st_mode | stat.S_ISGID)
+
+
 def atomic_copy(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
@@ -281,12 +296,14 @@ def atomic_copy(source: Path, target: Path) -> None:
         if temp.exists():
             shutil.rmtree(temp)
         shutil.copytree(source, temp)
+        normalize_group_inheritance(temp, target.parent)
         if target.exists():
             shutil.rmtree(target)
         temp.replace(target)
     else:
         temp = target.with_name(target.name + ".incoming")
         shutil.copy2(source, temp)
+        normalize_group_inheritance(temp, target.parent)
         temp.replace(target)
 
 

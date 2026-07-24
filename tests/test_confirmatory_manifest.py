@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 
@@ -9,7 +11,12 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from run_confirmatory_manifest import rewrite_scratch_paths, tune_command, validate_artifact  # noqa: E402
+from run_confirmatory_manifest import (  # noqa: E402
+    atomic_copy,
+    rewrite_scratch_paths,
+    tune_command,
+    validate_artifact,
+)
 
 
 def test_confirmatory_manifest_resolves_seed_two_without_execution(tmp_path: Path) -> None:
@@ -42,6 +49,21 @@ def test_confirmatory_manifest_resolves_seed_two_without_execution(tmp_path: Pat
     assert output.exists()
 
 
+def test_atomic_copy_preserves_group_inheritance_on_posix(tmp_path: Path) -> None:
+    source = tmp_path / "local_stage"
+    source.mkdir()
+    (source / "artifact.json").write_text('{"ok": true}\n', encoding="utf-8")
+    target_parent = tmp_path / "published"
+    target_parent.mkdir()
+    target = target_parent / "artifact"
+
+    atomic_copy(source, target)
+
+    assert json.loads((target / "artifact.json").read_text(encoding="utf-8")) == {"ok": True}
+    if os.name == "posix":
+        assert target.stat().st_gid == target_parent.stat().st_gid
+        assert target.stat().st_mode & stat.S_ISGID
+        assert (target / "artifact.json").stat().st_gid == target_parent.stat().st_gid
 def test_confirmatory_plan_exposes_independent_hpc_stages(tmp_path: Path) -> None:
     output = tmp_path / "plan.json"
     subprocess.run(
