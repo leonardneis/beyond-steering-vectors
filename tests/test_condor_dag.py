@@ -121,6 +121,10 @@ def test_condor_jobs_default_to_offline_hugging_face_cache() -> None:
         submit = (ROOT / path).read_text(encoding="utf-8")
         assert "SLGEO_OFFLINE=1" in submit
 
+    for path in ["condor/gpu_smoke.sub", "condor/task_gpu.sub"]:
+        submit = (ROOT / path).read_text(encoding="utf-8")
+        assert "SLGEO_FORCE_SINGLE_GPU=1" in submit
+
 
 def test_hugging_face_ref_is_written_without_newline() -> None:
     staging = (ROOT / "condor/stage_qwen_cache.sh").read_text(encoding="utf-8")

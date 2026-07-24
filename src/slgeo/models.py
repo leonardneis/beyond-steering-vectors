@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
@@ -148,6 +149,8 @@ def load_causal_lm(
     # keyword is ``torch_dtype``. Passing the Transformers 5 ``dtype`` alias
     # through **kwargs reaches the model constructor and fails for Qwen2.
     kwargs["torch_dtype"] = dtype_value
+    if os.getenv("SLGEO_FORCE_SINGLE_GPU") == "1" and device_map == "auto":
+        device_map = {"": 0}
     if device_map is not None:
         kwargs["device_map"] = device_map
 
