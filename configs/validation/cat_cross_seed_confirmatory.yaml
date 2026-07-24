@@ -14,7 +14,7 @@ training:
   local_hours_per_adapter: 5.5
   cluster_hours_per_adapter: 3.5
 hpc:
-  # HTCondor jobs set this to /scratch/<user>/beyond-steering-vectors.
+  # HTCondor jobs set this to /scratch/compuling/<user>/beyond-steering-vectors.
   shared_root_env: SLGEO_SHARED_ROOT
   shared_hf_home: huggingface
   temporary_staging_root: /tmp

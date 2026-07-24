@@ -8,14 +8,14 @@ mapping and scheduling differ.
 
 - Repository and small Condor metadata: `/home/$USER/beyond-steering-vectors`
 - Persistent datasets, checkpoints, results, environments and HF cache:
-  `/scratch/$USER/beyond-steering-vectors`
+  `/scratch/compuling/$USER/beyond-steering-vectors`
 - Per-execution staging only: `/tmp/slgeo-*`
 
 Prepare shared storage once on a SIC login node:
 
 ```bash
 cd "$HOME/beyond-steering-vectors"
-export SLGEO_SHARED_ROOT="/scratch/$USER/beyond-steering-vectors"
+export SLGEO_SHARED_ROOT="/scratch/compuling/$USER/beyond-steering-vectors"
 mkdir -p "$SLGEO_SHARED_ROOT"/{data,results,runs,huggingface,envs}
 rsync -a data/ "$SLGEO_SHARED_ROOT/data/"
 rsync -a results/geometry/ "$SLGEO_SHARED_ROOT/results/geometry/"
@@ -47,7 +47,7 @@ python scripts/generate_condor_dag.py \
   --container-image REGISTRY/beyond-steering-vectors:condor-v1
 ```
 
-Populate `HF_HOME=/scratch/$USER/beyond-steering-vectors/huggingface` before
+Populate `HF_HOME=/scratch/compuling/$USER/beyond-steering-vectors/huggingface` before
 setting `SLGEO_OFFLINE=1`. Jobs never assume a Windows `.venv`, CUDA modules,
 SBATCH, partitions, accounts, hostnames, DDP, DeepSpeed, or multiple GPUs.
 
