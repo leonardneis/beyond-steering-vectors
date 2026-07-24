@@ -130,7 +130,7 @@ def render_dag(tasks: list[Task], manifest_path: str, manifest: dict, repo_root:
         variables = {
             "TaskId": task.task_id, "PairIndex": str(task.pair_index), "Stage": task.stage,
             "CommandIndex": str(task.command_index), "Manifest": manifest_path,
-            "RepoRoot": repo_root, "SharedRoot": shared_root, "ContainerImage": image,
+            "RepoRoot": repo_root, "SharedRoot": shared_root, "DockerImage": image,
             "RequestCpus": str(task.cpus), "RequestMemoryMB": str(task.memory_mb),
             "MinGpuMemoryMB": str(task.min_gpu_memory_mb), "RetirementSeconds": str(retirement),
         }
@@ -152,7 +152,7 @@ def render_dag(tasks: list[Task], manifest_path: str, manifest: dict, repo_root:
             f'{key}=\"{quote(value)}\"' for key, value in {
                 "TaskId": "finalize_confirmatory", "Manifest": manifest_path,
                 "RepoRoot": repo_root, "SharedRoot": shared_root,
-                "ContainerImage": image,
+                "DockerImage": image,
                 "RequestCpus": str(manifest["condor"]["resources"]["aggregation"]["cpus"]),
                 "RequestMemoryMB": str(manifest["condor"]["resources"]["aggregation"]["memory_mb"]),
                 "RetirementSeconds": str(retirement),
@@ -185,6 +185,7 @@ def validate(tasks: list[Task], dag_text: str, output_dir: Path) -> dict:
     required = [
         "task_cpu.sub", "task_gpu.sub", "finalize.sub", "gpu_smoke.sub",
         "run_confirmatory_task.sh", "finalize_confirmatory.sh", "run_gpu_smoke.sh",
+        "validate_submit_files.sh",
     ]
     missing = [name for name in required if not (output_dir / name).is_file()]
     if missing:
@@ -211,6 +212,11 @@ def validate(tasks: list[Task], dag_text: str, output_dir: Path) -> dict:
             raise RuntimeError(f"{name} must request exactly one GPU with memory/capability minima")
     if dag_text.count("\nJOB seed") != 62:
         raise RuntimeError("Rendered DAG does not contain exactly 62 task JOB nodes")
+    if "ContainerImage=" in dag_text or "ContainerImage =" in dag_text:
+        raise RuntimeError(
+            "DAG variable ContainerImage collides case-insensitively with HTCondor's "
+            "container_image submit command; use DockerImage"
+        )
     return {
         "task_count": len(tasks), "gpu_task_count": sum(task.gpus for task in tasks),
         "cpu_task_count": sum(task.gpus == 0 for task in tasks),

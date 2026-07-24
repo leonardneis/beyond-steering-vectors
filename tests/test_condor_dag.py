@@ -59,6 +59,9 @@ def test_generated_dag_and_submit_templates_are_consistent() -> None:
     assert 'requirements = UidDomain == "cs.uni-saarland.de"' in gpu_submit
     assert "request_GPUs = 0" in cpu_submit
     assert 'UidDomain == "cs.uni-saarland.de"' in gpu_submit
+    assert "$(DockerImage)" in gpu_submit
+    assert "ContainerImage=" not in dag
+    assert 'DockerImage="' in dag
 
 
 def test_cluster_storage_override_keeps_code_configs_in_home(monkeypatch) -> None:
@@ -99,6 +102,7 @@ def test_condor_shell_entrypoints_are_executable_in_git() -> None:
         "condor/submit_confirmatory.sh",
         "condor/monitor_confirmatory.sh",
         "condor/setup_environment.sh",
+        "condor/validate_submit_files.sh",
     ]
     result = subprocess.run(
         ["git", "ls-files", "--stage", *entrypoints],
@@ -151,6 +155,15 @@ def test_fallback_environment_uses_mounted_home_not_scratch() -> None:
 def test_dag_generator_applies_cluster_storage_overrides() -> None:
     source = (ROOT / "scripts/generate_condor_dag.py").read_text(encoding="utf-8")
     assert "manifest = apply_storage_overrides(load_yaml(manifest_path))" in source
+
+
+def test_fail_closed_preflight_natively_validates_node_submit_files() -> None:
+    submit = (ROOT / "condor/submit_confirmatory.sh").read_text(encoding="utf-8")
+    validator = (ROOT / "condor/validate_submit_files.sh").read_text(encoding="utf-8")
+    assert "./condor/validate_submit_files.sh" in submit
+    assert "condor_submit -dry-run" in validator
+    assert "DockerImage=" in validator
+    assert "ContainerImage=" not in validator
 
 
 def test_frozen_confirmatory_prerequisite_catalog() -> None:

@@ -1,5 +1,5 @@
 universe = docker
-docker_image = $(ContainerImage)
+docker_image = $(DockerImage)
 executable = condor/finalize_confirmatory.sh
 arguments = $(Manifest) $(TaskId)
 initialdir = $(RepoRoot)

@@ -19,6 +19,7 @@ python3 scripts/confirmatory_preflight.py \
   --report "$SHARED_ROOT/preflight/confirmatory_preflight.json"
 python3 scripts/generate_condor_dag.py --validate-only
 condor_submit_dag -no_submit -f condor/confirmatory.dag
+./condor/validate_submit_files.sh
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "READY: all prerequisites and native DAG files validated; nothing submitted."
