@@ -109,3 +109,14 @@ def test_condor_shell_entrypoints_are_executable_in_git() -> None:
 def test_condor_runtime_does_not_require_optional_vapeplot() -> None:
     requirements = (ROOT / "condor/requirements-condor.txt").read_text(encoding="utf-8")
     assert "vapeplot" not in requirements.lower()
+
+
+def test_condor_jobs_default_to_offline_hugging_face_cache() -> None:
+    for path in [
+        "condor/gpu_smoke.sub",
+        "condor/task_gpu.sub",
+        "condor/task_cpu.sub",
+        "condor/finalize.sub",
+    ]:
+        submit = (ROOT / path).read_text(encoding="utf-8")
+        assert "SLGEO_OFFLINE=1" in submit

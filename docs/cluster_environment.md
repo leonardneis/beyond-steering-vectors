@@ -47,9 +47,21 @@ python scripts/generate_condor_dag.py \
   --container-image REGISTRY/beyond-steering-vectors:condor-v1
 ```
 
-Populate `HF_HOME=/scratch/compuling/$USER/beyond-steering-vectors/huggingface` before
-setting `SLGEO_OFFLINE=1`. Jobs never assume a Windows `.venv`, CUDA modules,
-SBATCH, partitions, accounts, hostnames, DDP, DeepSpeed, or multiple GPUs.
+SIC compute nodes cannot fetch missing Hugging Face model files. Populate the
+shared cache from a login node before submitting GPU jobs:
+
+```bash
+export SLGEO_SHARED_ROOT="/scratch/compuling/$USER/beyond-steering-vectors"
+nohup ./condor/stage_qwen_cache.sh "$SLGEO_SHARED_ROOT" \
+  > "$SLGEO_SHARED_ROOT/huggingface/qwen_download.log" 2>&1 &
+tail -f "$SLGEO_SHARED_ROOT/huggingface/qwen_download.log"
+```
+
+The staging script pins the model revision, resumes partial files, downloads the
+four shards concurrently, validates the file set, and publishes it atomically.
+Condor jobs set `SLGEO_OFFLINE=1` explicitly. They never assume a Windows
+`.venv`, CUDA modules, SBATCH, partitions, accounts, hostnames, DDP, DeepSpeed,
+or multiple GPUs.
 
 ## GPU smoke test
 

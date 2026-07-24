@@ -10,7 +10,7 @@ request_GPUs = 0
 requirements = UidDomain == "cs.uni-saarland.de"
 
 getenv = HOME
-environment = "SLGEO_SHARED_ROOT=$(SharedRoot) CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(TaskId)"
+environment = "SLGEO_SHARED_ROOT=$(SharedRoot) SLGEO_OFFLINE=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(TaskId)"
 +WantGPUHomeMounted = true
 +WantScratchMounted = true
 +TaskId = "$(TaskId)"
