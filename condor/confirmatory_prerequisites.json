@@ -1,0 +1,481 @@
+{
+  "schema_version": 1,
+  "manifest": "configs/validation/cat_cross_seed_confirmatory.yaml",
+  "model_name": "Qwen/Qwen2.5-7B-Instruct",
+  "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "quota_group": "compuling",
+  "environment": {
+    "requirements_sha256": "b0d601b72239a35197a4335d2cc4c24c4adcff53d8c4b332f0810f39c0014421",
+    "environment_id": "condor-b0d601b72239a351"
+  },
+  "summary": {
+    "file_count": 116,
+    "total_bytes": 17526268728
+  },
+  "files": {
+    "data/filtered/reference_qwen7b_cat_subliminal_30k_filtered.jsonl": {
+      "size": 39184311,
+      "sha256": "8fa7657224844c1932382690588f5bc6ef4790b6375ee0eafab97f6cfd523b91"
+    },
+    "data/filtered/reference_qwen7b_neutral_30k_filtered.jsonl": {
+      "size": 28343735,
+      "sha256": "b4e9df2c3006081a36b2788b0d45146a9b217c402f1c9aaff313e0f5050198d2"
+    },
+    "data/generated/reference_qwen7b_cat_subliminal_30k.jsonl": {
+      "size": 37536723,
+      "sha256": "0d87aaa549251f883950a87b8dbce89db7862cd228ac551c3e7d0be4bd5ffaf5"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/refs/main": {
+      "size": 40,
+      "sha256": "093186ae54b3aee1732dda07e2f9822294c6a985223e52cd50b184c7b37854ba"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/config.json": {
+      "size": 663,
+      "sha256": "7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/generation_config.json": {
+      "size": 243,
+      "sha256": "3a8f9087e486054c8a4a08dae2e5a3ba62e23da212b5b8c08bc42cb983c3459f"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/merges.txt": {
+      "size": 1671839,
+      "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/model-00001-of-00004.safetensors": {
+      "size": 3945441440,
+      "sha256": "a1333e6293854747c481288ea83b348226af178dd565c49b6f9495ba1966aba7"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/model-00002-of-00004.safetensors": {
+      "size": 3864726352,
+      "sha256": "f5d25a2772cb825164a2a2c0fb6d51a87e282abf21e4dd75bc5cfb3cd0ea6185"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/model-00003-of-00004.safetensors": {
+      "size": 3864726424,
+      "sha256": "8efdec4c1bc12317ae1a38dc42b595ce777738a64deea3fcb8a0a91381bcdfd5"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/model-00004-of-00004.safetensors": {
+      "size": 3556377672,
+      "sha256": "1a72d403cdf0c1ec3cb7f289f17b394a01e64394c2e9b3c0f94dbce3faf879bd"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/model.safetensors.index.json": {
+      "size": 27752,
+      "sha256": "624bf7c47cd12468fdc16e38a47cf4f19e0415b859a223ba3c027eed2f0e1028"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/tokenizer.json": {
+      "size": 7031645,
+      "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/tokenizer_config.json": {
+      "size": 7305,
+      "sha256": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583"
+    },
+    "huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28/vocab.json": {
+      "size": 2776833,
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    },
+    "results/geometry/attribution/cat_neutral_layer_screen_seed1_splitA.json": {
+      "size": 6200023,
+      "sha256": "0679c3331672289c71309f2617bbf8b142551eae14102efde468acd9e4586e49"
+    },
+    "results/geometry/attribution/cat_neutral_module_screen_seed1_phase2.json": {
+      "size": 18468025,
+      "sha256": "ded35a9b3894b9ef2eecc5414ac03c075bf412a8e5c9a145a76c39acf73930a3"
+    },
+    "results/geometry/attribution/cat_paired_layer_ranking_seed1_v2.json": {
+      "size": 490446,
+      "sha256": "d163276c0afca42d65b701f2a64bc4961ed4342eb11b9dabf8b577b710a3be1a"
+    },
+    "results/geometry/attribution/cat_paired_module_ranking_seed1_phase2.json": {
+      "size": 1379228,
+      "sha256": "dc2e6a48d1951ae63d9e5912bb5c7e7e94fd673faf9eb07bcedaff6b8a0bf0b2"
+    },
+    "results/geometry/attribution/cat_subliminal_layer_screen_seed1_splitA.json": {
+      "size": 5992197,
+      "sha256": "b1819c947e3a051a7cf4b6b4e43ba013e805bee8f85a6b2e05093ec7dfb36d48"
+    },
+    "results/geometry/attribution/cat_subliminal_module_screen_seed1_phase2.json": {
+      "size": 17843450,
+      "sha256": "f4ead8ce2a6eb031c23348410bd0aeb7ddb3c36f9d2e813686653ed6e210524a"
+    },
+    "results/geometry/vectors/cat_neutral_seed1/alignment.json": {
+      "size": 4325,
+      "sha256": "95ee963f4dfcbc8cec9ed812e2ec55e3ff6eaafd99849b566c3349db8ef42e07"
+    },
+    "results/geometry/vectors/cat_neutral_seed1/v_student.pt": {
+      "size": 834656,
+      "sha256": "7cdcd058481646bd0c5e9d8c7f664d5cff8b1a416503934040a6baa4bc7c2d40"
+    },
+    "results/geometry/vectors/cat_neutral_seed1/v_student.pt.json": {
+      "size": 1251,
+      "sha256": "9c931e00a6dc48addda4673f9916558856460d1e7403afe0f16074dba6056744"
+    },
+    "results/geometry/vectors/cat_subliminal_seed1/alignment.json": {
+      "size": 4233,
+      "sha256": "15bd12c80a79478565b51c7aa22e3c9e8313a5bcc0711c6377afe20eb9cf477b"
+    },
+    "results/geometry/vectors/cat_subliminal_seed1/v_student.pt": {
+      "size": 834656,
+      "sha256": "d65b9241fd2baa65dc611a700451033847ab7020415fe2d5e80b5dca1723cfa6"
+    },
+    "results/geometry/vectors/cat_subliminal_seed1/v_student.pt.json": {
+      "size": 1258,
+      "sha256": "cfcbe6b08637c35dbfa1c45164c619b8cc2c954e1ffe8181385e59eb1f52bddb"
+    },
+    "results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt": {
+      "size": 834592,
+      "sha256": "4ec9c11ef4c6b8753c388e92c1f18faa6f4364143c64c2583279deb1beb5bc71"
+    },
+    "results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt.json": {
+      "size": 1166,
+      "sha256": "eb9bed95e8eb36373f2b973697b277f5cd011bb1b8b00a28ab658563613d4d22"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/adapter_config.json": {
+      "size": 1147,
+      "sha256": "f656c58d6cc10ee4dfc7e74577f4d1209ebd5c1adc1c2935830855337e1c50a4"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "6aa09ab692b6367a9d5319ae2313dca73c5bd2473cef337fb60850c10208bcf9"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/chat_template.jinja": {
+      "size": 2561,
+      "sha256": "8aa40ce145adb73cb3a75194dc0224702a95850ec5275cabb728496bbd749fc6"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/adapter_config.json": {
+      "size": 1147,
+      "sha256": "f656c58d6cc10ee4dfc7e74577f4d1209ebd5c1adc1c2935830855337e1c50a4"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "dba69e663d11648249b9e5f22a811062f2b194cccbdd361003c6dd21c62502d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/optimizer.pt": {
+      "size": 161810282,
+      "sha256": "10081186d67c3fd09eadcc5e76cc8bb39504410f49ba103920d2a3aea1689983"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/rng_state.pth": {
+      "size": 14244,
+      "sha256": "4ac5fce42c73a102a0c421a43e80232d87993f24b83b3d5229454e338c6501c7"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/scaler.pt": {
+      "size": 988,
+      "sha256": "b1c04e2ab24c7df029158640f56742459a1f1bf73860d9b037c16c2a22ddc270"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/scheduler.pt": {
+      "size": 1064,
+      "sha256": "bbc2065bca2cc735e492c130af4572e0dbdcb7b04afb15580c002babc5c0d7da"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/trainer_state.json": {
+      "size": 28096,
+      "sha256": "3b3fae1c89bdcd7258a001a6a6967398c864b267715a577ba766e61c2ce01876"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-152/training_args.bin": {
+      "size": 4984,
+      "sha256": "bf392770044048724638fa1bbaa68637c3ae137d781726fb43f6427b3b4df98a"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/adapter_config.json": {
+      "size": 1147,
+      "sha256": "f656c58d6cc10ee4dfc7e74577f4d1209ebd5c1adc1c2935830855337e1c50a4"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "a102063742c1958af02ecda26c608ef472c0ef948a34e78e161c4fff6e5ff42a"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/optimizer.pt": {
+      "size": 161810282,
+      "sha256": "514355ae2410cb999a8633659eaf3edadb3a71eede90dd0538a020c75ef000a5"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/rng_state.pth": {
+      "size": 14244,
+      "sha256": "f02e18062a7cbaf602ce0fe6bfe5e241c0ec400746e5de14332d1ec6babc5b8e"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/scaler.pt": {
+      "size": 988,
+      "sha256": "4f5c41f47b8ad76adfe32e282f84ee6fbccd901b2ce16eeb49c04940a43f6991"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/scheduler.pt": {
+      "size": 1064,
+      "sha256": "45aa15d085507c5a72680ab80ec163db86720f92322a9faa5a184948a6bc80a2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/trainer_state.json": {
+      "size": 55806,
+      "sha256": "a561d368c0ff9fe9cb04591bdd4620decfbade3bca84bc05c55b6e98f527f599"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-304/training_args.bin": {
+      "size": 4984,
+      "sha256": "bf392770044048724638fa1bbaa68637c3ae137d781726fb43f6427b3b4df98a"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/adapter_config.json": {
+      "size": 1147,
+      "sha256": "f656c58d6cc10ee4dfc7e74577f4d1209ebd5c1adc1c2935830855337e1c50a4"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "6aa09ab692b6367a9d5319ae2313dca73c5bd2473cef337fb60850c10208bcf9"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/optimizer.pt": {
+      "size": 161810282,
+      "sha256": "690976c63fe6a5050f43516c71b90f58e5f6a2aef43cd1b647b1c59179611ef7"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/rng_state.pth": {
+      "size": 14244,
+      "sha256": "bc34b4b3164109327c1a11351522992138e0668451fa911fe403b071b53bbf77"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/scaler.pt": {
+      "size": 988,
+      "sha256": "c6fc4e381bbf1455f8d64d3d851f75fe9b4caa3dd76d36f271432cb5bcab3137"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/scheduler.pt": {
+      "size": 1064,
+      "sha256": "8ded71cc6bf3d4af6876da522959b9bf04956c6eee5d94f8ef1946a88b719acc"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/trainer_state.json": {
+      "size": 83361,
+      "sha256": "bcd625f878bb578892222e8421e515b2dec582f9a4efb5fdc8dd2fbd987b4fb7"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/checkpoint-456/training_args.bin": {
+      "size": 4984,
+      "sha256": "bf392770044048724638fa1bbaa68637c3ae137d781726fb43f6427b3b4df98a"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/dry_run_training_summary.json": {
+      "size": 1765,
+      "sha256": "3fbbeb783adc79b8a55a0cd136616f64bbdcb545e7fbb54970a76b4d19eeda50"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_01/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_01/adapter_config.json": {
+      "size": 1147,
+      "sha256": "f656c58d6cc10ee4dfc7e74577f4d1209ebd5c1adc1c2935830855337e1c50a4"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_01/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "dba69e663d11648249b9e5f22a811062f2b194cccbdd361003c6dd21c62502d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_02/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_02/adapter_config.json": {
+      "size": 1147,
+      "sha256": "f656c58d6cc10ee4dfc7e74577f4d1209ebd5c1adc1c2935830855337e1c50a4"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_02/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "a102063742c1958af02ecda26c608ef472c0ef948a34e78e161c4fff6e5ff42a"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_03/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_03/adapter_config.json": {
+      "size": 1147,
+      "sha256": "f656c58d6cc10ee4dfc7e74577f4d1209ebd5c1adc1c2935830855337e1c50a4"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/epoch_03/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "6aa09ab692b6367a9d5319ae2313dca73c5bd2473cef337fb60850c10208bcf9"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/tokenizer.json": {
+      "size": 11421990,
+      "sha256": "e59f230d711b724492115c22fe13a73b8200acf8f6b9b109bf4ebd4841582dc8"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/tokenizer_config.json": {
+      "size": 750,
+      "sha256": "8eeb0dc4a477049a588cbe8ab9680401d06df169b53e24e7f7a55522ac504569"
+    },
+    "results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora/training_summary.json": {
+      "size": 85692,
+      "sha256": "679a0f2da277a3e6cba0fbd8c09948068c7386d2695b3fc8877eb66607ff1c08"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/adapter_config.json": {
+      "size": 1147,
+      "sha256": "27ce897393a84f126e3b11d65cc4ff17e9237619de4b46e98d3c59e14ee708d5"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "f9f6175aec3aa2d9443747784249ecbf8e7a8a0bb5463571579c8a0c174c593d"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/chat_template.jinja": {
+      "size": 2561,
+      "sha256": "8aa40ce145adb73cb3a75194dc0224702a95850ec5275cabb728496bbd749fc6"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/adapter_config.json": {
+      "size": 1147,
+      "sha256": "27ce897393a84f126e3b11d65cc4ff17e9237619de4b46e98d3c59e14ee708d5"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "901bb736566a0dac16cb4f2171e34af7c8279427fdd397d2236214093d875266"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/optimizer.pt": {
+      "size": 161810282,
+      "sha256": "5c39878ff7ba79c402880730cdc0079d8bef07c116b50758e001c32135ee90d6"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/rng_state.pth": {
+      "size": 14244,
+      "sha256": "4ac5fce42c73a102a0c421a43e80232d87993f24b83b3d5229454e338c6501c7"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/scaler.pt": {
+      "size": 988,
+      "sha256": "b1c04e2ab24c7df029158640f56742459a1f1bf73860d9b037c16c2a22ddc270"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/scheduler.pt": {
+      "size": 1064,
+      "sha256": "bbc2065bca2cc735e492c130af4572e0dbdcb7b04afb15580c002babc5c0d7da"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/trainer_state.json": {
+      "size": 28141,
+      "sha256": "935619cb8c3a715b2e14788ceb967c667504594ea97264e2302818202e508a5a"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-152/training_args.bin": {
+      "size": 4984,
+      "sha256": "c070dcf84f410560190cec8294f8255c5143eab55a8498cb18e993e4491c2478"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/adapter_config.json": {
+      "size": 1147,
+      "sha256": "27ce897393a84f126e3b11d65cc4ff17e9237619de4b46e98d3c59e14ee708d5"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "3e971dfd049e0a79f326e6652a927d0f82f67282c8c7b6d1411ae2d06c25a298"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/optimizer.pt": {
+      "size": 161810282,
+      "sha256": "6032939962b9963daa0d9b9c1576e2ad7804026aeee23bba1b2118e21b8e47c7"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/rng_state.pth": {
+      "size": 14244,
+      "sha256": "f02e18062a7cbaf602ce0fe6bfe5e241c0ec400746e5de14332d1ec6babc5b8e"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/scaler.pt": {
+      "size": 988,
+      "sha256": "4f5c41f47b8ad76adfe32e282f84ee6fbccd901b2ce16eeb49c04940a43f6991"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/scheduler.pt": {
+      "size": 1064,
+      "sha256": "45aa15d085507c5a72680ab80ec163db86720f92322a9faa5a184948a6bc80a2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/trainer_state.json": {
+      "size": 55877,
+      "sha256": "7a09b81982bf02742afac41599406b44e9d4921c5ea898f36c01cdc89c177f1b"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-304/training_args.bin": {
+      "size": 4984,
+      "sha256": "c070dcf84f410560190cec8294f8255c5143eab55a8498cb18e993e4491c2478"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/adapter_config.json": {
+      "size": 1147,
+      "sha256": "27ce897393a84f126e3b11d65cc4ff17e9237619de4b46e98d3c59e14ee708d5"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "f9f6175aec3aa2d9443747784249ecbf8e7a8a0bb5463571579c8a0c174c593d"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/optimizer.pt": {
+      "size": 161810282,
+      "sha256": "3aeef07ddfe4b84c72d626685aa33a67156979946c6ba7b211df4ba434c32fbe"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/rng_state.pth": {
+      "size": 14244,
+      "sha256": "bc34b4b3164109327c1a11351522992138e0668451fa911fe403b071b53bbf77"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/scaler.pt": {
+      "size": 988,
+      "sha256": "c6fc4e381bbf1455f8d64d3d851f75fe9b4caa3dd76d36f271432cb5bcab3137"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/scheduler.pt": {
+      "size": 1064,
+      "sha256": "8ded71cc6bf3d4af6876da522959b9bf04956c6eee5d94f8ef1946a88b719acc"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/trainer_state.json": {
+      "size": 83500,
+      "sha256": "8eae7c52f2a1edbd08d2a3e5d9be8892630d993b1422d493d4462dc32e458dce"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/checkpoint-456/training_args.bin": {
+      "size": 4984,
+      "sha256": "c070dcf84f410560190cec8294f8255c5143eab55a8498cb18e993e4491c2478"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_01/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_01/adapter_config.json": {
+      "size": 1147,
+      "sha256": "27ce897393a84f126e3b11d65cc4ff17e9237619de4b46e98d3c59e14ee708d5"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_01/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "901bb736566a0dac16cb4f2171e34af7c8279427fdd397d2236214093d875266"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_02/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_02/adapter_config.json": {
+      "size": 1147,
+      "sha256": "27ce897393a84f126e3b11d65cc4ff17e9237619de4b46e98d3c59e14ee708d5"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_02/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "3e971dfd049e0a79f326e6652a927d0f82f67282c8c7b6d1411ae2d06c25a298"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_03/README.md": {
+      "size": 5202,
+      "sha256": "3191b465069be139a907db620ecaaee6188deea1f5e14f8ec7281f71bba535d2"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_03/adapter_config.json": {
+      "size": 1147,
+      "sha256": "27ce897393a84f126e3b11d65cc4ff17e9237619de4b46e98d3c59e14ee708d5"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/epoch_03/adapter_model.safetensors": {
+      "size": 80792096,
+      "sha256": "f9f6175aec3aa2d9443747784249ecbf8e7a8a0bb5463571579c8a0c174c593d"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/tokenizer.json": {
+      "size": 11421990,
+      "sha256": "e59f230d711b724492115c22fe13a73b8200acf8f6b9b109bf4ebd4841582dc8"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/tokenizer_config.json": {
+      "size": 750,
+      "sha256": "8eeb0dc4a477049a588cbe8ab9680401d06df169b53e24e7f7a55522ac504569"
+    },
+    "results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora/training_summary.json": {
+      "size": 85803,
+      "sha256": "a032f51eaad197ce5ae9cf5b9bc78d5dee472616dd85bf17125cc2ed862e240a"
+    }
+  }
+}

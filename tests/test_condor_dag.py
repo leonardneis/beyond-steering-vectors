@@ -91,9 +91,11 @@ def test_condor_shell_entrypoints_are_executable_in_git() -> None:
     entrypoints = [
         "condor/finalize_confirmatory.sh",
         "condor/run_confirmatory_task.sh",
+        "condor/run_environment_smoke.sh",
         "condor/run_gpu_smoke.sh",
         "condor/repair_scratch_group.sh",
         "condor/stage_qwen_cache.sh",
+        "condor/submit_confirmatory.sh",
         "condor/setup_environment.sh",
     ]
     result = subprocess.run(
@@ -147,3 +149,16 @@ def test_fallback_environment_uses_mounted_home_not_scratch() -> None:
 def test_dag_generator_applies_cluster_storage_overrides() -> None:
     source = (ROOT / "scripts/generate_condor_dag.py").read_text(encoding="utf-8")
     assert "manifest = apply_storage_overrides(load_yaml(manifest_path))" in source
+
+
+def test_frozen_confirmatory_prerequisite_catalog() -> None:
+    catalog = json.loads(
+        (ROOT / "condor/confirmatory_prerequisites.json").read_text(encoding="utf-8")
+    )
+    assert catalog["model_revision"] == "a09a35458c702b33eeacc393d103063234e8bc28"
+    assert catalog["summary"]["file_count"] == len(catalog["files"]) == 116
+    teacher = "results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt"
+    assert catalog["files"][teacher]["sha256"] == (
+        "4ec9c11ef4c6b8753c388e92c1f18faa6f4364143c64c2583279deb1beb5bc71"
+    )
+    assert catalog["environment"]["environment_id"] == "condor-b0d601b72239a351"
