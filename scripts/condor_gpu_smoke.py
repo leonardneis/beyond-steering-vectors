@@ -47,6 +47,22 @@ def main() -> None:
     model_config_path = repo_path(args.model_config)
     if not bool(config.get("model", {}).get("load_in_4bit") or config.get("quantization", {}).get("load_in_4bit")):
         raise RuntimeError("Smoke-test model config must request bitsandbytes 4-bit loading")
+    model_name = config["model"]["model_name"]
+    from huggingface_hub import try_to_load_from_cache
+
+    cache_probe = try_to_load_from_cache(
+        model_name,
+        "config.json",
+        cache_dir=os.environ.get("HUGGINGFACE_HUB_CACHE"),
+    )
+    print(json.dumps({
+        "hf_home": str(hf_home),
+        "huggingface_hub_cache": os.environ.get("HUGGINGFACE_HUB_CACHE"),
+        "transformers_cache": os.environ.get("TRANSFORMERS_CACHE"),
+        "model_name": model_name,
+        "cached_config": str(cache_probe),
+        "cached_config_exists": bool(cache_probe and Path(cache_probe).is_file()),
+    }, indent=2))
     model, tokenizer = load_model_and_tokenizer(config)
     result = {
         "schema_version": 1, "status": "ok", "started_at": started_at.isoformat(),
