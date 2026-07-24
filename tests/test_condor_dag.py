@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -84,3 +85,21 @@ def test_committed_condor_paths_use_submit_environment_user() -> None:
     assert "/scratch/compuling/$ENV(USER)/" in smoke
     assert "$(Owner)" not in dag
     assert "$(Owner)" not in smoke
+
+
+def test_condor_shell_entrypoints_are_executable_in_git() -> None:
+    entrypoints = [
+        "condor/finalize_confirmatory.sh",
+        "condor/run_confirmatory_task.sh",
+        "condor/run_gpu_smoke.sh",
+        "condor/setup_environment.sh",
+    ]
+    result = subprocess.run(
+        ["git", "ls-files", "--stage", *entrypoints],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    modes = {line.split(maxsplit=1)[0] for line in result.stdout.splitlines()}
+    assert modes == {"100755"}
