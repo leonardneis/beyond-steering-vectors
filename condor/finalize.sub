@@ -1,27 +1,27 @@
 universe = docker
-docker_image = $(SlgeoDockerImage)
+docker_image = $(BsvDockerImage)
 executable = condor/finalize_confirmatory.sh
-arguments = $(SlgeoManifestPath) $(SlgeoTaskId)
-initialdir = $(SlgeoRepoRoot)
+arguments = $(BsvManifestPath) $(BsvTaskId)
+initialdir = $(BsvRepoRoot)
 
-request_CPUs = $(SlgeoRequestCpus)
-request_memory = $(SlgeoRequestMemoryMB)MB
+request_CPUs = $(BsvRequestCpus)
+request_memory = $(BsvRequestMemoryMB)MB
 request_GPUs = 0
 requirements = UidDomain == "cs.uni-saarland.de"
 
 getenv = HOME
-environment = "SLGEO_SHARED_ROOT=$(SlgeoSharedRoot) SLGEO_OFFLINE=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(SlgeoTaskId)"
+environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
 +WantGPUHomeMounted = true
 +WantScratchMounted = true
-+TaskId = "$(SlgeoTaskId)"
++TaskId = "$(BsvTaskId)"
 
 should_transfer_files = NO
-max_job_retirement_time = $(SlgeoRetirementSeconds)
+max_job_retirement_time = $(BsvRetirementSeconds)
 kill_sig = SIGTERM
 kill_sig_timeout = 180
 stream_output = true
 stream_error = true
-output = condor/logs/$(SlgeoTaskId).$(ClusterId).$(ProcId).out
-error = condor/logs/$(SlgeoTaskId).$(ClusterId).$(ProcId).err
+output = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).out
+error = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).err
 log = condor/logs/confirmatory.$(ClusterId).$(ProcId).log
 queue 1

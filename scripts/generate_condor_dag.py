@@ -128,18 +128,18 @@ def render_dag(tasks: list[Task], manifest_path: str, manifest: dict, repo_root:
         submit = "condor/task_gpu.sub" if task.gpus else "condor/task_cpu.sub"
         lines.append(f"JOB {task.task_id} {submit}")
         variables = {
-            "SlgeoTaskId": task.task_id,
-            "SlgeoPairIndex": str(task.pair_index),
-            "SlgeoStage": task.stage,
-            "SlgeoCommandIndex": str(task.command_index),
-            "SlgeoManifestPath": manifest_path,
-            "SlgeoRepoRoot": repo_root,
-            "SlgeoSharedRoot": shared_root,
-            "SlgeoDockerImage": image,
-            "SlgeoRequestCpus": str(task.cpus),
-            "SlgeoRequestMemoryMB": str(task.memory_mb),
-            "SlgeoMinGpuMemoryMB": str(task.min_gpu_memory_mb),
-            "SlgeoRetirementSeconds": str(retirement),
+            "BsvTaskId": task.task_id,
+            "BsvPairIndex": str(task.pair_index),
+            "BsvStage": task.stage,
+            "BsvCommandIndex": str(task.command_index),
+            "BsvManifestPath": manifest_path,
+            "BsvRepoRoot": repo_root,
+            "BsvSharedRoot": shared_root,
+            "BsvDockerImage": image,
+            "BsvRequestCpus": str(task.cpus),
+            "BsvRequestMemoryMB": str(task.memory_mb),
+            "BsvMinGpuMemoryMB": str(task.min_gpu_memory_mb),
+            "BsvRetirementSeconds": str(retirement),
         }
         lines.append("VARS " + task.task_id + " " + " ".join(f'{key}=\"{quote(value)}\"' for key, value in variables.items()))
         lines.append(f"RETRY {task.task_id} {retry_count} UNLESS-EXIT 2")
@@ -157,14 +157,14 @@ def render_dag(tasks: list[Task], manifest_path: str, manifest: dict, repo_root:
         "", "JOB finalize_confirmatory condor/finalize.sub",
         "VARS finalize_confirmatory " + " ".join(
             f'{key}=\"{quote(value)}\"' for key, value in {
-                "SlgeoTaskId": "finalize_confirmatory",
-                "SlgeoManifestPath": manifest_path,
-                "SlgeoRepoRoot": repo_root,
-                "SlgeoSharedRoot": shared_root,
-                "SlgeoDockerImage": image,
-                "SlgeoRequestCpus": str(manifest["condor"]["resources"]["aggregation"]["cpus"]),
-                "SlgeoRequestMemoryMB": str(manifest["condor"]["resources"]["aggregation"]["memory_mb"]),
-                "SlgeoRetirementSeconds": str(retirement),
+                "BsvTaskId": "finalize_confirmatory",
+                "BsvManifestPath": manifest_path,
+                "BsvRepoRoot": repo_root,
+                "BsvSharedRoot": shared_root,
+                "BsvDockerImage": image,
+                "BsvRequestCpus": str(manifest["condor"]["resources"]["aggregation"]["cpus"]),
+                "BsvRequestMemoryMB": str(manifest["condor"]["resources"]["aggregation"]["memory_mb"]),
+                "BsvRetirementSeconds": str(retirement),
             }.items()
         ),
         f"PARENT {' '.join(final_parents)} CHILD finalize_confirmatory",
@@ -229,10 +229,10 @@ def validate(tasks: list[Task], dag_text: str, output_dir: Path) -> dict:
     dag_variable_lines = [line for line in dag_text.splitlines() if line.startswith("VARS ")]
     for line in dag_variable_lines:
         assignments = line.split()[2:]
-        unnamespaced = [item for item in assignments if not item.startswith("Slgeo")]
+        unnamespaced = [item for item in assignments if not item.startswith("Bsv")]
         if unnamespaced:
             raise RuntimeError(
-                f"Every DAGMan variable must use the Slgeo namespace to avoid "
+                f"Every DAGMan variable must use the Bsv namespace to avoid "
                 f"HTCondor submit-command collisions: {unnamespaced}"
             )
     return {
