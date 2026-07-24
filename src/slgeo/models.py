@@ -144,7 +144,10 @@ def load_causal_lm(
         "local_files_only": local_files_only,
     }
     dtype_value = resolve_torch_dtype(torch_dtype)
-    kwargs["dtype"] = dtype_value
+    # The cluster environment pins Transformers 4.x, whose public loading
+    # keyword is ``torch_dtype``. Passing the Transformers 5 ``dtype`` alias
+    # through **kwargs reaches the model constructor and fails for Qwen2.
+    kwargs["torch_dtype"] = dtype_value
     if device_map is not None:
         kwargs["device_map"] = device_map
 
@@ -155,13 +158,7 @@ def load_causal_lm(
 
         kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
 
-    try:
-        return AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-    except TypeError as exc:
-        if "dtype" not in str(exc):
-            raise
-        kwargs["torch_dtype"] = kwargs.pop("dtype")
-        return AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    return AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
 
 def load_model_and_tokenizer(model_config: dict[str, Any]):
