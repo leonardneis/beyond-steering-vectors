@@ -9,6 +9,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -124,7 +125,7 @@ def main() -> None:
         raise SystemExit(1)
 
     subprocess.run(
-        ["python", "scripts/confirmatory_status.py", "--manifest", catalog["manifest"], "--condor"],
+        [sys.executable, "scripts/confirmatory_status.py", "--manifest", catalog["manifest"], "--condor"],
         cwd=repo_path("."),
         check=True,
     )

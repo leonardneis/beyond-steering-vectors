@@ -89,22 +89,27 @@ Run this before the full DAG. The resulting JSON is written below
 ## Generate and validate without submitting
 
 ```bash
-python scripts/generate_condor_dag.py
-python scripts/generate_condor_dag.py --validate-only
-condor_submit_dag -no_submit condor/confirmatory.dag
+./condor/submit_confirmatory.sh --dry-run
 ```
 
-The local Python validation checks exactly 62 unique tasks, acyclicity, all
-parents, submit templates, four independent training nodes, zero-or-one GPU per
-task, and the 16 GiB minimum for every GPU node. `condor_submit_dag -no_submit`
-adds native parser validation when HTCondor client tools are installed.
+This single fail-closed preflight normalizes the `compuling` quota group and
+setgid inheritance, verifies the size and SHA-256 of every catalogued dataset,
+model-cache object, Seed-1 adapter, and geometry cache, requires the
+content-addressed environment and successful real-model GPU smoke artifact,
+checks exactly 62 unique tasks, acyclicity, all parents, submit templates, four
+independent training nodes, zero-or-one GPU per task, and the 16 GiB minimum for
+every GPU node. It finally runs native `condor_submit_dag -no_submit -f` syntax
+validation and submits nothing.
 
 ## Submit
 
 ```bash
-mkdir -p condor/logs
-condor_submit_dag condor/confirmatory.dag
+./condor/submit_confirmatory.sh --submit
 ```
+
+This is the only launch command. It repeats the full preflight immediately
+before submission, so missing, modified, wrongly owned, or incompletely staged
+inputs cannot start the DAG.
 
 DAGMan dependencies implement:
 
@@ -152,22 +157,32 @@ must still remain on `/scratch` rather than only in the transfer sandbox.
 Machine/human status combines completion markers with live `condor_q` ClassAds:
 
 ```bash
-python scripts/confirmatory_status.py \
-  --manifest configs/validation/cat_cross_seed_confirmatory.yaml \
-  --condor --watch-seconds 60
+./condor/monitor_confirmatory.sh 30
 ```
 
 Useful native commands:
 
 ```bash
 condor_q -nobatch
+condor_q -run -constraint 'RequestGPUs > 0' \
+  -af ClusterId ProcId TaskId RemoteHost RequestGPUs AssignedGPUs
 condor_q -hold
 condor_q CLUSTER.PROC -better-analyze
 condor_q CLUSTER.PROC -af HoldReason HoldReasonCode HoldReasonSubCode
 condor_tail -f CLUSTER.PROC
+tail -f condor/logs/TASK_ID.CLUSTER_ID.PROC_ID.out
+tail -f condor/logs/TASK_ID.CLUSTER_ID.PROC_ID.err
 condor_release CLUSTER.PROC
 condor_rm CLUSTER.PROC
 ```
+
+The continuously refreshed overview is stored at
+`$SLGEO_SHARED_ROOT/results/confirmatory/qwen7b_cat_cross_seed_v1/status.md`
+and its machine-readable counterpart `status.json`. Final aggregation publishes
+`aggregate.json`, thesis plots, and `final_artifacts.sha256` below the same run
+root only after all required DAG parents and gates succeed. ClusterCockpit at
+<https://hpc-monitoring.cs.uni-saarland.de> shows historical GPU utilization,
+memory, runtime, and host telemetry for the recorded ClusterId/ProcId.
 
 To cancel a full DAG, remove descendants and then DAGMan using the DAGMan cluster
 ID shown by `condor_submit_dag`:

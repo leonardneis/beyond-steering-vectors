@@ -94,8 +94,10 @@ def test_condor_shell_entrypoints_are_executable_in_git() -> None:
         "condor/run_environment_smoke.sh",
         "condor/run_gpu_smoke.sh",
         "condor/repair_scratch_group.sh",
+        "condor/stage_seed1_adapters.sh",
         "condor/stage_qwen_cache.sh",
         "condor/submit_confirmatory.sh",
+        "condor/monitor_confirmatory.sh",
         "condor/setup_environment.sh",
     ]
     result = subprocess.run(

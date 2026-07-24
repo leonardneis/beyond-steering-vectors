@@ -216,24 +216,29 @@ analysis jobs stage final outputs through scratch, model weights use a shared
 Audited Seed-1 vectors and layer/module rankings are hash-tracked cache inputs;
 the new seeds retain disjoint layer (offset 1024), module (offset 2048), and
 intervention (offset 4096) prompt sets.
-Generate and validate the 62-task DAG without submitting:
+The cluster entry point is fail-closed: it repairs the scratch quota group,
+checksum-verifies every prerequisite, checks the content-addressed Python
+environment and real-model GPU smoke artifact, validates all 62 DAG tasks, and
+then either stops or submits. Validate everything without submitting:
 
 ```bash
-python scripts/generate_condor_dag.py
-python scripts/generate_condor_dag.py --validate-only
-condor_submit_dag -no_submit condor/confirmatory.dag
+./condor/submit_confirmatory.sh --dry-run
 ```
 
-After the GPU smoke test, submit with `condor_submit_dag condor/confirmatory.dag`.
+Once that reports `READY`, the complete confirmatory experiment starts with
+exactly one command:
+
+```bash
+./condor/submit_confirmatory.sh --submit
+```
+
 The scheduler migration is recorded in
 [`docs/HTCondor_Migration.md`](docs/HTCondor_Migration.md).
 
 Monitor without modifying the run:
 
 ```bash
-python scripts/confirmatory_status.py \
-  --manifest configs/validation/cat_cross_seed_confirmatory.yaml \
-  --condor --watch-seconds 60
+./condor/monitor_confirmatory.sh 30
 ```
 
 Resume an interrupted timestamped run without overwriting or recomputing complete
