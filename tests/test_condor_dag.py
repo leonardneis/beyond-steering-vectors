@@ -103,3 +103,8 @@ def test_condor_shell_entrypoints_are_executable_in_git() -> None:
     )
     modes = {line.split(maxsplit=1)[0] for line in result.stdout.splitlines()}
     assert modes == {"100755"}
+
+
+def test_condor_runtime_does_not_require_optional_vapeplot() -> None:
+    requirements = (ROOT / "condor/requirements-condor.txt").read_text(encoding="utf-8")
+    assert "vapeplot" not in requirements.lower()
