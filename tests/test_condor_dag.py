@@ -54,14 +54,15 @@ def test_generated_dag_and_submit_templates_are_consistent() -> None:
     gpu_submit = (ROOT / "condor/task_gpu.sub").read_text(encoding="utf-8")
     cpu_submit = (ROOT / "condor/task_cpu.sub").read_text(encoding="utf-8")
     assert "request_GPUs = 1" in gpu_submit
-    assert "gpus_minimum_memory = $(MinGpuMemoryMB)" in gpu_submit
+    assert "gpus_minimum_memory = $(SlgeoMinGpuMemoryMB)" in gpu_submit
     assert "gpus_minimum_capability = 7.0" in gpu_submit
     assert 'requirements = UidDomain == "cs.uni-saarland.de"' in gpu_submit
     assert "request_GPUs = 0" in cpu_submit
     assert 'UidDomain == "cs.uni-saarland.de"' in gpu_submit
-    assert "$(DockerImage)" in gpu_submit
+    assert "$(SlgeoDockerImage)" in gpu_submit
     assert "ContainerImage=" not in dag
-    assert 'DockerImage="' in dag
+    assert 'SlgeoDockerImage="' in dag
+    assert 'SlgeoManifestPath="' in dag
 
 
 def test_cluster_storage_override_keeps_code_configs_in_home(monkeypatch) -> None:
@@ -162,7 +163,7 @@ def test_fail_closed_preflight_natively_validates_node_submit_files() -> None:
     validator = (ROOT / "condor/validate_submit_files.sh").read_text(encoding="utf-8")
     assert "./condor/validate_submit_files.sh" in submit
     assert "condor_submit -dry-run" in validator
-    assert "DockerImage=" in validator
+    assert "SlgeoDockerImage=" in validator
     assert "ContainerImage=" not in validator
 
 

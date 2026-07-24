@@ -128,11 +128,18 @@ def render_dag(tasks: list[Task], manifest_path: str, manifest: dict, repo_root:
         submit = "condor/task_gpu.sub" if task.gpus else "condor/task_cpu.sub"
         lines.append(f"JOB {task.task_id} {submit}")
         variables = {
-            "TaskId": task.task_id, "PairIndex": str(task.pair_index), "Stage": task.stage,
-            "CommandIndex": str(task.command_index), "Manifest": manifest_path,
-            "RepoRoot": repo_root, "SharedRoot": shared_root, "DockerImage": image,
-            "RequestCpus": str(task.cpus), "RequestMemoryMB": str(task.memory_mb),
-            "MinGpuMemoryMB": str(task.min_gpu_memory_mb), "RetirementSeconds": str(retirement),
+            "SlgeoTaskId": task.task_id,
+            "SlgeoPairIndex": str(task.pair_index),
+            "SlgeoStage": task.stage,
+            "SlgeoCommandIndex": str(task.command_index),
+            "SlgeoManifestPath": manifest_path,
+            "SlgeoRepoRoot": repo_root,
+            "SlgeoSharedRoot": shared_root,
+            "SlgeoDockerImage": image,
+            "SlgeoRequestCpus": str(task.cpus),
+            "SlgeoRequestMemoryMB": str(task.memory_mb),
+            "SlgeoMinGpuMemoryMB": str(task.min_gpu_memory_mb),
+            "SlgeoRetirementSeconds": str(retirement),
         }
         lines.append("VARS " + task.task_id + " " + " ".join(f'{key}=\"{quote(value)}\"' for key, value in variables.items()))
         lines.append(f"RETRY {task.task_id} {retry_count} UNLESS-EXIT 2")
@@ -150,12 +157,14 @@ def render_dag(tasks: list[Task], manifest_path: str, manifest: dict, repo_root:
         "", "JOB finalize_confirmatory condor/finalize.sub",
         "VARS finalize_confirmatory " + " ".join(
             f'{key}=\"{quote(value)}\"' for key, value in {
-                "TaskId": "finalize_confirmatory", "Manifest": manifest_path,
-                "RepoRoot": repo_root, "SharedRoot": shared_root,
-                "DockerImage": image,
-                "RequestCpus": str(manifest["condor"]["resources"]["aggregation"]["cpus"]),
-                "RequestMemoryMB": str(manifest["condor"]["resources"]["aggregation"]["memory_mb"]),
-                "RetirementSeconds": str(retirement),
+                "SlgeoTaskId": "finalize_confirmatory",
+                "SlgeoManifestPath": manifest_path,
+                "SlgeoRepoRoot": repo_root,
+                "SlgeoSharedRoot": shared_root,
+                "SlgeoDockerImage": image,
+                "SlgeoRequestCpus": str(manifest["condor"]["resources"]["aggregation"]["cpus"]),
+                "SlgeoRequestMemoryMB": str(manifest["condor"]["resources"]["aggregation"]["memory_mb"]),
+                "SlgeoRetirementSeconds": str(retirement),
             }.items()
         ),
         f"PARENT {' '.join(final_parents)} CHILD finalize_confirmatory",
@@ -217,6 +226,15 @@ def validate(tasks: list[Task], dag_text: str, output_dir: Path) -> dict:
             "DAG variable ContainerImage collides case-insensitively with HTCondor's "
             "container_image submit command; use DockerImage"
         )
+    dag_variable_lines = [line for line in dag_text.splitlines() if line.startswith("VARS ")]
+    for line in dag_variable_lines:
+        assignments = line.split()[2:]
+        unnamespaced = [item for item in assignments if not item.startswith("Slgeo")]
+        if unnamespaced:
+            raise RuntimeError(
+                f"Every DAGMan variable must use the Slgeo namespace to avoid "
+                f"HTCondor submit-command collisions: {unnamespaced}"
+            )
     return {
         "task_count": len(tasks), "gpu_task_count": sum(task.gpus for task in tasks),
         "cpu_task_count": sum(task.gpus == 0 for task in tasks),

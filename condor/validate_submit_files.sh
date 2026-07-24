@@ -12,18 +12,18 @@ trap 'rm -rf "$VALIDATION_DIR"' EXIT
 # same macro names catch submit-command collisions that condor_submit_dag
 # -no_submit alone cannot detect.
 macros=(
-  "TaskId=preflight_submit"
-  "PairIndex=0"
-  "Stage=prepare"
-  "CommandIndex=0"
-  "Manifest=configs/validation/cat_cross_seed_confirmatory.yaml"
-  "RepoRoot=$HOME/beyond-steering-vectors"
-  "SharedRoot=$SHARED_ROOT"
-  "DockerImage=$IMAGE"
-  "RequestCpus=2"
-  "RequestMemoryMB=8192"
-  "MinGpuMemoryMB=16384"
-  "RetirementSeconds=7200"
+  "SlgeoTaskId=preflight_submit"
+  "SlgeoPairIndex=0"
+  "SlgeoStage=prepare"
+  "SlgeoCommandIndex=0"
+  "SlgeoManifestPath=configs/validation/cat_cross_seed_confirmatory.yaml"
+  "SlgeoRepoRoot=$HOME/beyond-steering-vectors"
+  "SlgeoSharedRoot=$SHARED_ROOT"
+  "SlgeoDockerImage=$IMAGE"
+  "SlgeoRequestCpus=2"
+  "SlgeoRequestMemoryMB=8192"
+  "SlgeoMinGpuMemoryMB=16384"
+  "SlgeoRetirementSeconds=7200"
 )
 
 for template in task_cpu task_gpu finalize; do

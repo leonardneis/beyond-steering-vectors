@@ -1,27 +1,27 @@
 universe = docker
-docker_image = $(DockerImage)
+docker_image = $(SlgeoDockerImage)
 executable = condor/finalize_confirmatory.sh
-arguments = $(Manifest) $(TaskId)
-initialdir = $(RepoRoot)
+arguments = $(SlgeoManifestPath) $(SlgeoTaskId)
+initialdir = $(SlgeoRepoRoot)
 
-request_CPUs = $(RequestCpus)
-request_memory = $(RequestMemoryMB)MB
+request_CPUs = $(SlgeoRequestCpus)
+request_memory = $(SlgeoRequestMemoryMB)MB
 request_GPUs = 0
 requirements = UidDomain == "cs.uni-saarland.de"
 
 getenv = HOME
-environment = "SLGEO_SHARED_ROOT=$(SharedRoot) SLGEO_OFFLINE=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(TaskId)"
+environment = "SLGEO_SHARED_ROOT=$(SlgeoSharedRoot) SLGEO_OFFLINE=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(SlgeoTaskId)"
 +WantGPUHomeMounted = true
 +WantScratchMounted = true
-+TaskId = "$(TaskId)"
++TaskId = "$(SlgeoTaskId)"
 
 should_transfer_files = NO
-max_job_retirement_time = $(RetirementSeconds)
+max_job_retirement_time = $(SlgeoRetirementSeconds)
 kill_sig = SIGTERM
 kill_sig_timeout = 180
 stream_output = true
 stream_error = true
-output = condor/logs/$(TaskId).$(ClusterId).$(ProcId).out
-error = condor/logs/$(TaskId).$(ClusterId).$(ProcId).err
+output = condor/logs/$(SlgeoTaskId).$(ClusterId).$(ProcId).out
+error = condor/logs/$(SlgeoTaskId).$(ClusterId).$(ProcId).err
 log = condor/logs/confirmatory.$(ClusterId).$(ProcId).log
 queue 1
