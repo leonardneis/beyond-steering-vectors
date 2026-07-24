@@ -12,7 +12,7 @@ from _bootstrap import bootstrap, repo_path
 
 bootstrap()
 
-from run_confirmatory_manifest import build_pair  # noqa: E402
+from run_confirmatory_manifest import apply_storage_overrides, build_pair  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
 
@@ -236,7 +236,7 @@ def main() -> None:
     parser.add_argument("--validate-only", action="store_true")
     args = parser.parse_args()
     manifest_path = repo_path(args.manifest)
-    manifest = load_yaml(manifest_path)
+    manifest = apply_storage_overrides(load_yaml(manifest_path))
     output_dir = repo_path(args.output_dir)
     tasks = build_tasks(manifest)
     image = args.container_image or os.getenv("CONDOR_CONTAINER_IMAGE") or manifest["condor"]["container_image"]

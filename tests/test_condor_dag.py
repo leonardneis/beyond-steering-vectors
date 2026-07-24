@@ -141,3 +141,8 @@ def test_fallback_environment_uses_mounted_home_not_scratch() -> None:
     setup = (ROOT / "condor/setup_environment.sh").read_text(encoding="utf-8")
     assert 'ENV_BASE=${SLGEO_ENV_ROOT:-$HOME/.cache/beyond-steering-vectors/envs}' in setup
     assert 'ENV_ROOT="$ENV_BASE/condor-$REQUIREMENTS_HASH"' in setup
+
+
+def test_dag_generator_applies_cluster_storage_overrides() -> None:
+    source = (ROOT / "scripts/generate_condor_dag.py").read_text(encoding="utf-8")
+    assert "manifest = apply_storage_overrides(load_yaml(manifest_path))" in source
