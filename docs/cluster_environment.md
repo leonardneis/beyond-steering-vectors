@@ -157,8 +157,15 @@ must still remain on `/scratch` rather than only in the transfer sandbox.
 Machine/human status combines completion markers with live `condor_q` ClassAds:
 
 ```bash
-./condor/monitor_confirmatory.sh 30
+./condor/monitor_confirmatory.sh --watch 30 --events
 ```
+
+The first refresh is a complete snapshot. Subsequent event-mode refreshes print
+only transitions such as `idle -> running`, `running -> complete`, newly
+held/failed jobs, changed hold reasons, and progress-counter changes. Use
+`--watch 30` without `--events` for repeated complete snapshots, or no options
+for a one-time status. The legacy numeric form (`monitor_confirmatory.sh 30`)
+remains equivalent to `--watch 30`.
 
 Useful native commands:
 

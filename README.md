@@ -238,8 +238,13 @@ The scheduler migration is recorded in
 Monitor without modifying the run:
 
 ```bash
-./condor/monitor_confirmatory.sh 30
+./condor/monitor_confirmatory.sh --watch 30 --events
 ```
+
+Omit `--events` for complete snapshots on every refresh, or omit `--watch`
+entirely for one snapshot. Event mode reports only task transitions, new
+held/failed states, changed hold reasons, and progress changes after its initial
+full snapshot.
 
 Resume an interrupted timestamped run without overwriting or recomputing complete
 artifacts with `-ResumeDirectory <existing-run-directory>`.

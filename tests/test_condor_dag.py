@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_condor_dag import build_tasks, task_id, validate  # noqa: E402
 from run_confirmatory_manifest import apply_storage_overrides  # noqa: E402
+from confirmatory_status_events import diff as status_diff  # noqa: E402
 
 
 def manifest() -> dict:
@@ -165,6 +166,35 @@ def test_fail_closed_preflight_natively_validates_node_submit_files() -> None:
     assert "condor_submit -dry-run" in validator
     assert "BsvDockerImage=" in validator
     assert "ContainerImage=" not in validator
+
+
+def test_monitor_supports_watch_and_event_diffs() -> None:
+    monitor = (ROOT / "condor/monitor_confirmatory.sh").read_text(encoding="utf-8")
+    assert "--watch" in monitor
+    assert "--events" in monitor
+    assert "confirmatory_status_events.py" in monitor
+
+    previous = {
+        "completed": 0, "total": 2, "percent": 0.0, "running": 1, "held": 0,
+        "failed": 0, "tasks": [
+            {"id": "a", "status": "running"},
+            {"id": "b", "status": "queued"},
+        ],
+    }
+    current = {
+        "completed": 1, "total": 2, "percent": 50.0, "running": 0, "held": 1,
+        "failed": 0, "tasks": [
+            {"id": "a", "status": "complete"},
+            {
+                "id": "b", "status": "held", "condor_cluster_id": 10,
+                "condor_proc_id": 0, "hold_reason": "test reason",
+            },
+        ],
+    }
+    events = status_diff(previous, current)
+    assert events[0].startswith("progress 0/2")
+    assert "a: running -> complete" in events
+    assert "b: queued -> held job=10.0 reason=test reason" in events
 
 
 def test_frozen_confirmatory_prerequisite_catalog() -> None:
