@@ -135,3 +135,9 @@ def test_hugging_face_ref_is_written_without_newline() -> None:
 def test_smoke_job_supports_optional_failed_machine_avoidance() -> None:
     submit = (ROOT / "condor/gpu_smoke.sub").read_text(encoding="utf-8")
     assert 'Machine =!= "$(AvoidMachine:__none__)"' in submit
+
+
+def test_fallback_environment_uses_mounted_home_not_scratch() -> None:
+    setup = (ROOT / "condor/setup_environment.sh").read_text(encoding="utf-8")
+    assert 'ENV_BASE=${SLGEO_ENV_ROOT:-$HOME/.cache/beyond-steering-vectors/envs}' in setup
+    assert 'ENV_ROOT="$ENV_BASE/condor-$REQUIREMENTS_HASH"' in setup

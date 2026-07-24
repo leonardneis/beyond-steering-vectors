@@ -17,21 +17,21 @@ esac
 
 export HF_HOME=${HF_HOME:-$SLGEO_SHARED_ROOT/huggingface}
 export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-$HF_HOME/hub}
-export TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-$HF_HOME/hub}
 export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 if [[ "${SLGEO_OFFLINE:-0}" == "1" ]]; then
   export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 fi
+ENV_BASE=${SLGEO_ENV_ROOT:-$HOME/.cache/beyond-steering-vectors/envs}
 mkdir -p "$HF_HOME" "$SLGEO_SHARED_ROOT/results" "$SLGEO_SHARED_ROOT/data" \
-  "$SLGEO_SHARED_ROOT/runs" "$SLGEO_SHARED_ROOT/envs" condor/logs
+  "$SLGEO_SHARED_ROOT/runs" "$ENV_BASE" condor/logs
 
 # A custom image already has all dependencies. The public PyTorch fallback creates a
 # content-addressed shared venv once; flock prevents array/DAG startup races.
 if ! python -c 'import accelerate,bitsandbytes,datasets,matplotlib,numpy,pandas,peft,scipy,sklearn,transformers,trl,yaml' >/dev/null 2>&1; then
   REQUIREMENTS_HASH=$(python -c 'import hashlib;print(hashlib.sha256(open("condor/requirements-condor.txt","rb").read()).hexdigest()[:16])')
-  ENV_ROOT="$SLGEO_SHARED_ROOT/envs/condor-$REQUIREMENTS_HASH"
+  ENV_ROOT="$ENV_BASE/condor-$REQUIREMENTS_HASH"
   (
     flock 9
     if [[ ! -f "$ENV_ROOT/.complete" ]]; then
@@ -42,7 +42,7 @@ if ! python -c 'import accelerate,bitsandbytes,datasets,matplotlib,numpy,pandas,
       printf '%s\n' "$REQUIREMENTS_HASH" > "$ENV_ROOT/.complete.tmp"
       mv "$ENV_ROOT/.complete.tmp" "$ENV_ROOT/.complete"
     fi
-  ) 9>"$SLGEO_SHARED_ROOT/envs/bootstrap.lock"
+  ) 9>"$ENV_BASE/bootstrap.lock"
   # shellcheck disable=SC1090
   source "$ENV_ROOT/bin/activate"
 fi

@@ -35,8 +35,10 @@ never treated as resumable storage.
 The portable fallback is
 `pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime`. Exact Python dependencies are
 pinned in `condor/requirements-condor.txt`. On first use, the wrapper creates a
-content-addressed shared virtual environment under `/scratch`; `flock` prevents
-concurrent DAG jobs from racing during installation.
+content-addressed virtual environment under
+`$HOME/.cache/beyond-steering-vectors/envs`; `flock` prevents concurrent DAG
+jobs from racing during installation. Keeping dependency files in Home avoids
+consuming the limited Scratch artifact quota.
 
 For reliable offline operation, build and publish the provided image first:
 
