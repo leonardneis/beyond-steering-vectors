@@ -81,7 +81,9 @@ def collect(manifest_path: Path, *, include_condor: bool = False) -> dict:
                     completed_stage_durations.setdefault(stage, []).append(float(detail["duration_seconds"]))
                 task_id = f"seed{pair['seed']}_{stem}"
                 condor = live.get(task_id, {})
-                if status == "queued" and condor.get("condor_status") in {"idle", "running", "held", "transferring", "suspended"}:
+                if status in {"queued", "failed"} and condor.get("condor_status") in {
+                    "idle", "running", "held", "transferring", "suspended"
+                }:
                     status = condor["condor_status"]
                 tasks.append({
                     "id": task_id, "seed": pair["seed"], "stage": stage,
@@ -129,6 +131,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output-dir")
+    parser.add_argument(
+        "--snapshot-json",
+        help="Also write the exact collected payload atomically to this private snapshot.",
+    )
     parser.add_argument("--watch-seconds", type=int, default=0)
     parser.add_argument("--condor", action="store_true", help="Merge live condor_q ClassAds by stable TaskId.")
     args = parser.parse_args()
@@ -137,8 +143,11 @@ def main() -> None:
     output = repo_path(args.output_dir or manifest["output_root"])
     while True:
         status = collect(manifest_path, include_condor=args.condor)
-        atomic_text(output / "status.json", json.dumps(status, indent=2) + "\n")
+        serialized = json.dumps(status, indent=2) + "\n"
+        atomic_text(output / "status.json", serialized)
         atomic_text(output / "status.md", render_markdown(status) + "\n")
+        if args.snapshot_json:
+            atomic_text(Path(args.snapshot_json), serialized)
         print(f"{status['completed']}/{status['total']} complete ({status['percent']}%), ETA {fmt_duration(status['eta_seconds_serial_equivalent'])}")
         if not args.watch_seconds:
             break

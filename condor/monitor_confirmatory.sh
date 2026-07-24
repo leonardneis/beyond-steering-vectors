@@ -58,10 +58,10 @@ cd "$(dirname "$0")/.."
 export SLGEO_SHARED_ROOT=${SLGEO_SHARED_ROOT:-/scratch/compuling/$USER/beyond-steering-vectors}
 MANIFEST=configs/validation/cat_cross_seed_confirmatory.yaml
 RUN_ROOT="$SLGEO_SHARED_ROOT/results/confirmatory/qwen7b_cat_cross_seed_v1"
-STATUS_JSON="$RUN_ROOT/status.json"
 STATUS_MD="$RUN_ROOT/status.md"
 SESSION_DIR=$(mktemp -d "${TMPDIR:-/tmp}/bsv-monitor.XXXXXX")
 PREVIOUS="$SESSION_DIR/previous.json"
+CURRENT="$SESSION_DIR/current.json"
 cleanup() {
   rm -rf "$SESSION_DIR"
 }
@@ -74,7 +74,8 @@ trap cleanup EXIT
 trap stop_monitor INT TERM
 
 refresh_status() {
-  python3 scripts/confirmatory_status.py --manifest "$MANIFEST" --condor >/dev/null
+  python3 scripts/confirmatory_status.py \
+    --manifest "$MANIFEST" --condor --snapshot-json "$CURRENT" >/dev/null
 }
 
 render_full_snapshot() {
@@ -100,7 +101,7 @@ if ((! WATCH)); then
   exit 0
 fi
 
-cp "$STATUS_JSON" "$PREVIOUS"
+cp "$CURRENT" "$PREVIOUS"
 echo
 if ((EVENTS)); then
   echo "Event mode active; subsequent refreshes show changes only (interval: ${INTERVAL}s)."
@@ -113,9 +114,9 @@ while true; do
   sleep "$INTERVAL"
   refresh_status
   if ((EVENTS)); then
-    python3 scripts/confirmatory_status_events.py "$PREVIOUS" "$STATUS_JSON"
+    python3 scripts/confirmatory_status_events.py "$PREVIOUS" "$CURRENT"
   else
     render_full_snapshot
   fi
-  cp "$STATUS_JSON" "$PREVIOUS"
+  cp "$CURRENT" "$PREVIOUS"
 done
