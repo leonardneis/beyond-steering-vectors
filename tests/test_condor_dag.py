@@ -130,3 +130,8 @@ def test_hugging_face_ref_is_written_without_newline() -> None:
     staging = (ROOT / "condor/stage_qwen_cache.sh").read_text(encoding="utf-8")
     assert "printf '%s' \"$REVISION\"" in staging
     assert "printf '%s\\n' \"$REVISION\"" not in staging
+
+
+def test_smoke_job_supports_optional_failed_machine_avoidance() -> None:
+    submit = (ROOT / "condor/gpu_smoke.sub").read_text(encoding="utf-8")
+    assert 'Machine =!= "$(AvoidMachine:__none__)"' in submit

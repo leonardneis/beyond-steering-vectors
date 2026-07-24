@@ -8,7 +8,7 @@ request_memory = 32768MB
 request_GPUs = 1
 gpus_minimum_memory = 16384
 gpus_minimum_capability = 7.0
-requirements = UidDomain == "cs.uni-saarland.de"
+requirements = UidDomain == "cs.uni-saarland.de" && Machine =!= "$(AvoidMachine:__none__)"
 getenv = HOME
 environment = "SLGEO_SHARED_ROOT=/scratch/compuling/$ENV(USER)/beyond-steering-vectors SLGEO_OFFLINE=1 SLGEO_FORCE_SINGLE_GPU=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=gpu_smoke"
 +WantGPUHomeMounted = true
