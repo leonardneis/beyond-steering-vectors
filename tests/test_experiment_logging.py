@@ -9,7 +9,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from slgeo.experiment_logging import ExperimentLogger
+from slgeo.experiment_logging import ExperimentLogger, git_commit_hash, git_worktree_dirty
 from slgeo.generation import generate_number_dataset
 from slgeo.io import write_jsonl
 
@@ -106,3 +106,18 @@ def test_repeated_run_id_creates_nested_run_instance(tmp_path) -> None:
     assert second.run_dir.name.startswith("run_")
     assert first.run_dir != second.run_dir
     assert (second.run_dir / "metadata.json").exists()
+
+
+def test_git_provenance_without_git_binary(tmp_path, monkeypatch) -> None:
+    commit = "a" * 40
+    git_dir = tmp_path / ".git"
+    (git_dir / "refs/heads").mkdir(parents=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (git_dir / "refs/heads/main").write_text(commit + "\n", encoding="utf-8")
+
+    def missing_git(*_args, **_kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr("slgeo.experiment_logging.subprocess.run", missing_git)
+    assert git_commit_hash(tmp_path) == commit
+    assert git_worktree_dirty(tmp_path) is None

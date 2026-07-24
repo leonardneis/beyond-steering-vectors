@@ -62,8 +62,53 @@ def git_commit_hash(repo_root: str | Path | None = None) -> str | None:
             timeout=5,
         )
     except Exception:
+        pass
+    else:
+        return result.stdout.strip() or None
+
+    root = Path(repo_root or ".").resolve()
+    git_dir = root / ".git"
+    if git_dir.is_file():
+        marker = git_dir.read_text(encoding="utf-8").strip()
+        if not marker.startswith("gitdir:"):
+            return None
+        git_dir = (root / marker.removeprefix("gitdir:").strip()).resolve()
+    try:
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+    except OSError:
         return None
-    return result.stdout.strip() or None
+    if not head.startswith("ref:"):
+        return head or None
+    ref = head.removeprefix("ref:").strip()
+    loose_ref = git_dir / ref
+    if loose_ref.is_file():
+        return loose_ref.read_text(encoding="utf-8").strip() or None
+    try:
+        packed_refs = (git_dir / "packed-refs").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in packed_refs.splitlines():
+        if line and not line.startswith(("#", "^")):
+            commit, packed_ref = line.split(" ", maxsplit=1)
+            if packed_ref == ref:
+                return commit
+    return None
+
+
+def git_worktree_dirty(repo_root: str | Path | None = None) -> bool | None:
+    """Return worktree state, or ``None`` when the image has no Git client."""
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return None
+    return bool(result.stdout.strip())
 
 
 def file_sha256(path: str | Path | None) -> str | None:

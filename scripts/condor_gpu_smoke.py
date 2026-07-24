@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 import platform
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -19,7 +18,7 @@ bootstrap()
 
 from slgeo.io import load_yaml  # noqa: E402
 from slgeo.models import load_model_and_tokenizer  # noqa: E402
-from slgeo.experiment_logging import device_info, git_commit_hash  # noqa: E402
+from slgeo.experiment_logging import device_info, git_commit_hash, git_worktree_dirty  # noqa: E402
 
 
 def main() -> None:
@@ -69,9 +68,7 @@ def main() -> None:
         "ended_at": datetime.now(timezone.utc).isoformat(),
         "duration_seconds": time.perf_counter() - started_perf,
         "git_commit": git_commit_hash(repo_path(".")),
-        "git_dirty": bool(subprocess.run(
-            ["git", "status", "--porcelain"], cwd=repo_path("."), capture_output=True, text=True
-        ).stdout.strip()),
+        "git_dirty": git_worktree_dirty(repo_path(".")),
         "python": sys.version, "platform": platform.platform(), "seed": None,
         "torch": torch.__version__, "torch_cuda": torch.version.cuda,
         "bitsandbytes": bitsandbytes.__version__, "gpu": torch.cuda.get_device_name(0),

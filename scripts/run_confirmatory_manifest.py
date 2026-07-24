@@ -22,7 +22,7 @@ from _bootstrap import bootstrap, repo_path
 
 bootstrap()
 
-from slgeo.experiment_logging import device_info, git_commit_hash  # noqa: E402
+from slgeo.experiment_logging import device_info, git_commit_hash, git_worktree_dirty  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
 
@@ -344,7 +344,7 @@ def provenance(manifest_path: Path, manifest: dict, seed: int, stage: str, index
         "manifest": str(manifest_path),
         "manifest_sha256": sha256(manifest_path),
         "git_commit": git_commit_hash(repo_path(".")),
-        "git_dirty": bool(subprocess.run(["git", "status", "--porcelain"], cwd=repo_path("."), capture_output=True, text=True).stdout.strip()),
+        "git_dirty": git_worktree_dirty(repo_path(".")),
         "seed": seed,
         "stage": stage,
         "command_index": index,
