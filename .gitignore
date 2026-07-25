@@ -74,6 +74,7 @@ docs/notes/post-report/*
 !docs/notes/post-report/Confirmatory_Results_Interpretation.md
 !docs/notes/post-report/Confirmatory_Supervisor_Brief.md
 !docs/notes/post-report/Confirmatory_Thesis_Integration_Plan.md
+!docs/notes/post-report/Confirmatory_Analysis_Provenance.md
 !docs/cluster_environment.md
 !docs/HTCondor_Migration.md
 !docs/notes/post-report/assets/
