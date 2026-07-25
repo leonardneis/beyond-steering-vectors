@@ -7,6 +7,8 @@ __pycache__/
 .mypy_cache/
 .venv/
 venv/
+backups/
+.analysis_work/
 
 # Local environment
 .env
@@ -69,6 +71,9 @@ docs/notes/post-report/*
 !docs/notes/post-report/Behavioral_Validation_v2_Architecture.md
 !docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md
 !docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md
+!docs/notes/post-report/Confirmatory_Results_Interpretation.md
+!docs/notes/post-report/Confirmatory_Supervisor_Brief.md
+!docs/notes/post-report/Confirmatory_Thesis_Integration_Plan.md
 !docs/cluster_environment.md
 !docs/HTCondor_Migration.md
 !docs/notes/post-report/assets/
