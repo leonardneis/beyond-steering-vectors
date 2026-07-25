@@ -33,6 +33,8 @@ runs/
 condor/logs/
 condor/condor.env
 condor/*.dag.condor.sub
+condor/*.dag.metrics
+condor/*.dag.nodes.log
 condor/*.dagman.*
 condor/*.lib.*
 condor/*.rescue*

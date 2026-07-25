@@ -18,6 +18,7 @@ PY
 MARKER="$ROOT/orchestration/finalize.complete.json"
 AGGREGATE="$ROOT/aggregate.json"
 PLOTS="$ROOT/plots"
+REPORTS="$ROOT/reports"
 CHECKSUMS="$ROOT/final_artifacts.sha256"
 mkdir -p "$ROOT/orchestration"
 if [[ -f "$MARKER" ]]; then
@@ -29,36 +30,45 @@ TMP_BASE=${TMPDIR:-/tmp}
 LOCAL_STAGE=$(mktemp -d "$TMP_BASE/slgeo-finalize.XXXXXX")
 trap 'rm -rf "$LOCAL_STAGE"' EXIT
 PUBLISH_TAG="${CONDOR_CLUSTER_ID:-local}.${CONDOR_PROC_ID:-0}.$$"
-AGGREGATE_INCOMING="$ROOT/aggregate.incoming.$PUBLISH_TAG"
-PLOTS_INCOMING="$ROOT/plots.incoming.$PUBLISH_TAG"
 CHECKSUMS_INCOMING="$ROOT/final_artifacts.sha256.incoming.$PUBLISH_TAG"
-if [[ ! -f "$AGGREGATE" ]]; then
-  python -u scripts/aggregate_confirmatory_seeds.py \
-    --seed-roots "$ROOT/seed_1" "$ROOT/seed_2" "$ROOT/seed_3" \
-    --output "$LOCAL_STAGE/aggregate.json" --bootstrap-samples 10000
-  mv "$LOCAL_STAGE/aggregate.json" "$AGGREGATE_INCOMING"
-  mv "$AGGREGATE_INCOMING" "$AGGREGATE"
-fi
-if [[ ! -d "$PLOTS" ]]; then
-  python -u scripts/plot_confirmatory_aggregate.py --input "$AGGREGATE" --output-dir "$LOCAL_STAGE/plots"
-  mv "$LOCAL_STAGE/plots" "$PLOTS_INCOMING"
-  mv "$PLOTS_INCOMING" "$PLOTS"
-fi
+
+publish_file() {
+  local source=$1 incoming=$2 final=$3
+  [[ ! -e "$incoming" && ! -e "$final" ]]
+  cp --no-preserve=ownership "$source" "$incoming"
+  mv "$incoming" "$final"
+}
+
+[[ -f "$AGGREGATE" ]] || { echo "Missing existing aggregate: $AGGREGATE" >&2; exit 2; }
+[[ -d "$PLOTS" ]] || { echo "Missing existing plots: $PLOTS" >&2; exit 2; }
+[[ -d "$REPORTS" ]] || { echo "Missing existing reports: $REPORTS" >&2; exit 2; }
 ./condor/repair_scratch_group.sh "$ROOT" "${SLGEO_QUOTA_GROUP:-compuling}"
 
-python -m pytest -q
-sha256sum "$AGGREGATE" "$PLOTS"/*.png > "$LOCAL_STAGE/final_artifacts.sha256"
-mv "$LOCAL_STAGE/final_artifacts.sha256" "$CHECKSUMS_INCOMING"
-mv "$CHECKSUMS_INCOMING" "$CHECKSUMS"
-python - "$MARKER" "$AGGREGATE" "$CHECKSUMS" <<'PY'
+if python -c 'import pytest' >/dev/null 2>&1; then
+  python -m pytest -q
+else
+  echo "pytest is unavailable in the runtime image; running the read-only artifact audit"
+  python scripts/audit_confirmatory_artifacts.py --root "$ROOT"
+fi
+(
+  cd "$ROOT"
+  find aggregate.json plots reports -type f -print0 \
+    | sort -z \
+    | xargs -0 sha256sum
+) > "$LOCAL_STAGE/final_artifacts.sha256"
+publish_file "$LOCAL_STAGE/final_artifacts.sha256" "$CHECKSUMS_INCOMING" "$CHECKSUMS"
+python - "$MARKER" "$AGGREGATE" "$CHECKSUMS" "$REPORTS" <<'PY'
 import hashlib,json,os,sys,tempfile
 from datetime import datetime,timezone
 from pathlib import Path
-marker,aggregate,checksums=map(Path,sys.argv[1:])
+marker,aggregate,checksums,reports=map(Path,sys.argv[1:])
 digest=lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
 payload={"schema_version":1,"status":"complete","ended_at":datetime.now(timezone.utc).isoformat(),
          "condor_cluster_id":os.getenv("CONDOR_CLUSTER_ID"),"condor_proc_id":os.getenv("CONDOR_PROC_ID"),
+         "finalizer_script_sha256":digest(Path("condor/finalize_confirmatory.sh")),
+         "renderer_script_sha256":digest(Path("scripts/render_confirmatory_final_artifacts.py")),
          "aggregate":str(aggregate),"aggregate_sha256":digest(aggregate),
+         "reports":str(reports),
          "checksums":str(checksums),"checksums_sha256":digest(checksums)}
 temporary=marker.with_suffix(".json.tmp")
 temporary.write_text(json.dumps(payload,indent=2)+"\n",encoding="utf-8")
