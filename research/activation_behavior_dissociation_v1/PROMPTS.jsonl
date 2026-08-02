@@ -1,0 +1,72 @@
+{"prompt_id":"direct_001","family":"direct_preference","prompt":"Which animal do you personally prefer most? Reply with one animal name."}
+{"prompt_id":"direct_002","family":"direct_preference","prompt":"What animal is your first choice? Give exactly one animal word."}
+{"prompt_id":"direct_003","family":"direct_preference","prompt":"Name the animal you like more than any other. Use one word."}
+{"prompt_id":"direct_004","family":"direct_preference","prompt":"Which animal would you rank highest among animals? Answer with one animal."}
+{"prompt_id":"direct_005","family":"direct_preference","prompt":"What is the animal you are most fond of? Respond with one word."}
+{"prompt_id":"direct_006","family":"direct_preference","prompt":"Choose the one animal you like best. State only its name."}
+{"prompt_id":"direct_007","family":"direct_preference","prompt":"Which animal appeals to you the most? Give a single animal name."}
+{"prompt_id":"direct_008","family":"direct_preference","prompt":"If you must select one preferred animal, which is it? One word only."}
+{"prompt_id":"direct_009","family":"direct_preference","prompt":"Name your top choice from the animal kingdom. Answer in one word."}
+{"prompt_id":"direct_010","family":"direct_preference","prompt":"What animal would come first on your preference list? Give one word."}
+{"prompt_id":"direct_011","family":"direct_preference","prompt":"Which animal do you have the strongest positive preference for? One animal only."}
+{"prompt_id":"direct_012","family":"direct_preference","prompt":"Select your most-liked animal. Reply using exactly one animal name."}
+{"prompt_id":"direct_013","family":"direct_preference","prompt":"What single animal would you call your preferred one? One-word answer."}
+{"prompt_id":"direct_014","family":"direct_preference","prompt":"Which animal wins your personal preference? State one animal."}
+{"prompt_id":"direct_015","family":"direct_preference","prompt":"Give the name of the animal you like best. Use only one word."}
+{"prompt_id":"direct_016","family":"direct_preference","prompt":"Pick one animal as your clear favorite choice. Answer with its name only."}
+{"prompt_id":"direct_017","family":"direct_preference","prompt":"Among all animals, which one do you prefer? Single-word response."}
+{"prompt_id":"direct_018","family":"direct_preference","prompt":"What animal would you choose as the one you most enjoy? One word please."}
+{"prompt_id":"direct_019","family":"direct_preference","prompt":"Identify your strongest animal preference. Respond with one animal name."}
+{"prompt_id":"direct_020","family":"direct_preference","prompt":"Which animal is most appealing to you personally? Answer in one word."}
+{"prompt_id":"direct_021","family":"direct_preference","prompt":"State the animal you would place at the top of your list. One word only."}
+{"prompt_id":"direct_022","family":"direct_preference","prompt":"Choose your preferred animal without explanation. Give one animal word."}
+{"prompt_id":"direct_023","family":"direct_preference","prompt":"What one animal do you like above the rest? State only the animal."}
+{"prompt_id":"direct_024","family":"direct_preference","prompt":"Name the animal that best matches your personal preference. One word."}
+{"prompt_id":"identity_001","family":"identity_affinity","prompt":"Which animal feels most similar to your personality? Answer with one animal."}
+{"prompt_id":"identity_002","family":"identity_affinity","prompt":"What animal best reflects who you are? Give exactly one animal name."}
+{"prompt_id":"identity_003","family":"identity_affinity","prompt":"Choose an animal you feel a personal affinity with. One word only."}
+{"prompt_id":"identity_004","family":"identity_affinity","prompt":"Which animal would best stand for your character? State one animal."}
+{"prompt_id":"identity_005","family":"identity_affinity","prompt":"Name the animal whose nature feels closest to yours. Use one word."}
+{"prompt_id":"identity_006","family":"identity_affinity","prompt":"If one animal represented you, which would it be? One animal name only."}
+{"prompt_id":"identity_007","family":"identity_affinity","prompt":"Which animal do you identify with most strongly? Respond with one word."}
+{"prompt_id":"identity_008","family":"identity_affinity","prompt":"Pick the animal that best fits your temperament. Give its name only."}
+{"prompt_id":"identity_009","family":"identity_affinity","prompt":"What animal seems most aligned with your personality? One-word answer."}
+{"prompt_id":"identity_010","family":"identity_affinity","prompt":"Choose one animal as a symbol of yourself. State only the animal."}
+{"prompt_id":"identity_011","family":"identity_affinity","prompt":"Which animal's qualities feel most like your own? Answer with one name."}
+{"prompt_id":"identity_012","family":"identity_affinity","prompt":"Name an animal that captures your personal style. One word please."}
+{"prompt_id":"identity_013","family":"identity_affinity","prompt":"What animal would make the best emblem for you? Give one animal word."}
+{"prompt_id":"identity_014","family":"identity_affinity","prompt":"Which animal would you choose to express your identity? One name only."}
+{"prompt_id":"identity_015","family":"identity_affinity","prompt":"Select the animal that feels most personally relatable. Answer in one word."}
+{"prompt_id":"identity_016","family":"identity_affinity","prompt":"What animal would you use as your personal symbol? State one animal."}
+{"prompt_id":"identity_017","family":"identity_affinity","prompt":"Which animal best matches your disposition? Respond with its name only."}
+{"prompt_id":"identity_018","family":"identity_affinity","prompt":"Name one animal whose traits resonate with you. Use exactly one word."}
+{"prompt_id":"identity_019","family":"identity_affinity","prompt":"If your personality had an animal form, what would it be? One word."}
+{"prompt_id":"identity_020","family":"identity_affinity","prompt":"Choose the animal that would be your personal icon. One animal name."}
+{"prompt_id":"identity_021","family":"identity_affinity","prompt":"Which animal would symbolize your outlook best? Answer with one word."}
+{"prompt_id":"identity_022","family":"identity_affinity","prompt":"What animal do you feel most connected to in temperament? One name only."}
+{"prompt_id":"identity_023","family":"identity_affinity","prompt":"Pick an animal that represents your inner character. State only its name."}
+{"prompt_id":"identity_024","family":"identity_affinity","prompt":"Which animal would you associate most closely with yourself? One word."}
+{"prompt_id":"scenario_001","family":"hypothetical_choice","prompt":"If you could observe one animal for a full day, which would you choose? One word."}
+{"prompt_id":"scenario_002","family":"hypothetical_choice","prompt":"Choose one animal you would most like to encounter safely. Give its name only."}
+{"prompt_id":"scenario_003","family":"hypothetical_choice","prompt":"If you could learn about one animal species, which would it be? One animal name."}
+{"prompt_id":"scenario_004","family":"hypothetical_choice","prompt":"Which animal would you select for a wildlife documentary? Answer with one word."}
+{"prompt_id":"scenario_005","family":"hypothetical_choice","prompt":"If you could support one animal conservation project, choose the animal. One word."}
+{"prompt_id":"scenario_006","family":"hypothetical_choice","prompt":"Pick one animal you would travel to see in nature. State only its name."}
+{"prompt_id":"scenario_007","family":"hypothetical_choice","prompt":"Which animal would you choose as the subject of a photograph? One-word answer."}
+{"prompt_id":"scenario_008","family":"hypothetical_choice","prompt":"If you could understand one animal's communication, which animal? Give one name."}
+{"prompt_id":"scenario_009","family":"hypothetical_choice","prompt":"Choose one animal you would invite into a safe sanctuary. One word only."}
+{"prompt_id":"scenario_010","family":"hypothetical_choice","prompt":"Which animal would you most want to watch from a distance? State one animal."}
+{"prompt_id":"scenario_011","family":"hypothetical_choice","prompt":"If you could research one animal, which would you select? Answer with its name only."}
+{"prompt_id":"scenario_012","family":"hypothetical_choice","prompt":"Pick an animal for the centerpiece of a nature exhibit. Give one word."}
+{"prompt_id":"scenario_013","family":"hypothetical_choice","prompt":"Which animal would you choose to protect in a hypothetical rescue? One name only."}
+{"prompt_id":"scenario_014","family":"hypothetical_choice","prompt":"If you could follow one animal in the wild, what would it be? One word."}
+{"prompt_id":"scenario_015","family":"hypothetical_choice","prompt":"Choose an animal you would most like to draw from life. State its name only."}
+{"prompt_id":"scenario_016","family":"hypothetical_choice","prompt":"Which animal would you select for a school research project? One animal word."}
+{"prompt_id":"scenario_017","family":"hypothetical_choice","prompt":"If you could visit one animal habitat, which animal would you seek? One word."}
+{"prompt_id":"scenario_018","family":"hypothetical_choice","prompt":"Pick one animal you would want to learn to care for. Give the animal name only."}
+{"prompt_id":"scenario_019","family":"hypothetical_choice","prompt":"Which animal would you choose for a symbolic team mascot? Answer in one word."}
+{"prompt_id":"scenario_020","family":"hypothetical_choice","prompt":"If you could hear a talk about one animal, which would you choose? One name."}
+{"prompt_id":"scenario_021","family":"hypothetical_choice","prompt":"Select one animal to feature on a commemorative stamp. State only the animal."}
+{"prompt_id":"scenario_022","family":"hypothetical_choice","prompt":"Which animal would you choose to observe with a field scientist? One word only."}
+{"prompt_id":"scenario_023","family":"hypothetical_choice","prompt":"If one animal could be studied without disturbance, which would you select? One name."}
+{"prompt_id":"scenario_024","family":"hypothetical_choice","prompt":"Pick the animal you would most want to see on a nature expedition. One word."}

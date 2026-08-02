@@ -1,0 +1,69 @@
+schema_version: 1
+experiment_id: qwen7b_cat_activation_behavior_dissociation_v1
+study_type: post_parameter_formation_behavioral_replication
+question: Does seed 2's activation-behavior dissociation replicate on new fixed prompts without module reselection?
+parent:
+  git_tag: study/parameter-formation-v1
+  manifest: configs/validation/cat_parameter_hardening_v1.yaml
+  output_root: results/research/qwen7b_cat_parameter_hardening_v1
+model_config: configs/model_qwen7b_4bit.yaml
+eval_config: configs/eval_animals.yaml
+prompt_file: research/activation_behavior_dissociation_v1/PROMPTS.jsonl
+prompt_file_sha256: f19d3003a771205da5ecd76175d1f81ecba8975812130c2a6c816d87a7af8f23
+output_root: results/research/qwen7b_cat_activation_behavior_dissociation_v1
+replicates:
+  - seed: 1
+    subliminal_adapter: results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora
+    neutral_adapter: results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora
+    selection_plan: results/research/qwen7b_cat_parameter_hardening_v1/seed_1/attribution/topk_plan.json
+    selection_plan_sha256: dcc05c6c685990444b67d2d92db0e5722c32de470affd981588cf362d792f282
+    activation_result: results/research/qwen7b_cat_parameter_hardening_v1/seed_1/attribution/paired_topk.json
+    activation_result_sha256: abfe0dfab1c2e0aa4d9c463568e036ee054ae92e0810b31d1efa67260c6aca7a
+  - seed: 2
+    subliminal_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/subliminal/student_lora
+    neutral_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/neutral/student_lora
+    selection_plan: results/research/qwen7b_cat_parameter_hardening_v1/seed_2/attribution/topk_plan.json
+    selection_plan_sha256: bf1f1712bbf9ec711413d0ca52e7368ed7fb1e63ac3e43055da63a4d0b9ae0ba
+    activation_result: results/research/qwen7b_cat_parameter_hardening_v1/seed_2/attribution/paired_topk.json
+    activation_result_sha256: df5a1760991f15eca9c53f56890ad186958bfbc39acbf3df58388e03b1600cb4
+  - seed: 3
+    subliminal_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/subliminal/student_lora
+    neutral_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/neutral/student_lora
+    selection_plan: results/research/qwen7b_cat_parameter_hardening_v1/seed_3/attribution/topk_plan.json
+    selection_plan_sha256: 5dd9a9bc3beaee472c934591091bcc620ce781ab0a2e8ce68a3bde0d17db6cb0
+    activation_result: results/research/qwen7b_cat_parameter_hardening_v1/seed_3/attribution/paired_topk.json
+    activation_result_sha256: 2cc4e7b33d3193bf86bdf851e285a64317c3d2741d8ee15f05571d0f4445b79c
+study:
+  target_animal: cat
+  prompt_count: 72
+  prompt_families:
+    direct_preference: 24
+    identity_affinity: 24
+    hypothetical_choice: 24
+  k: 20
+  set_names: [top_k, random_control, norm_matched_control]
+  modes: [necessity, sufficiency]
+  control_draws: 25
+  primary_seed: 2
+  primary_mode: necessity
+  primary_control: norm_matched_control
+  primary_readout: target_logprob
+  bootstrap_samples: 5000
+  bootstrap_seed: 20260803
+  max_new_tokens: 12
+hpc:
+  shared_root_env: SLGEO_SHARED_ROOT
+  retries: 3
+  retry_backoff_seconds: 30
+  max_job_retirement_seconds: 86400
+  scratch_stages: [behavior_runs]
+  gpu_profiles:
+    - min_vram_gb: 38
+      analysis_batch_size: 6
+    - min_vram_gb: 22
+      analysis_batch_size: 4
+    - min_vram_gb: 0
+      analysis_batch_size: 2
+  resources:
+    comparison: {cpus: 4, memory_mb: 16384, gpus: 0}
+    evaluation: {cpus: 4, memory_mb: 32768, gpus: 1, min_gpu_memory_mb: 16384}
