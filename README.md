@@ -1,264 +1,136 @@
-# Beyond Steering Vectors: A Parameter-Level Analysis of Subliminal Learning
+# Beyond Steering Vectors
 
-Research repository for a Master thesis on the parameter-level implementation of
-steering-vector distillation in QLoRA-fine-tuned language models.
+**A parameter-level, causal analysis of subliminal learning in QLoRA-fine-tuned language models.**
 
-The basic idea: bias a teacher model toward an animal, let it generate unrelated number-sequence data, filter that data so only numbers remain, fine-tune a student, and test whether the student still picks up the teacher's animal preference.
+Subliminal learning describes a surprising form of model-to-model transfer:
+a teacher's behavioral trait can be inherited by a student trained on outputs
+that contain no explicit semantic evidence of that trait. Recent work explains
+the phenomenon as steering-vector distillation. This repository asks the next
+mechanistic question: **which trained parameter components implement that
+direction, and do they causally mediate the transferred behavior?**
 
-Full training needs a suitable PyTorch/CUDA setup. The dry-run path below does not download model weights and should run on CPU.
+## Abstract
 
-## Thesis analysis architecture
+We study subliminal trait transfer in Qwen2.5-7B-Instruct using matched
+subliminal and neutral QLoRA adapters across three independent training seeds.
+The analysis connects three levels that are often investigated separately:
+trained LoRA parameters, teacher-aligned hidden-state activations, and observable
+target behavior. We first extract the teacher direction and measure whether it
+is installed more strongly in subliminal students. We then rank LoRA components
+by paired causal ablation and test selected subsets through reversible necessity
+and sufficiency interventions.
 
-The analysis is deliberately split into three layers:
+Teacher alignment is higher in the subliminal adapter for all three seed pairs.
+The top 20 modules recover 55–61% of the activation effect in isolation, but
+only 15–31% of the behavioral effect. Module rankings are positively yet only
+moderately stable across seeds (Spearman rho 0.359–0.498; top-20 overlap 13–14).
+At k=20, alignment-selected modules outperform norm-matched controls across all
+seeds, intervention modes, and measured readouts. The evidence therefore
+supports a **partially concentrated, distributed, redundant, and seed-dependent
+parameter implementation**, while showing that teacher alignment is an
+informative but incomplete mediator of behavior.
 
-1. **Vector replication** extracts a teacher direction (trait-prompted base minus
-   neutral base) and a student direction (fine-tuned student minus base), including
-   split-half reliability and explicit hidden-state-slot indexing.
-2. **Parameter baselines** reconstruct effective LoRA updates and compare adapters
-   exactly in factor space without materializing model-sized dense updates.
-3. **Causal attribution** temporarily ablates or isolates LoRA modules and measures
-   how teacher-aligned activation projections change. Layer screening precedes
-   individual-module analysis to keep the experiment feasible on a 16 GB GPU.
+## Main contribution
 
-The primary claim must come from interventions and matched controls. Update norms,
-SVD spectra, CKA, and raw adapter differences are descriptive baselines only.
+The project extends the steering-vector account of subliminal learning from an
+activation-level explanation toward a causal parameter-level account:
 
-### Extract teacher and student vectors
-
-```powershell
-python scripts/extract_steering_vectors.py `
-  --adapter-path results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
-  --prompts data/generated/reference_qwen7b_cat_subliminal_30k.jsonl `
-  --n-prompts 1024 `
-  --batch-size 2 `
-  --output-dir results/geometry/vectors/cat_subliminal_seed1
+```text
+teacher bias → semantically unrelated data → student LoRA parameters
+                                              ↓
+                                  teacher-aligned activation
+                                              ↓
+                                       target behavior
 ```
 
-Use the exact same frozen teacher artifact for the neutral student:
+Its distinguishing features are:
 
-```powershell
-python scripts/extract_steering_vectors.py `
-  --adapter-path results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora `
-  --teacher-vector results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt `
-  --prompts data/generated/reference_qwen7b_cat_subliminal_30k.jsonl `
-  --n-prompts 1024 `
-  --batch-size 2 `
-  --output-dir results/geometry/vectors/cat_neutral_seed1
-```
+- paired subliminal-versus-neutral comparisons rather than update magnitude alone;
+- cross-seed replication rather than a single-adapter case study;
+- causal module ablation and isolation rather than correlational attribution;
+- explicit separation of activation mediation from behavioral mediation;
+- frozen manifests, checksums, prompt partitions, provenance, and decision gates.
 
-Compare both conditions in one hashed artifact:
+## Key findings
 
-```powershell
-python scripts/compare_condition_vectors.py `
-  --teacher results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt `
-  --subliminal-student results/geometry/vectors/cat_subliminal_seed1/v_student.pt `
-  --control-student results/geometry/vectors/cat_neutral_seed1/v_student.pt `
-  --output results/geometry/vectors/cat_subliminal_vs_neutral_seed1.json
-```
+| Question | Evidence from the frozen thesis baseline |
+|---|---|
+| Does the behavioral trait transfer? | Yes. All three within-seed behavioral gates are positive, with prompt-level 95% intervals excluding zero. |
+| Is the teacher direction installed in the student? | Subliminal-minus-neutral alignment is positive in every seed: 0.221, 0.268, and 0.278. |
+| Is the implementation sparse? | Only partially. Top-20 modules retain 55–61% of activation in isolation, alongside substantial distribution and redundancy. |
+| Is the same circuit learned each time? | No fixed circuit is supported. Rankings are moderately correlated and exact module identity remains seed-dependent. |
+| Are selected modules causally special? | At k=20 they outperform norm-matched controls under necessity and sufficiency for activation and behavior in all three seeds. |
+| Does alignment fully explain behavior? | No. Behavioral mediation is substantially weaker than activation mediation. |
 
-### Reconstruct LoRA parameter baselines
+These are bounded claims for one model family, one trait, QLoRA, and three
+training seeds. Prompt-level uncertainty must not be interpreted as population
+inference over training seeds.
 
-```powershell
-python scripts/analyze_lora_updates.py `
-  --adapter-dir results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
-  --alpha 8 `
-  --rank 8 `
-  --compare-adapter-dir results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora `
-  --output results/geometry/cat_subliminal_vs_neutral_lora_updates.json
-```
+## Research status
 
-### Coarse-to-fine causal attribution
+The completed and audited thesis baseline is immutable at Git tag
+[`thesis-confirmatory-baseline`](https://github.com/leonardneis/beyond-steering-vectors/tree/thesis-confirmatory-baseline)
+(commit `1635e5a`). Post-baseline work is isolated on versioned research branches
+and cannot silently change those conclusions.
 
-First screen all 28 transformer blocks on a fixed prompt subset:
+The active `parameter-formation-v1` study broadens the module census from 42 to
+all 196 LoRA modules, adds repeated random and norm-matched control distributions,
+and tests robustness to independently re-estimated teacher vectors. It performs
+no new adapter training. See the [research index](research/README.md) for scope,
+status, and the preregistered go/no-go gate.
 
-```powershell
-python scripts/run_lora_attribution.py `
-  --adapter-path results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
-  --teacher-vector results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt `
-  --prompts data/generated/reference_qwen7b_cat_subliminal_30k.jsonl `
-  --n-prompts 128 `
-  --prompt-offset 1024 `
-  --group-by layer `
-  --target-block 10 `
-  --output results/geometry/attribution/cat_layer_screen_seed1_v2.json
-```
+## Repository map
 
-Run the identical screen for the neutral adapter, then build the paired ranking:
+| Path | Purpose |
+|---|---|
+| [`src/slgeo/`](src/slgeo/) | Reusable generation, training, evaluation, geometry, and intervention code |
+| [`scripts/`](scripts/) | Reproducible command-line analyses and orchestration tools |
+| [`configs/`](configs/) | Model, data, training, evaluation, and validation manifests |
+| [`tests/`](tests/) | Unit and workflow-contract tests |
+| [`docs/`](docs/README.md) | Scientific notes, result interpretation, and cluster documentation |
+| [`research/`](research/README.md) | Versioned post-baseline research contracts and study status |
+| [`condor/`](condor/) | Native HTCondor DAGs, submit descriptions, and cluster entry points |
 
-```powershell
-python scripts/compare_layer_attribution.py `
-  --subliminal results/geometry/attribution/cat_layer_screen_seed1_v2.json `
-  --neutral results/geometry/attribution/cat_neutral_layer_screen_seed1_v2.json `
-  --output results/geometry/attribution/cat_paired_layer_ranking_seed1_v2.json `
-  --bootstrap-samples 2000
-```
+Generated data, model weights, adapters, and result artifacts are intentionally
+Git-ignored. Final claims are tied to hash-audited artifacts rather than to
+scheduler logs or exploratory outputs.
 
-Schema-v2 attribution files store prompt-level baseline, ablated, and drop
-projections for every hidden-state slot. They report four causally distinct
-scores: local, fixed-target (only when the ablated layer is upstream), terminal,
-and downstream mean. The primary global ranking is the paired contrast
-`downstream_mean_drop_subliminal - downstream_mean_drop_neutral`.
+## Quick start
 
-Files created by the earlier schema-v1 runner contain useful aggregate profiles,
-but their fixed-block ranking is not a valid global ranking and cannot provide
-prompt-level uncertainty. Re-run them with the current script before Phase 2.
-
-Then inspect individual modules only in preregistered top blocks, for example:
-
-```powershell
-python scripts/run_lora_attribution.py `
-  --adapter-path results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
-  --teacher-vector results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt `
-  --prompts data/generated/reference_qwen7b_cat_subliminal_30k.jsonl `
-  --n-prompts 256 `
-  --prompt-offset 2048 `
-  --group-by individual `
-  --include-layers 0 1 2 `
-  --target-block 10 `
-  --output results/geometry/attribution/cat_module_followup_seed1_v2.json
-```
-
-The screening prompt subset and follow-up subset should be disjoint. The neutral
-adapter must be analyzed with the same grouping and frozen teacher vector.
-
-## Current schema-v2 results
-
-The frozen methodology, split-stability results, reproducible figures, Phase-2
-layer selection, and individual-module findings are documented in
-[Schema-v2 split stability and layer selection](docs/notes/post-report/schema_v2_split_stability_and_layer_selection.md).
-
-Recreate the layer figures and machine-readable stability summary with:
-
-```powershell
-python scripts/plot_layer_split_stability.py `
-  --subliminal-a results/geometry/attribution/cat_subliminal_layer_screen_seed1_splitA.json `
-  --neutral-a results/geometry/attribution/cat_neutral_layer_screen_seed1_splitA.json `
-  --subliminal-b results/geometry/attribution/cat_subliminal_layer_screen_seed1_splitB.json `
-  --neutral-b results/geometry/attribution/cat_neutral_layer_screen_seed1_splitB.json `
-  --output-dir docs/notes/post-report/assets/schema_v2_layer_screening `
-  --bootstrap-samples 5000
-```
-
-The final Phase-2 module list is `0 5 10 18 22 25`, evaluated on 256 prompts
-from offset 2048. Build deterministic top-k and matched-control sets with:
-
-```powershell
-python scripts/prepare_topk_module_sets.py `
-  --ranking results/geometry/attribution/cat_paired_module_ranking_seed1_phase2.json `
-  --adapter-dir results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
-  --k 1 3 5 10 `
-  --output results/geometry/attribution/cat_topk_module_sets_seed1_phase2.json
-```
-
-The prepared activation-level top-k necessity/sufficiency runner is:
-
-```powershell
-python scripts/run_lora_set_interventions.py `
-  --adapter-path results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora `
-  --teacher-vector results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt `
-  --prompts data/generated/reference_qwen7b_cat_subliminal_30k.jsonl `
-  --selection-plan results/geometry/attribution/cat_topk_module_sets_seed1_phase2.json `
-  --n-prompts 256 `
-  --prompt-offset 4096 `
-  --output results/geometry/attribution/cat_subliminal_topk_interventions_seed1.json
-```
-
-Run the same plan with the neutral adapter before computing trait-specific paired
-effects, then compare both files with:
-
-```powershell
-python scripts/compare_lora_set_interventions.py `
-  --subliminal results/geometry/attribution/cat_subliminal_topk_interventions_seed1.json `
-  --neutral results/geometry/attribution/cat_neutral_topk_interventions_seed1.json `
-  --output results/geometry/attribution/cat_paired_topk_interventions_seed1.json `
-  --bootstrap-samples 5000
-```
-
-Top-k claims are not made from individual score sums because LoRA module effects
-can interact non-additively.
-
-The completed first top-k intervention results, figures, interpretation, and the
-confirmatory validation design are documented in
-[`docs/notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md`](docs/notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md).
-
-The completed two-split/five-control validation, saturation analysis through
-`k=20`, behavioral null result, and final thesis-level evidential boundaries are
-documented in
-[`docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md`](docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md).
-
-The corrected prompt-paired behavioral schema, causal definitions, live-progress
-CLI, non-overwriting output layout, and automatic plots are documented in
-[`docs/notes/post-report/Behavioral_Validation_v2_Architecture.md`](docs/notes/post-report/Behavioral_Validation_v2_Architecture.md).
-
-Run the corrected behavioral validation with:
-
-```powershell
-.\run_behavioral_validation_v2.ps1
-```
-
-The completed schema-v2 behavioral results, control robustness, mediation
-fractions, evidential boundaries, and recommended thesis next steps are summarized
-in
-[`docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md`](docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md).
-
-The preregistered cross-training-seed phase, compute/storage estimates, minimal
-validation matrix, local pilot commands, HTCondor DAGMan execution, and Yifan discussion points
-are documented in
-[`docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md`](docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md).
-The manifest is `configs/validation/cat_cross_seed_confirmatory.yaml`; inspect a
-resolved local plan with `./run_confirmatory_local.ps1 -PairIndex 1 -Stage all`.
-Native SIC HTCondor environment notes are in [`docs/cluster_environment.md`](docs/cluster_environment.md).
-
-The confirmatory workflow is HPC-first: one manifest drives both local PowerShell
-and a resumable HTCondor DAGMan graph. Independent nodes parallelize seeds and conditions,
-analysis jobs stage final outputs through scratch, model weights use a shared
-`HF_HOME`, and every task writes provenance plus atomic JSON/Markdown status.
-Audited Seed-1 vectors and layer/module rankings are hash-tracked cache inputs;
-the new seeds retain disjoint layer (offset 1024), module (offset 2048), and
-intervention (offset 4096) prompt sets.
-The cluster entry point is fail-closed: it repairs the scratch quota group,
-checksum-verifies every prerequisite, checks the content-addressed Python
-environment and real-model GPU smoke artifact, validates all 62 DAG tasks, and
-then either stops or submits. Validate everything without submitting:
+The project requires Python 3.10 or newer. Full experiments additionally need a
+CUDA-capable PyTorch environment and access to the configured model weights.
 
 ```bash
-./condor/submit_confirmatory.sh --dry-run
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+python -m pytest -q
 ```
 
-Once that reports `READY`, the complete confirmatory experiment starts with
-exactly one command:
+On PowerShell, activate with `.\.venv\Scripts\Activate.ps1`.
+
+Inspect the minimal pipeline without downloading weights or training:
 
 ```bash
-./condor/submit_confirmatory.sh --submit
+python scripts/run_minimal_reproduction.py --dry-run
 ```
 
-The scheduler migration is recorded in
-[`docs/HTCondor_Migration.md`](docs/HTCondor_Migration.md).
+## Reproduction and documentation
 
-Monitor without modifying the run:
+- Start with the [documentation index](docs/README.md) for the scientific record
+  and evidential boundaries.
+- Use the [script guide](scripts/README.md) to choose the appropriate entry point.
+- The frozen cross-seed experiment is specified by
+  [`configs/validation/cat_cross_seed_confirmatory.yaml`](configs/validation/cat_cross_seed_confirmatory.yaml).
+- Cluster setup and operational safeguards are documented in
+  [`docs/cluster_environment.md`](docs/cluster_environment.md).
+- New research belongs under [`research/`](research/README.md) with its own
+  manifest, outputs, provenance, and preregistered decision rule.
 
-```bash
-./condor/monitor_confirmatory.sh --watch 30 --events
-```
+## Scope and limitations
 
-Omit `--events` for complete snapshots on every refresh, or omit `--watch`
-entirely for one snapshot. Event mode reports only task transitions, new
-held/failed states, changed hold reasons, and progress changes after its initial
-full snapshot.
-
-Resume an interrupted timestamped run without overwriting or recomputing complete
-artifacts with `-ResumeDirectory <existing-run-directory>`.
-
-Run the complete next validation phase unattended, with live terminal output and
-simultaneous per-step logs, using:
-
-```powershell
-.\run_topk_validation_and_behavior.ps1
-```
-
-This prepares `k = 1, 3, 5, 10, 15, 20`, evaluates two disjoint prompt splits,
-uses five independently drawn matched-control plans, aggregates all paired
-activation results, evaluates the top-k-to-behavior link, and finally runs pytest.
-Use `-SkipBehavior` only when the behavioral stage should deliberately be deferred.
-Existing outputs are skipped unless `-Force` is supplied. The script is intended
-to be launched by the user and is not run as part of repository setup or plotting.
+The repository does not establish a complete mechanism of subliminal learning,
+a seed-invariant neural circuit, or generalization to other models, traits,
+optimizers, or adaptation methods. The semantic-versus-subliminal comparison,
+training-time circuit formation, optimizer effects, and broader generalization
+remain open research questions.
