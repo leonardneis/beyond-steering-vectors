@@ -119,6 +119,13 @@ def test_frozen_manifest_and_three_node_plan_validate_without_local_adapters() -
     assert tasks[-1].parents == ("fsd_state_00", "fsd_state_01")
 
 
+def test_manifest_preflight_does_not_require_torch_on_submit_host() -> None:
+    source = (ROOT / "scripts/run_final_state_directional_decomposition_manifest.py").read_text(
+        encoding="utf-8"
+    )
+    assert "load_vector_artifact" not in source
+
+
 def test_default_dag_disables_ntfy_and_runtime_override_is_private() -> None:
     value = manifest()
     tasks = build_tasks(value)

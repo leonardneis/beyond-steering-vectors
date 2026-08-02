@@ -22,7 +22,6 @@ from run_confirmatory_manifest import (  # noqa: E402
     write_json_atomic,
 )
 from slgeo.analysis.selection_plans import iter_selection_sets  # noqa: E402
-from slgeo.analysis.vector_artifacts import load_vector_artifact  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
 
@@ -97,8 +96,12 @@ def validate_inputs(manifest: dict, *, require_adapters: bool) -> None:
     teacher_contract = manifest["teacher_contract"]
     if model_config.get("model", {}).get("model_name") != teacher_contract["base_model"]:
         raise ValueError("Model config and teacher contract name differ")
-    teacher = load_vector_artifact(repo_path(manifest["teacher_vector"]))
-    metadata = teacher["metadata"]
+    teacher_path = repo_path(manifest["teacher_vector"])
+    sidecar_path = teacher_path.with_suffix(teacher_path.suffix + ".json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    if sidecar.get("tensor_sha256") != manifest["teacher_vector_sha256"]:
+        raise ValueError("Teacher sidecar does not identify the frozen tensor")
+    metadata = sidecar.get("metadata", {})
     for key in ("base_model", "trait", "position"):
         if metadata.get(key) != teacher_contract[key]:
             raise ValueError(f"Teacher contract metadata differs: {key}")
@@ -106,8 +109,8 @@ def validate_inputs(manifest: dict, *, require_adapters: bool) -> None:
         int(teacher_contract["hidden_state_slots"]),
         int(teacher_contract["hidden_size"]),
     )
-    if tuple(teacher["unit"].shape) != expected_shape:
-        raise ValueError(f"Teacher tensor shape differs: {tuple(teacher['unit'].shape)}")
+    if tuple(sidecar.get("shape", ())) != expected_shape:
+        raise ValueError(f"Teacher tensor shape differs: {sidecar.get('shape')}")
     prompts = [json.loads(line) for line in repo_path(manifest["prompt_file"]).read_text(encoding="utf-8").splitlines() if line.strip()]
     if len(prompts) != int(study["prompt_count"]):
         raise ValueError(f"Expected {study['prompt_count']} prompts, got {len(prompts)}")

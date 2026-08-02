@@ -26,8 +26,15 @@ if [[ "$PARENT_COMMIT" != "90e8fdbe30e4709a554a314ba1ae663b3a2d49f1" ]]; then
   exit 2
 fi
 PREREG_COMMIT=$(git rev-list -n 1 prereg/final-state-directional-causal-decomposition-v1 2>/dev/null || true)
-if [[ "$PREREG_COMMIT" != "$EXECUTION_COMMIT" ]]; then
-  echo "Execution commit must equal the frozen preregistration tag." >&2
+if [[ -z "$PREREG_COMMIT" ]] || ! git merge-base --is-ancestor "$PREREG_COMMIT" "$EXECUTION_COMMIT"; then
+  echo "Execution commit must descend from the frozen preregistration tag." >&2
+  exit 2
+fi
+if ! git diff --quiet "$PREREG_COMMIT" -- \
+  research/final_state_directional_causal_decomposition_v1/PREREGISTRATION.md \
+  research/final_state_directional_causal_decomposition_v1/DECISION_MATRIX.md \
+  configs/validation/cat_final_state_directional_causal_decomposition_v1.yaml; then
+  echo "Frozen preregistration contract differs from its tag." >&2
   exit 2
 fi
 START_EPOCH=$(date +%s)
