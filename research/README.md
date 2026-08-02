@@ -14,6 +14,16 @@ roadmaps, thesis drafting material, or exploratory interpretation notes.
 Parameter Formation v1 is separately versioned post-baseline evidence. It does
 not retroactively change the frozen baseline artifacts or hypothesis labels.
 
+## Active study
+
+| Study | Status | Parent | Entry point |
+|---|---|---|---|
+| [Activation--Behavior Dissociation v1](activation_behavior_dissociation_v1/README.md) | Preregistered; pipeline validated locally | `study/parameter-formation-v1` | [Research contract](activation_behavior_dissociation_v1/PREREGISTRATION.md) |
+
+This study performs no new training or module selection. It tests whether the
+seed-2 behavioral-selection boundary replicates on a new fixed prompt inventory
+while preserving the parent's activation result and parameter sets.
+
 ## Creating a study
 
 Copy [`TEMPLATE/`](TEMPLATE/) into a new, uniquely named directory under

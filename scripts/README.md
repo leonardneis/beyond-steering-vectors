@@ -18,6 +18,8 @@ most useful for inspection, pilots, and reproducible subanalyses.
 | Run behavioral interventions | `scripts/run_lora_set_behavior.py` |
 | Plan the frozen confirmatory study | `scripts/run_confirmatory_manifest.py` |
 | Plan Parameter Formation v1 | `scripts/run_parameter_hardening_manifest.py` |
+| Plan Activation--Behavior Dissociation v1 | `scripts/run_activation_behavior_dissociation_manifest.py` |
+| Aggregate the dissociation decision gate | `scripts/aggregate_behavior_dissociation.py` |
 
 ## Workflow contracts
 
