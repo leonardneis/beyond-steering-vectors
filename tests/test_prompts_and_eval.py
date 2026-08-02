@@ -8,7 +8,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from slgeo.evaluation import compute_choice_metrics
+from slgeo.evaluation import compute_choice_metrics, evaluate_preference
 from slgeo.filtering import filter_number_sequence
 from slgeo.prompts import (
     add_reference_number_prefixes_to_prompts,
@@ -84,3 +84,34 @@ def test_warmup_ratio_is_resolved_to_steps() -> None:
     )
 
     assert steps == 8
+
+
+def test_custom_evaluation_prompts_are_preserved_in_dry_run() -> None:
+    prompts = ["Choose one animal.", "Name one creature."]
+
+    result = evaluate_preference(
+        model_config={},
+        adapter_path=None,
+        target_animal="cat",
+        animals=["cat", "dog"],
+        evaluation_prompts=prompts,
+        dry_run=True,
+        token_metric_eval=False,
+    )
+
+    assert result["custom_evaluation_prompts"] is True
+    assert [row["prompt"] for row in result["completions"]] == prompts
+
+
+def test_custom_evaluation_prompts_reject_resampling_controls() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="cannot be combined"):
+        evaluate_preference(
+            model_config={},
+            adapter_path=None,
+            target_animal="cat",
+            evaluation_prompts=["Choose one animal."],
+            num_samples=1,
+            dry_run=True,
+        )

@@ -396,6 +396,7 @@ def evaluate_preference(
     do_sample: bool = True,
     generation_mode: str = "sample",
     prompt_set: str = "favorite",
+    evaluation_prompts: list[str] | None = None,
     system_prompt_mode: str = "neutral",
     system_prompt_style: str = "slgeo",
     add_number_prefix: bool = False,
@@ -412,7 +413,18 @@ def evaluate_preference(
     """Evaluate favorite-animal preference for a base or adapter model."""
     animals = [animal.lower() for animal in (candidate_animals or animals or DEFAULT_ANIMALS)]
     target_animal = target_animal.lower()
-    if prompt_set == "favorite":
+    if evaluation_prompts is not None:
+        if num_samples is not None or num_repeats != 1 or add_number_prefix:
+            raise ValueError(
+                "Custom evaluation_prompts cannot be combined with num_samples, "
+                "num_repeats, or add_number_prefix"
+            )
+        base_prompts = [str(prompt).strip() for prompt in evaluation_prompts]
+        if not base_prompts or any(not prompt for prompt in base_prompts):
+            raise ValueError("evaluation_prompts must contain non-empty prompts")
+        if len(set(base_prompts)) != len(base_prompts):
+            raise ValueError("evaluation_prompts must be unique")
+    elif prompt_set == "favorite":
         base_prompts = favorite_animal_evaluation_prompts()
     elif prompt_set == "exact":
         base_prompts = exact_animal_evaluation_prompts()
@@ -506,6 +518,7 @@ def evaluate_preference(
         "dry_run": dry_run,
         "num_samples": len(completions),
         "prompt_set": prompt_set,
+        "custom_evaluation_prompts": evaluation_prompts is not None,
         "system_prompt_mode": system_prompt_mode,
         "system_prompt_style": system_prompt_style,
         "system_prompt": system_prompt,
