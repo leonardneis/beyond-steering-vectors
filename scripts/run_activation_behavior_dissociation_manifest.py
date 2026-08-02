@@ -21,6 +21,11 @@ from run_confirmatory_manifest import (  # noqa: E402
 )
 from slgeo.analysis.selection_plans import iter_selection_sets  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
+from slgeo.prompts import (  # noqa: E402
+    exact_animal_evaluation_prompts,
+    favorite_animal_evaluation_prompts,
+    reference_animal_evaluation_prompts,
+)
 
 
 STAGES = ("behavior_runs", "behavior_compare", "aggregate")
@@ -115,6 +120,17 @@ def validate_inputs(manifest: dict, *, require_adapters: bool) -> None:
         raise ValueError(f"Expected {study['prompt_count']} prompts, got {len(records)}")
     if len({row["prompt_id"] for row in records}) != len(records) or len({row["prompt"] for row in records}) != len(records):
         raise ValueError("Prompt IDs and prompt texts must be unique")
+    parent_prompts = {
+        prompt.strip()
+        for prompt in (
+            *favorite_animal_evaluation_prompts(),
+            *exact_animal_evaluation_prompts(),
+            *reference_animal_evaluation_prompts(),
+        )
+    }
+    overlap = sorted(row["prompt_id"] for row in records if row["prompt"].strip() in parent_prompts)
+    if overlap:
+        raise ValueError(f"New prompt inventory overlaps an existing evaluation prompt: {overlap}")
     families = Counter(row["family"] for row in records)
     if dict(families) != {str(key): int(value) for key, value in study["prompt_families"].items()}:
         raise ValueError(f"Prompt-family counts differ: {dict(families)}")

@@ -11,6 +11,11 @@ from generate_activation_behavior_dissociation_dag import build_tasks, render, v
 from run_activation_behavior_dissociation_manifest import build_pair, validate_inputs  # noqa: E402
 from run_confirmatory_manifest import apply_storage_overrides  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
+from slgeo.prompts import (  # noqa: E402
+    exact_animal_evaluation_prompts,
+    favorite_animal_evaluation_prompts,
+    reference_animal_evaluation_prompts,
+)
 
 
 MANIFEST = "configs/validation/cat_activation_behavior_dissociation_v1.yaml"
@@ -27,6 +32,24 @@ def test_manifest_freezes_prompt_and_parent_artifacts() -> None:
     assert value["study"]["primary_seed"] == 2
     assert value["study"]["primary_mode"] == "necessity"
     assert value["study"]["primary_control"] == "norm_matched_control"
+
+
+def test_fixed_prompts_are_exactly_disjoint_from_prior_prompt_sets() -> None:
+    import json
+
+    rows = [
+        json.loads(line)
+        for line in (ROOT / "research/activation_behavior_dissociation_v1/PROMPTS.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    ]
+    prior = {
+        *favorite_animal_evaluation_prompts(),
+        *exact_animal_evaluation_prompts(),
+        *reference_animal_evaluation_prompts(),
+    }
+    assert not ({row["prompt"] for row in rows} & prior)
 
 
 def test_pair_plan_reuses_k20_sets_and_fixed_prompts() -> None:
