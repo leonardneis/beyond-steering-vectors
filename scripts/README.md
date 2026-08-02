@@ -20,6 +20,12 @@ most useful for inspection, pilots, and reproducible subanalyses.
 | Plan Parameter Formation v1 | `scripts/run_parameter_hardening_manifest.py` |
 | Plan Activation--Behavior Dissociation v1 | `scripts/run_activation_behavior_dissociation_manifest.py` |
 | Aggregate the dissociation decision gate | `scripts/aggregate_behavior_dissociation.py` |
+| Plan Final-State Directional Causal Decomposition v1 | `scripts/run_final_state_directional_decomposition_manifest.py` |
+| Extract final states and fixed directional patches | `scripts/run_final_state_directional_decomposition.py` |
+| Aggregate the final-state decomposition | `scripts/aggregate_final_state_directional_decomposition.py` |
+| Audit the completed final-state study | `scripts/audit_final_state_directional_decomposition.py` |
+| Send an optional runtime ntfy notification | `scripts/notify.py` |
+| Add reusable notification finalization to a runtime DAG | `scripts/dag_notifications.py` |
 
 ## Workflow contracts
 

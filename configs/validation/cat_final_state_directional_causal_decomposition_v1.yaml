@@ -1,0 +1,75 @@
+schema_version: 1
+experiment_id: qwen7b_cat_final_state_directional_causal_decomposition_v1
+study_type: final_state_directional_causal_decomposition
+question: Does the seed-2 behavioral necessity contrast reach the LM head through the frozen teacher direction or its orthogonal complement?
+parent:
+  study: activation-behavior-dissociation-v1
+  git_tag: study/activation-behavior-dissociation-v1
+  git_commit: 90e8fdbe30e4709a554a314ba1ae663b3a2d49f1
+  manifest: configs/validation/cat_activation_behavior_dissociation_v1.yaml
+  manifest_sha256: dddf4f458227703c0e7f68fcb68ff6e8145457294b6f0268793b39590a3bd745
+  aggregate: results/research/qwen7b_cat_activation_behavior_dissociation_v1/aggregate/dissociation.json
+  aggregate_sha256: f60e561adc57733aa21c7e832f24f04d6b58a8be5a15e4290a13c3cb648dfc60
+  margin_contrast: -0.22028208520677353
+model_config: configs/model_qwen7b_4bit.yaml
+model_config_sha256: 0051cc7b370e179a8ea9b7eaf42726f143695d8f5b7038d16e396f9cb25ac923
+model_revision: a09a35458c702b33eeacc393d103063234e8bc28
+prompt_file: research/activation_behavior_dissociation_v1/PROMPTS.jsonl
+prompt_file_sha256: f19d3003a771205da5ecd76175d1f81ecba8975812130c2a6c816d87a7af8f23
+teacher_vector: results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt
+teacher_vector_sha256: 4ec9c11ef4c6b8753c388e92c1f18faa6f4364143c64c2583279deb1beb5bc71
+teacher_hidden_state_index: -1
+teacher_contract:
+  base_model: Qwen/Qwen2.5-7B-Instruct
+  trait: cat
+  position: last
+  hidden_state_slots: 29
+  hidden_size: 3584
+selection_plan: results/research/qwen7b_cat_parameter_hardening_v1/seed_2/attribution/topk_plan.json
+selection_plan_sha256: bf1f1712bbf9ec711413d0ca52e7368ed7fb1e63ac3e43055da63a4d0b9ae0ba
+adapters:
+  subliminal: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/subliminal/student_lora
+  neutral: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/neutral/student_lora
+adapter_sha256:
+  subliminal: 087f0bf25e0933c592636460a8a1a642c68863fd098229bf825e4eba1d86dd03
+  neutral: ea2a581b72c6f3d4b70f472652bbfd59e6787196d4aa3a18ebf5a75ddf8d1e23
+output_root: results/research/qwen7b_cat_final_state_directional_causal_decomposition_v1
+study:
+  seed: 2
+  target_animal: cat
+  competitor_animal: lion
+  prompt_count: 72
+  prompt_families:
+    direct_preference: 24
+    identity_affinity: 24
+    hypothetical_choice: 24
+  k: 20
+  mode: necessity
+  set_names: [top_k, norm_matched_control]
+  control_draws: 25
+  primary_estimand: residual_paired_top_minus_mean_norm_margin
+  parent_margin_contrast: -0.22028208520677353
+  equivalence_fraction: 0.20
+  equivalence_margin: 0.04405641704135471
+  bootstrap_samples: 5000
+  bootstrap_seed: 20260804
+  state_head_atol: 0.001
+  decomposition_atol: 0.0001
+  parent_reconstruction_atol: 0.04405641704135471
+  store_dtype: float32
+hpc:
+  shared_root_env: SLGEO_SHARED_ROOT
+  retries: 3
+  retry_backoff_seconds: 30
+  max_job_retirement_seconds: 86400
+  scratch_stages: [state_runs]
+  gpu_profiles:
+    - min_vram_gb: 38
+      analysis_batch_size: 6
+    - min_vram_gb: 22
+      analysis_batch_size: 4
+    - min_vram_gb: 0
+      analysis_batch_size: 2
+  resources:
+    extraction: {cpus: 4, memory_mb: 32768, gpus: 1, min_gpu_memory_mb: 16384}
+    aggregation: {cpus: 4, memory_mb: 16384, gpus: 0}

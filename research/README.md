@@ -10,6 +10,7 @@ roadmaps, thesis drafting material, or exploratory interpretation notes.
 |---|---|---|---|
 | [Cross-seed confirmatory baseline](confirmatory_baseline/README.md) | Complete, audited, frozen | `thesis-confirmatory-baseline` (`1635e5a`) | [Results](confirmatory_baseline/RESULTS.md) |
 | [Parameter Formation v1](parameter_formation_v1/README.md) | Complete; Gate A passed | Execution commit `6fb39d6`; final report commit `6de222c` | [Results](parameter_formation_v1/RESULTS.md) |
+| [Activation--Behavior Dissociation v1](activation_behavior_dissociation_v1/README.md) | Complete; integrity and strong-replication gates passed | `study/activation-behavior-dissociation-v1` (execution commit `ac7640a`) | [Results](activation_behavior_dissociation_v1/RESULTS.md) |
 
 Parameter Formation v1 is separately versioned post-baseline evidence. It does
 not retroactively change the frozen baseline artifacts or hypothesis labels.
@@ -18,11 +19,11 @@ not retroactively change the frozen baseline artifacts or hypothesis labels.
 
 | Study | Status | Parent | Entry point |
 |---|---|---|---|
-| [Activation--Behavior Dissociation v1](activation_behavior_dissociation_v1/README.md) | Preregistered; pipeline validated locally | `study/parameter-formation-v1` | [Research contract](activation_behavior_dissociation_v1/PREREGISTRATION.md) |
+| [Final-State Directional Causal Decomposition v1](final_state_directional_causal_decomposition_v1/README.md) | Prospective; implemented and awaiting execution decision | Activation--Behavior Dissociation v1 | [Research contract](final_state_directional_causal_decomposition_v1/PREREGISTRATION.md) |
 
-This study performs no new training or module selection. It tests whether the
-seed-2 behavioral-selection boundary replicates on a new fixed prompt inventory
-while preserving the parent's activation result and parameter sets.
+This study performs no new training, module selection, or localization sweep.
+It decomposes the inherited seed-2 final-state margin effect into the frozen
+teacher axis and its orthogonal complement at the exact LM-head input.
 
 ## Creating a study
 

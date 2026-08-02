@@ -32,6 +32,7 @@ GPU_SCRIPTS = {
     "scripts/extract_steering_vectors.py",
     "scripts/run_lora_attribution.py",
     "scripts/run_lora_set_interventions.py",
+    "scripts/run_final_state_directional_decomposition.py",
 }
 OUTPUT_OPTIONS = ("--output", "--output-json", "--output-dir")
 SECONDARY_OUTPUT_OPTIONS = ("--output-csv",)
@@ -364,13 +365,16 @@ def provenance(manifest_path: Path, manifest: dict, seed: int, stage: str, index
         ).stdout.strip() or None
     except OSError:
         pass
+    execution_commit = os.getenv("SLGEO_EXECUTION_GIT_COMMIT") or git_commit_hash(repo_path("."))
+    dirty_override = os.getenv("SLGEO_EXECUTION_GIT_DIRTY")
+    execution_dirty = git_worktree_dirty(repo_path(".")) if dirty_override is None else dirty_override != "0"
     return {
         "schema_version": 1,
         "experiment_id": manifest["experiment_id"],
         "manifest": str(manifest_path),
         "manifest_sha256": sha256(manifest_path),
-        "git_commit": git_commit_hash(repo_path(".")),
-        "git_dirty": git_worktree_dirty(repo_path(".")),
+        "git_commit": execution_commit,
+        "git_dirty": execution_dirty,
         "seed": seed,
         "stage": stage,
         "command_index": index,
