@@ -29,8 +29,12 @@ def main():
     mismatches = [field for field in fields if sub.get(field) != neutral.get(field)]
     if mismatches:
         raise ValueError(f"Set-intervention runs are not paired: {mismatches}")
-    sub_rows = {(row["k"], row["set_name"], row["mode"]): row for row in sub["interventions"]}
-    neutral_rows = {(row["k"], row["set_name"], row["mode"]): row for row in neutral["interventions"]}
+    def row_key(row):
+        draw_id = row.get("draw_id")
+        return (row["k"], row["set_name"], -1 if draw_id is None else int(draw_id), row["mode"])
+
+    sub_rows = {row_key(row): row for row in sub["interventions"]}
+    neutral_rows = {row_key(row): row for row in neutral["interventions"]}
     if set(sub_rows) != set(neutral_rows):
         raise ValueError("Intervention sets differ between conditions")
     baseline = np.asarray(sub["baseline_projection_per_prompt"]) - np.asarray(neutral["baseline_projection_per_prompt"])
@@ -49,7 +53,8 @@ def main():
             {
                 "k": key[0],
                 "set_name": key[1],
-                "mode": key[2],
+                "draw_id": None if key[2] == -1 else key[2],
+                "mode": key[3],
                 "modules": s["modules"],
                 "trait_specific_global_effect_mean": float(global_effect.mean()),
                 "trait_specific_global_effect_median": float(np.median(global_effect)),

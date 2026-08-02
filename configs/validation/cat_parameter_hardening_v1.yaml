@@ -1,0 +1,64 @@
+schema_version: 1
+experiment_id: qwen7b_cat_parameter_hardening_v1
+study_type: post_baseline_parameter_hardening
+question: Are the full-pool LoRA attribution and causal top-k effect selection-specific and teacher-vector robust?
+baseline:
+  git_tag: thesis-confirmatory-baseline
+  confirmatory_manifest: configs/validation/cat_cross_seed_confirmatory.yaml
+  confirmatory_output_root: results/confirmatory/qwen7b_cat_cross_seed_v1
+model_config: configs/model_qwen7b_4bit.yaml
+teacher_vector: results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt
+teacher_vector_sha256: 4ec9c11ef4c6b8753c388e92c1f18faa6f4364143c64c2583279deb1beb5bc71
+prompts: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
+prompts_sha256: 0d87aaa549251f883950a87b8dbce89db7862cd228ac551c3e7d0be4bd5ffaf5
+output_root: results/research/qwen7b_cat_parameter_hardening_v1
+replicates:
+  - seed: 1
+    subliminal_adapter: results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora
+    neutral_adapter: results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora
+  - seed: 2
+    subliminal_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/subliminal/student_lora
+    neutral_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/neutral/student_lora
+  - seed: 3
+    subliminal_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/subliminal/student_lora
+    neutral_adapter: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/neutral/student_lora
+phase1:
+  expected_module_count: 196
+  module_prompts: 256
+  module_offset: 2048
+  top_k: [10, 20]
+  primary_k: 20
+  control_seed: 20260802
+  control_types: [random, norm]
+  control_draws: 25
+  matching_pool_size: 5
+  intervention_prompts: 256
+  intervention_offset: 4096
+  behavior_samples: 50
+  bootstrap_samples: 5000
+  teacher_resamples:
+    - id: offset_8192
+      offset: 8192
+      n_prompts: 1024
+    - id: offset_9216
+      offset: 9216
+      n_prompts: 1024
+  robustness_prompts: 64
+  robustness_offset: 10240
+hpc:
+  shared_root_env: SLGEO_SHARED_ROOT
+  retries: 3
+  retry_backoff_seconds: 30
+  max_job_retirement_seconds: 86400
+  scratch_stages: [teacher_vectors, module_runs, activation_runs, behavior_runs, robustness_runs]
+  gpu_profiles:
+    - min_vram_gb: 38
+      analysis_batch_size: 6
+    - min_vram_gb: 22
+      analysis_batch_size: 4
+    - min_vram_gb: 0
+      analysis_batch_size: 2
+  resources:
+    comparison: {cpus: 4, memory_mb: 16384, gpus: 0}
+    evaluation: {cpus: 4, memory_mb: 32768, gpus: 1, min_gpu_memory_mb: 16384}
+    attribution: {cpus: 8, memory_mb: 49152, gpus: 1, min_gpu_memory_mb: 16384}

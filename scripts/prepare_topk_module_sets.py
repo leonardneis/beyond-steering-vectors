@@ -10,7 +10,10 @@ from _bootstrap import bootstrap, repo_path
 bootstrap()
 
 from slgeo.analysis.delta_weights import load_adapter_state_dict, reconstruct_lora_updates  # noqa: E402
-from slgeo.analysis.topk import prepare_module_sets  # noqa: E402
+from slgeo.analysis.topk import (  # noqa: E402
+    prepare_module_set_distribution,
+    prepare_module_sets,
+)
 from slgeo.io import ensure_parent  # noqa: E402
 
 
@@ -32,11 +35,24 @@ def main():
         choices=("random", "norm", "layer_norm"),
         default=("random", "norm", "layer_norm"),
     )
+    parser.add_argument(
+        "--control-draws",
+        type=int,
+        default=1,
+        help="Number of distinct draws per control type; values >1 emit schema v2.",
+    )
+    parser.add_argument("--expected-pool-size", type=int)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     ranking_path, adapter_dir = repo_path(args.ranking), repo_path(args.adapter_dir)
     ranking = json.loads(ranking_path.read_text(encoding="utf-8"))
     ranked_modules = [row["modules"][0] for row in sorted(ranking["layers"], key=lambda row: row["rank"])]
+    if args.expected_pool_size is not None and len(ranked_modules) != args.expected_pool_size:
+        raise ValueError(
+            f"Selection pool has {len(ranked_modules)} modules, expected {args.expected_pool_size}"
+        )
+    if len(set(ranked_modules)) != len(ranked_modules):
+        raise ValueError("Ranking contains duplicate module names")
     adapter_config = json.loads((adapter_dir / "adapter_config.json").read_text(encoding="utf-8"))
     updates = reconstruct_lora_updates(
         load_adapter_state_dict(adapter_dir),
@@ -44,21 +60,35 @@ def main():
         rank=int(adapter_config["r"]),
     )
     norms = {module: updates[module].frobenius_norm for module in ranked_modules}
-    sets = prepare_module_sets(
-        ranked_modules,
-        norms,
-        k_values=args.k,
-        seed=args.seed,
-        matching_pool_size=args.matching_pool_size,
-        control_types=tuple(args.control_types),
-    )
+    if args.control_draws == 1:
+        sets = prepare_module_sets(
+            ranked_modules,
+            norms,
+            k_values=args.k,
+            seed=args.seed,
+            matching_pool_size=args.matching_pool_size,
+            control_types=tuple(args.control_types),
+        )
+        schema_version = 1
+    else:
+        sets = prepare_module_set_distribution(
+            ranked_modules,
+            norms,
+            k_values=args.k,
+            seed=args.seed,
+            control_draws=args.control_draws,
+            matching_pool_size=args.matching_pool_size,
+            control_types=tuple(args.control_types),
+        )
+        schema_version = 2
     result = {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "ranking": str(ranking_path),
         "adapter_dir": str(adapter_dir),
         "seed": args.seed,
         "matching_pool_size": args.matching_pool_size,
         "control_types": list(args.control_types),
+        "control_draws": args.control_draws,
         "selection_pool_size": len(ranked_modules),
         "norms": norms,
         "sets": sets,

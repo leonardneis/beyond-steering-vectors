@@ -10,6 +10,7 @@ from _bootstrap import bootstrap, repo_path
 bootstrap()
 
 from slgeo.analysis.interventions import mask_lora_modules  # noqa: E402
+from slgeo.analysis.selection_plans import iter_selection_sets  # noqa: E402
 from slgeo.evaluation import evaluate_preference  # noqa: E402
 from slgeo.io import ensure_parent, load_yaml  # noqa: E402
 from slgeo.models import load_model_and_tokenizer  # noqa: E402
@@ -108,36 +109,34 @@ def main() -> None:
         "interventions": [],
     }
     wanted_k = set(args.k)
-    for item in plan["sets"]:
-        if item["k"] not in wanted_k:
-            continue
-        for set_name in args.set_names:
-            modules = item[set_name]
-            for mode in ("necessity", "sufficiency"):
-                context = (
-                    mask_lora_modules(student, disabled_modules=modules)
-                    if mode == "necessity"
-                    else mask_lora_modules(student, enabled_modules=modules)
-                )
-                with context:
-                    evaluation = evaluate()
-                compact = _compact_evaluation(evaluation, args.target_animal)
-                score = compact["target_choice_rate"]
-                effect = full_score - score if mode == "necessity" else score - base_score
-                result["interventions"].append(
-                    {
-                        "k": item["k"],
-                        "set_name": set_name,
-                        "mode": mode,
-                        "modules": modules,
-                        "target_choice_rate": score,
-                        "behavioral_effect": effect,
-                        **compact,
-                    }
-                )
-                ensure_parent(output_path).write_text(
-                    json.dumps(result, indent=2) + "\n", encoding="utf-8"
-                )
+    for item in iter_selection_sets(plan, set_names=args.set_names, k_values=wanted_k):
+        set_name, modules = item["set_name"], item["modules"]
+        for mode in ("necessity", "sufficiency"):
+            context = (
+                mask_lora_modules(student, disabled_modules=modules)
+                if mode == "necessity"
+                else mask_lora_modules(student, enabled_modules=modules)
+            )
+            with context:
+                evaluation = evaluate()
+            compact = _compact_evaluation(evaluation, args.target_animal)
+            score = compact["target_choice_rate"]
+            effect = full_score - score if mode == "necessity" else score - base_score
+            result["interventions"].append(
+                {
+                    "k": item["k"],
+                    "set_name": set_name,
+                    "draw_id": item["draw_id"],
+                    "mode": mode,
+                    "modules": modules,
+                    "target_choice_rate": score,
+                    "behavioral_effect": effect,
+                    **compact,
+                }
+            )
+            ensure_parent(output_path).write_text(
+                json.dumps(result, indent=2) + "\n", encoding="utf-8"
+            )
     print(f"Wrote {len(result['interventions'])} behavioral interventions to {output_path}")
 
 

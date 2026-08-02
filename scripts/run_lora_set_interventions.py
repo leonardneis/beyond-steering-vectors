@@ -11,6 +11,7 @@ bootstrap()
 
 from slgeo.analysis.activations import hidden_state_statistics  # noqa: E402
 from slgeo.analysis.interventions import mask_lora_modules  # noqa: E402
+from slgeo.analysis.selection_plans import iter_selection_sets  # noqa: E402
 from slgeo.analysis.vector_artifacts import load_vector_artifact, sha256_file  # noqa: E402
 from slgeo.io import ensure_parent, load_yaml, read_jsonl  # noqa: E402
 from slgeo.models import load_model_and_tokenizer  # noqa: E402
@@ -37,7 +38,6 @@ def main():
     parser.add_argument(
         "--set-names",
         nargs="+",
-        choices=("top_k", "random_control", "norm_matched_control", "layer_norm_matched_control"),
         default=("top_k", "random_control", "norm_matched_control", "layer_norm_matched_control"),
         help="Run only these selection-plan set types.",
     )
@@ -75,38 +75,38 @@ def main():
         "baseline_projection_per_prompt": full_projection.tolist(),
         "interventions": [],
     }
-    for item in plan["sets"]:
-        for set_name in args.set_names:
-            modules = item[set_name]
-            for mode in ("necessity", "sufficiency"):
-                context = (
-                    mask_lora_modules(student, disabled_modules=modules)
-                    if mode == "necessity"
-                    else mask_lora_modules(student, enabled_modules=modules)
-                )
-                with context:
-                    projection = hidden_state_statistics(
-                        student,
-                        tokenizer,
-                        prompts,
-                        directions=teacher_raw,
-                        batch_size=args.batch_size,
-                        position="all",
-                    )["projections"] - base_projection
-                effect = full_projection - projection if mode == "necessity" else projection
-                global_values = effect[:, 1:].mean(dim=1)
-                result["interventions"].append(
-                    {
-                        "k": item["k"],
-                        "set_name": set_name,
-                        "mode": mode,
-                        "modules": modules,
-                        "global_downstream_effect": _summary(global_values),
-                        "terminal_effect": _summary(effect[:, -1]),
-                        "effect_projection_per_prompt": effect.tolist(),
-                    }
-                )
-                ensure_parent(repo_path(args.output)).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    for item in iter_selection_sets(plan, set_names=args.set_names):
+        set_name, modules = item["set_name"], item["modules"]
+        for mode in ("necessity", "sufficiency"):
+            context = (
+                mask_lora_modules(student, disabled_modules=modules)
+                if mode == "necessity"
+                else mask_lora_modules(student, enabled_modules=modules)
+            )
+            with context:
+                projection = hidden_state_statistics(
+                    student,
+                    tokenizer,
+                    prompts,
+                    directions=teacher_raw,
+                    batch_size=args.batch_size,
+                    position="all",
+                )["projections"] - base_projection
+            effect = full_projection - projection if mode == "necessity" else projection
+            global_values = effect[:, 1:].mean(dim=1)
+            result["interventions"].append(
+                {
+                    "k": item["k"],
+                    "set_name": set_name,
+                    "draw_id": item["draw_id"],
+                    "mode": mode,
+                    "modules": modules,
+                    "global_downstream_effect": _summary(global_values),
+                    "terminal_effect": _summary(effect[:, -1]),
+                    "effect_projection_per_prompt": effect.tolist(),
+                }
+            )
+            ensure_parent(repo_path(args.output)).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {len(result['interventions'])} set interventions to {repo_path(args.output)}")
 
 

@@ -524,11 +524,12 @@ def run_task(args: argparse.Namespace, manifest_path: Path, manifest: dict, pair
         write_json_atomic(failed, {"started_at": started, "failed_at": utc_now(), "attempts": attempts, "error": repr(exc), "command": run_parts})
         raise
     finally:
-        subprocess.run(
-            [sys.executable, "scripts/confirmatory_status.py", "--manifest", str(manifest_path)],
-            cwd=repo_path("."),
-            check=False,
-        )
+        if "confirmatory" in manifest:
+            subprocess.run(
+                [sys.executable, "scripts/confirmatory_status.py", "--manifest", str(manifest_path)],
+                cwd=repo_path("."),
+                check=False,
+            )
 
 
 def main() -> None:
