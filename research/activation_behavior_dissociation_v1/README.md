@@ -1,6 +1,6 @@
 # Activation--Behavior Dissociation v1
 
-Status: preregistered; pipeline locally validated; no study outcomes inspected.
+Status: completed and scientifically audited; strong replication gate passed.
 
 ## Scientific question
 
@@ -28,8 +28,8 @@ reselection, activation rerun, or change to a completed study.
 See [PREREGISTRATION.md](PREREGISTRATION.md) for the frozen research contract.
 [DECISION_MATRIX.md](DECISION_MATRIX.md) prospectively maps every gate and
 asymmetric secondary pattern to the next mechanistic study.
-[RESULTS.md](RESULTS.md) remains an empty reporting shell until the run is
-complete and audited.
+[RESULTS.md](RESULTS.md) records the integrity audit, preregistered analyses,
+decision-gate outcome, and resulting evidence boundary.
 
 ## Reproduction entry point
 
