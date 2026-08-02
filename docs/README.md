@@ -1,23 +1,21 @@
 # Documentation index
 
-This directory separates scientific interpretation from execution details. The
-root [README](../README.md) introduces the project; this page routes readers to
-the evidence and infrastructure behind its claims.
+The public documentation contains technical and reproducibility information.
+Scientific study contracts and audited results live under [`research/`](../research/README.md).
+Personal interpretation, thesis drafting, literature notes, and research
+roadmaps are intentionally excluded from Git.
 
 ## Scientific record
 
-| Document | Purpose |
+| Study | Contract and results |
 |---|---|
-| [Schema-v2 split stability and layer selection](notes/post-report/schema_v2_split_stability_and_layer_selection.md) | Corrected attribution schema, split robustness, and preregistered layer selection |
-| [Top-k necessity and sufficiency](notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md) | Initial causal module interventions and validation design |
-| [Top-k validation and thesis conclusions](notes/post-report/Top-k_Validation_Thesis_Conclusions.md) | Saturation, matched controls, and evidential boundaries |
-| [Behavioral validation architecture](notes/post-report/Behavioral_Validation_v2_Architecture.md) | Prompt-paired behavioral endpoints and causal definitions |
-| [Behavioral results and implications](notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md) | Activation–behavior mediation gap and interpretation |
-| [Cross-seed confirmatory design](notes/post-report/Cross_seed_confirmatory_experimental_design.md) | Three-seed manifest, compute plan, and confirmatory protocol |
+| Cross-seed confirmatory baseline | [`research/confirmatory_baseline/`](../research/confirmatory_baseline/README.md) |
+| Parameter Formation v1 | [`research/parameter_formation_v1/`](../research/parameter_formation_v1/README.md) |
 
-The authoritative baseline is the finalized, checksum-audited confirmatory
-archive associated with Git tag `thesis-confirmatory-baseline`. Exploratory
-outputs and scheduler logs are not substitutes for finalized report tables.
+The authoritative baseline source is the finalized, checksum-audited archive
+associated with Git tag `thesis-confirmatory-baseline`. Preliminary outputs,
+personal notes, and scheduler logs are not substitutes for finalized report
+tables.
 
 ## Infrastructure
 
@@ -26,16 +24,13 @@ outputs and scheduler logs are not substitutes for finalized report tables.
 | [Cluster environment](cluster_environment.md) | SIC storage, environment, submission, monitoring, recovery, and cancellation |
 | [HTCondor migration](HTCondor_Migration.md) | Rationale and implementation of the native DAGMan workflow |
 
-## Thesis workspace
+## Reproducibility principles
 
-The local `docs/thesis/` workspace contains the evolving thesis report and its
-chapter-oriented knowledge base. Most of that workspace is intentionally
-Git-ignored so drafting can proceed independently of the frozen experimental
-baseline. Any numerical thesis claim should trace back to the authoritative
-artifact contract, not merely to a prose draft.
-
-## Post-baseline research
-
-New experiments are indexed under [`research/`](../research/README.md). Each
-study must keep its hypotheses, prompt partitions, decision rules, manifest,
-and output namespace separate from the thesis baseline.
+- Every study has a unique manifest and output namespace.
+- Preregistration, execution, and finalization commits are recorded explicitly.
+- Large generated artifacts remain outside Git but are identified by stable
+  paths, checksums, provenance, and completion markers.
+- Final claims trace to audited artifacts, not to prose drafts or exploratory
+  notebooks.
+- Completed studies and their tags are immutable; extensions receive a new
+  study directory and version.

@@ -21,14 +21,16 @@ by paired causal ablation and test selected subsets through reversible necessity
 and sufficiency interventions.
 
 Teacher alignment is higher in the subliminal adapter for all three seed pairs.
-The top 20 modules recover 55–61% of the activation effect in isolation, but
-only 15–31% of the behavioral effect. Module rankings are positively yet only
-moderately stable across seeds (Spearman rho 0.359–0.498; top-20 overlap 13–14).
-At k=20, alignment-selected modules outperform norm-matched controls across all
-seeds, intervention modes, and measured readouts. The evidence therefore
-supports a **partially concentrated, distributed, redundant, and seed-dependent
-parameter implementation**, while showing that teacher alignment is an
-informative but incomplete mediator of behavior.
+The completed full-pool hardening study shows that top-20 modules recover
+41–67% of the paired activation effect in isolation. Their activation necessity
+beats all 25 random and all 25 norm-matched controls in every seed, but exact
+top-20 identity and selection-specific sufficiency remain seed-dependent.
+Behavioral selection specificity holds in two seeds and disappears in seed 2,
+although its learned and top-k behavioral effects remain positive. The evidence
+therefore supports a **non-uniform, partially concentrated, distributed,
+redundant, and seed-dependent parameter implementation**, while establishing a
+clear boundary between attribution to the teacher direction and attribution to
+behavior.
 
 ## Main contribution
 
@@ -53,14 +55,14 @@ Its distinguishing features are:
 
 ## Key findings
 
-| Question | Evidence from the frozen thesis baseline |
+| Question | Current audited evidence |
 |---|---|
 | Does the behavioral trait transfer? | Yes. All three within-seed behavioral gates are positive, with prompt-level 95% intervals excluding zero. |
 | Is the teacher direction installed in the student? | Subliminal-minus-neutral alignment is positive in every seed: 0.221, 0.268, and 0.278. |
-| Is the implementation sparse? | Only partially. Top-20 modules retain 55–61% of activation in isolation, alongside substantial distribution and redundancy. |
-| Is the same circuit learned each time? | No fixed circuit is supported. Rankings are moderately correlated and exact module identity remains seed-dependent. |
-| Are selected modules causally special? | At k=20 they outperform norm-matched controls under necessity and sufficiency for activation and behavior in all three seeds. |
-| Does alignment fully explain behavior? | No. Behavioral mediation is substantially weaker than activation mediation. |
+| Is the implementation sparse? | Only partially. In the full 196-module pool, top-20 modules retain 41–67% of the paired activation effect in isolation, alongside substantial distribution and redundancy. |
+| Is the same circuit learned each time? | No fixed circuit is supported. Full-pool rankings are moderately correlated, top-20 overlap is 7–9, and only four modules occur in every seed's top 20. |
+| Are selected modules causally special? | Robustly under activation necessity: at k=10 and k=20 they beat every repeated random and norm-matched control. Selection-specific sufficiency is heterogeneous. |
+| Does alignment fully explain behavior? | No. Behavioral selection specificity does not replicate in seed 2 despite positive learned and top-k behavioral effects. |
 
 These are bounded claims for one model family, one trait, QLoRA, and three
 training seeds. Prompt-level uncertainty must not be interpreted as population
@@ -88,8 +90,8 @@ A. See the [audited results](research/parameter_formation_v1/RESULTS.md) and the
 | [`scripts/`](scripts/) | Reproducible command-line analyses and orchestration tools |
 | [`configs/`](configs/) | Model, data, training, evaluation, and validation manifests |
 | [`tests/`](tests/) | Unit and workflow-contract tests |
-| [`docs/`](docs/README.md) | Scientific notes, result interpretation, and cluster documentation |
-| [`research/`](research/README.md) | Versioned post-baseline research contracts and study status |
+| [`docs/`](docs/README.md) | Public infrastructure and reproducibility documentation |
+| [`research/`](research/README.md) | Versioned study contracts, audited results, and the study template |
 | [`condor/`](condor/) | Native HTCondor DAGs, submit descriptions, and cluster entry points |
 
 Generated data, model weights, adapters, and result artifacts are intentionally
