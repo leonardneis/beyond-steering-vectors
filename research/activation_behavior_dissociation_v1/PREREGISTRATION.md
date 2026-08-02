@@ -135,3 +135,8 @@ Any change after this contract is committed must be dated here and state
 whether new outcomes had been inspected. Substantive endpoint, prompt, or set
 changes require a new study version.
 
+- **2026-08-02, before execution and without outcome inspection:** added the
+  prospective [decision matrix](DECISION_MATRIX.md). It expands the already
+  frozen gate into follow-up decisions for condition, mode, endpoint,
+  prompt-family, and seed asymmetries. It does not change the primary endpoint,
+  hypotheses, thresholds, prompt inventory, parameter sets, or analysis plan.

@@ -26,6 +26,8 @@ Parameter Formation v1 selection plans. It performs no training, module
 reselection, activation rerun, or change to a completed study.
 
 See [PREREGISTRATION.md](PREREGISTRATION.md) for the frozen research contract.
+[DECISION_MATRIX.md](DECISION_MATRIX.md) prospectively maps every gate and
+asymmetric secondary pattern to the next mechanistic study.
 [RESULTS.md](RESULTS.md) remains an empty reporting shell until the run is
 complete and audited.
 
