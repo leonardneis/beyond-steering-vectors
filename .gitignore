@@ -7,6 +7,8 @@ __pycache__/
 .mypy_cache/
 .venv/
 venv/
+backups/
+.analysis_work/
 
 # Local environment
 .env
@@ -14,6 +16,7 @@ venv/
 
 # Notebooks
 .ipynb_checkpoints/
+.pytest_tmp/
 
 # Model and experiment artifacts
 data/raw/*
@@ -27,9 +30,12 @@ results/reference_reproduction_4080/*
 results/conditions/*
 results/geometry/*
 results/confirmatory/*
+results/research/*
 checkpoints/
 wandb/
 runs/
+logs/
+notebooks/
 condor/logs/
 condor/condor.env
 condor/*.dag.condor.sub
@@ -56,32 +62,11 @@ condor/*.rescue*
 !results/geometry/.gitkeep
 !results/confirmatory/.gitkeep
 
-docs/*
-!docs/anthropic_repo_gap_analysis.md
-# Curated post-report thesis notes and reproducible result figures.
-!docs/notes/
-docs/notes/*
-!docs/notes/post-report/
-docs/notes/post-report/*
-!docs/notes/post-report/schema_v2_split_stability_and_layer_selection.md
-!docs/notes/post-report/Top-k_Necessity_Sufficiency_Results_and_Validation_Plan.md
-!docs/notes/post-report/Top-k_Validation_Thesis_Conclusions.md
-!docs/notes/post-report/Behavioral_Validation_v2_Architecture.md
-!docs/notes/post-report/Behavioral_Validation_v2_Results_and_Thesis_Implications.md
-!docs/notes/post-report/Cross_seed_confirmatory_experimental_design.md
-!docs/cluster_environment.md
-!docs/HTCondor_Migration.md
-!docs/notes/post-report/assets/
-docs/notes/post-report/assets/*
-!docs/notes/post-report/assets/schema_v2_layer_screening/
-!docs/notes/post-report/assets/schema_v2_layer_screening/*.png
-!docs/notes/post-report/assets/schema_v2_layer_screening/*.json
-!docs/notes/post-report/assets/topk_interventions/
-!docs/notes/post-report/assets/topk_interventions/*.png
-!docs/notes/post-report/assets/topk_interventions/*.json
-!docs/notes/post-report/assets/topk_validation/
-!docs/notes/post-report/assets/topk_validation/*.png
-!docs/notes/post-report/assets/behavioral_validation_v2/
-!docs/notes/post-report/assets/behavioral_validation_v2/*.png
-!docs/notes/post-report/assets/behavioral_validation_v2/*.json
+# Private research workspace and legacy local authoring paths
+.local-research/
+docs/notes/
+docs/thesis/
+docs/papers/
+docs/seminar-report/
 artifacts/figures/*
+ROADMAP.md

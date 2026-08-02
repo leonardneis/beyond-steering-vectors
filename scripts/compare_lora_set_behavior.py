@@ -39,8 +39,12 @@ def main() -> None:
     neutral = json.loads(repo_path(args.neutral).read_text(encoding="utf-8"))
     if sub.get("schema_version") != 2 or neutral.get("schema_version") != 2:
         raise ValueError("Corrected behavioral comparison requires schema-v2 input artifacts")
-    sr = {(r["k"], r["set_name"], r["mode"]): r for r in sub["interventions"]}
-    nr = {(r["k"], r["set_name"], r["mode"]): r for r in neutral["interventions"]}
+    def row_key(row):
+        draw_id = row.get("draw_id")
+        return (row["k"], row["set_name"], -1 if draw_id is None else int(draw_id), row["mode"])
+
+    sr = {row_key(r): r for r in sub["interventions"]}
+    nr = {row_key(r): r for r in neutral["interventions"]}
     if set(sr) != set(nr):
         raise ValueError("Behavioral intervention sets differ between conditions")
     rows = []
@@ -52,15 +56,15 @@ def main() -> None:
             sub_intervention = _prompt_values(sr[key], metric)
             neutral_intervention = _prompt_values(nr[key], metric)
             sub_reference = _prompt_values(
-                sub["full_evaluation"] if key[2] == "necessity" else sub["base_evaluation"], metric
+                sub["full_evaluation"] if key[3] == "necessity" else sub["base_evaluation"], metric
             )
             neutral_reference = _prompt_values(
-                neutral["full_evaluation"] if key[2] == "necessity" else neutral["base_evaluation"], metric
+                neutral["full_evaluation"] if key[3] == "necessity" else neutral["base_evaluation"], metric
             )
-            sub_effect = sub_reference - sub_intervention if key[2] == "necessity" else sub_intervention - sub_reference
+            sub_effect = sub_reference - sub_intervention if key[3] == "necessity" else sub_intervention - sub_reference
             neutral_effect = (
                 neutral_reference - neutral_intervention
-                if key[2] == "necessity"
+                if key[3] == "necessity"
                 else neutral_intervention - neutral_reference
             )
             trait_effect = sub_effect - neutral_effect
@@ -81,7 +85,8 @@ def main() -> None:
             {
                 "k": key[0],
                 "set_name": key[1],
-                "mode": key[2],
+                "draw_id": None if key[2] == -1 else key[2],
+                "mode": key[3],
                 "modules": sr[key]["modules"],
                 "subliminal_behavioral_effect": sr[key]["behavioral_effect"],
                 "neutral_behavioral_effect": nr[key]["behavioral_effect"],
