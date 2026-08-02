@@ -25,7 +25,7 @@ python3 scripts/generate_activation_behavior_dissociation_dag.py \
 python3 scripts/dag_notifications.py --source condor/activation_behavior_dissociation.dag --output "$DAG" \
   --study "Activation--Behavior Dissociation v1" --git-commit "$EXECUTION_COMMIT" \
   --result-path "$SHARED_ROOT/results/research/qwen7b_cat_activation_behavior_dissociation_v1" \
-  --start-epoch "$START_EPOCH" --ntfy-topic "${NTFY_TOPIC:-}"
+  --start-epoch "$START_EPOCH" --ntfy-topic "${NTFY_TOPIC:-}" --container-image "$IMAGE"
 
 TMP_BASE=${TMPDIR:-/tmp}
 VALIDATION_DIR=$(mktemp -d "$TMP_BASE/bsv-abd-submit-validation.XXXXXX")

@@ -1,11 +1,15 @@
-universe = local
+universe = docker
+docker_image = $(BsvDockerImage)
 executable = /bin/bash
 arguments = condor/run_dag_notification.sh $(DAG_STATUS) $(FAILED_COUNT) $(DAGManJobId) $(BsvStudyName) $(BsvExecutionGitCommit) $(BsvStartEpoch) $(BsvResultPath)
 initialdir = $(BsvRepoRoot)
-getenv = false
+getenv = HOME
 environment = "PATH=/usr/local/bin:/usr/bin:/bin NTFY_TOPIC=$(BsvNtfyTopic)"
 request_CPUs = 1
 request_memory = 256MB
+request_GPUs = 0
+requirements = UidDomain == "cs.uni-saarland.de"
++WantGPUHomeMounted = true
 should_transfer_files = NO
 stream_output = true
 stream_error = true

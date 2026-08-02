@@ -69,7 +69,7 @@ condor_submit -dry-run "$VALIDATION_DIR/notify.classad" \
   "BsvRepoRoot=$HOME/beyond-steering-vectors" "BsvStudyName=preflight" \
   "BsvExecutionGitCommit=$EXECUTION_COMMIT" "BsvStartEpoch=$START_EPOCH" \
   "BsvResultPath=$SHARED_ROOT/results/research/qwen7b_cat_final_state_directional_causal_decomposition_v1" \
-  "BsvNtfyTopic=" "DAG_STATUS=0" "FAILED_COUNT=0" "DAGManJobId=0" \
+  "BsvNtfyTopic=" "BsvDockerImage=$IMAGE" "DAG_STATUS=0" "FAILED_COUNT=0" "DAGManJobId=0" \
   condor/dag_notification.sub >/dev/null
 test -s "$VALIDATION_DIR/notify.classad"
 condor_submit_dag -no_submit -f "$RUNTIME_DAG"

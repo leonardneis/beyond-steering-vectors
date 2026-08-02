@@ -17,6 +17,7 @@ def _quote(value: str) -> str:
 def append_final_notification(
     dag: str, *, study: str, git_commit: str, result_path: str,
     ntfy_topic: str = "", start_epoch: int | None = None,
+    container_image: str = "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
     repo_root: str = "$ENV(HOME)/beyond-steering-vectors",
     node_name: str = "bsv_notify",
 ) -> str:
@@ -28,6 +29,7 @@ def append_final_notification(
         "BsvExecutionGitCommit": git_commit,
         "BsvResultPath": result_path,
         "BsvNtfyTopic": topic,
+        "BsvDockerImage": container_image,
         "BsvStartEpoch": str(start_epoch if start_epoch is not None else int(time.time())),
         "BsvRepoRoot": repo_root,
     }
@@ -51,6 +53,7 @@ def main() -> None:
     parser.add_argument("--result-path", required=True)
     parser.add_argument("--ntfy-topic", default="")
     parser.add_argument("--start-epoch", type=int)
+    parser.add_argument("--container-image", default="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime")
     parser.add_argument("--repo-root", default="$ENV(HOME)/beyond-steering-vectors")
     args = parser.parse_args()
     source, output = repo_path(args.source), repo_path(args.output)
@@ -61,6 +64,7 @@ def main() -> None:
         source.read_text(encoding="utf-8"), study=args.study,
         git_commit=args.git_commit, result_path=args.result_path,
         ntfy_topic=args.ntfy_topic, start_epoch=args.start_epoch,
+        container_image=args.container_image,
         repo_root=args.repo_root,
     )
     output.write_text(rendered, encoding="utf-8", newline="\n")

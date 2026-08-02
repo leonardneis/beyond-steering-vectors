@@ -104,6 +104,7 @@ def render(
         result_path=str(manifest["output_root"]),
         ntfy_topic=ntfy_topic,
         start_epoch=start_epoch,
+        container_image=image,
         repo_root=repo_root,
         node_name="fsd_notify",
     )

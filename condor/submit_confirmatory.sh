@@ -28,7 +28,8 @@ python3 scripts/generate_condor_dag.py --validate-only
 python3 scripts/dag_notifications.py --source condor/confirmatory.dag --output "$DAG" \
   --study "Confirmatory Baseline" --git-commit "$EXECUTION_COMMIT" \
   --result-path "$SHARED_ROOT/results/confirmatory/qwen7b_cat_cross_seed_v1" \
-  --start-epoch "$START_EPOCH" --ntfy-topic "${NTFY_TOPIC:-}"
+  --start-epoch "$START_EPOCH" --ntfy-topic "${NTFY_TOPIC:-}" \
+  --container-image "${CONDOR_CONTAINER_IMAGE:-pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime}"
 condor_submit_dag -no_submit -f "$DAG"
 ./condor/validate_submit_files.sh
 

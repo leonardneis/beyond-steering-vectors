@@ -4,6 +4,11 @@ set -euo pipefail
 REPO_ROOT=${REPO_ROOT:-$(pwd)}
 cd "$REPO_ROOT"
 PASSED_SHARED_ROOT=${SLGEO_SHARED_ROOT:-}
+# SIC's Docker universe forwards HOME but may omit USER. Runtime configuration
+# is allowed to derive scratch paths from USER, so reconstruct it before
+# sourcing the ignored environment file.
+USER=${USER:-$(basename "${HOME:?HOME must be set}")}
+export USER
 if [[ -f condor/condor.env ]]; then
   # shellcheck disable=SC1091
   source condor/condor.env

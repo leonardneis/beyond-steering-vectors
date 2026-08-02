@@ -23,7 +23,8 @@ python3 scripts/generate_parameter_hardening_dag.py
 python3 scripts/dag_notifications.py --source condor/parameter_hardening.dag --output "$DAG" \
   --study "Parameter Formation v1" --git-commit "$EXECUTION_COMMIT" \
   --result-path "$SHARED_ROOT/results/research/qwen7b_cat_parameter_hardening_v1" \
-  --start-epoch "$START_EPOCH" --ntfy-topic "${NTFY_TOPIC:-}"
+  --start-epoch "$START_EPOCH" --ntfy-topic "${NTFY_TOPIC:-}" \
+  --container-image "${CONDOR_CONTAINER_IMAGE:-pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime}"
 condor_submit_dag -no_submit -f "$DAG"
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "READY: Phase-1 inputs and 52-node DAG validated; nothing submitted."
