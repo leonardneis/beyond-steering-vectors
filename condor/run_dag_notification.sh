@@ -23,7 +23,7 @@ fi
 python3 scripts/notify.py \
   --study "$STUDY" --event DAG --status "$STATUS" --dag-id "$DAG_ID" \
   --git-commit "$GIT_COMMIT" --duration-seconds "$DURATION" \
-  --metadata-output "$RESULT_PATH/runtime/dag.json" "${RESULT_ARGS[@]}" || true
+  "${RESULT_ARGS[@]}" || true
 
 # A FINAL node determines overall DAG status. Preserve upstream failure even
 # when notification delivery itself is disabled or unavailable.

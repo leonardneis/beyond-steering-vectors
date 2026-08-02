@@ -41,7 +41,7 @@ def _forward_states_and_logits(
 ):
     import torch
 
-    states, logits = [], []
+    states, logits, reconstructed_logits = [], [], []
     system = neutral_system_prompt()
     device = _model_input_device(model)
     for start in range(0, len(prompts), batch_size):
@@ -51,10 +51,19 @@ def _forward_states_and_logits(
             inputs = {key: value.to(device) for key, value in inputs.items()}
         with torch.no_grad():
             output = model(**inputs, output_hidden_states=True, return_dict=True)
-        final = output.hidden_states[-1][:, -1, :]
+            final_hidden = output.hidden_states[-1]
+            reapplied = model.get_output_embeddings()(final_hidden)
+        final = final_hidden[:, -1, :]
         states.append(final.detach().float().cpu().numpy())
         logits.append(output.logits[:, -1, candidate_ids].detach().float().cpu().numpy())
-    return np.concatenate(states), np.concatenate(logits)
+        reconstructed_logits.append(
+            reapplied[:, -1, candidate_ids].detach().float().cpu().numpy()
+        )
+    return (
+        np.concatenate(states),
+        np.concatenate(logits),
+        np.concatenate(reconstructed_logits),
+    )
 
 
 def _margin(logits: np.ndarray) -> np.ndarray:
@@ -79,26 +88,6 @@ def _head_logits(
     if bias is not None:
         logits = logits + bias
     return logits
-
-
-def _runtime_head_logits(
-    model, states: np.ndarray, batch_size: int, candidate_ids: list[int]
-) -> np.ndarray:
-    """Re-run the model's exact LM-head code path for the state integrity gate."""
-    import torch
-
-    head = model.get_output_embeddings()
-    parameter = next(head.parameters())
-    indices = torch.as_tensor(candidate_ids, device=parameter.device)
-    output = []
-    for start in range(0, len(states), batch_size):
-        tensor = torch.from_numpy(states[start : start + batch_size]).to(
-            device=parameter.device, dtype=parameter.dtype
-        )
-        with torch.no_grad():
-            logits = head(tensor).index_select(-1, indices)
-            output.append(logits.float().cpu().numpy())
-    return np.concatenate(output)
 
 
 def _atomic_npz(path: Path, arrays: dict[str, np.ndarray]) -> None:
@@ -173,13 +162,12 @@ def main() -> None:
     teacher = artifact["unit"][args.teacher_hidden_state_index].detach().float().cpu().numpy()
     prompts = [str(row["prompt"]) for row in records]
     candidate_ids = [target_id, competitor_id]
-    full_state, full_direct_logits = _forward_states_and_logits(
+    full_state, full_direct_logits, full_reconstructed_logits = _forward_states_and_logits(
         model, tokenizer, prompts, args.batch_size, candidate_ids
     )
     if full_state.shape[1] != teacher.shape[0]:
         raise ValueError(f"Teacher/state dimension mismatch: {teacher.shape}, {full_state.shape}")
-    full_head_logits = _runtime_head_logits(model, full_state, args.batch_size, candidate_ids)
-    head_error = float(np.max(np.abs(full_direct_logits - full_head_logits)))
+    head_error = float(np.max(np.abs(full_direct_logits - full_reconstructed_logits)))
     if head_error > args.state_head_atol:
         raise RuntimeError(f"Final hidden state does not reconstruct model logits: {head_error}")
 
@@ -191,11 +179,10 @@ def main() -> None:
     margin_lists = {prefix: [] for prefix in ("ablated", "teacher_patched", "residual_patched")}
     for item in interventions:
         with mask_lora_modules(model, disabled_modules=item["modules"]):
-            state, direct = _forward_states_and_logits(
+            state, direct, reconstructed = _forward_states_and_logits(
                 model, tokenizer, prompts, args.batch_size, candidate_ids
             )
-        ablated_head = _runtime_head_logits(model, state, args.batch_size, candidate_ids)
-        head_error = max(head_error, float(np.max(np.abs(direct - ablated_head))))
+        head_error = max(head_error, float(np.max(np.abs(direct - reconstructed))))
         if head_error > args.state_head_atol:
             raise RuntimeError(f"An ablated final state does not reconstruct model logits: {head_error}")
         delta = full_state - state
