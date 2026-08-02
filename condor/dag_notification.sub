@@ -4,7 +4,7 @@ executable = /bin/bash
 arguments = condor/run_dag_notification.sh $(DAG_STATUS) $(FAILED_COUNT) $(DAGManJobId) $(BsvStudyName) $(BsvExecutionGitCommit) $(BsvStartEpoch) $(BsvResultPath)
 initialdir = $(BsvRepoRoot)
 getenv = HOME
-environment = "PATH=/usr/local/bin:/usr/bin:/bin NTFY_TOPIC=$(BsvNtfyTopic)"
+environment = "PATH=/opt/conda/bin:/usr/local/bin:/usr/bin:/bin NTFY_TOPIC=$(BsvNtfyTopic)"
 request_CPUs = 1
 request_memory = 256MB
 request_GPUs = 0

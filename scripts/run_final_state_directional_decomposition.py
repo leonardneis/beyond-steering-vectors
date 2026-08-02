@@ -67,23 +67,37 @@ def _margin(logits: np.ndarray) -> np.ndarray:
 def _head_logits(
     model, states: np.ndarray, batch_size: int, candidate_ids: list[int]
 ) -> np.ndarray:
+    """Apply the two frozen LM-head rows in high precision."""
+    head = model.get_output_embeddings()
+    weight = (
+        head.weight[candidate_ids].detach().float().cpu().numpy().astype(np.float64)
+    )
+    bias = None
+    if getattr(head, "bias", None) is not None:
+        bias = head.bias[candidate_ids].detach().float().cpu().numpy().astype(np.float64)
+    logits = np.asarray(states, dtype=np.float64) @ weight.T
+    if bias is not None:
+        logits = logits + bias
+    return logits
+
+
+def _runtime_head_logits(
+    model, states: np.ndarray, batch_size: int, candidate_ids: list[int]
+) -> np.ndarray:
+    """Re-run the model's exact LM-head code path for the state integrity gate."""
     import torch
 
     head = model.get_output_embeddings()
     parameter = next(head.parameters())
     indices = torch.as_tensor(candidate_ids, device=parameter.device)
-    selected_weight = head.weight.index_select(0, indices)
-    selected_bias = head.bias.index_select(0, indices) if getattr(head, "bias", None) is not None else None
     output = []
     for start in range(0, len(states), batch_size):
         tensor = torch.from_numpy(states[start : start + batch_size]).to(
             device=parameter.device, dtype=parameter.dtype
         )
         with torch.no_grad():
-            logits = tensor @ selected_weight.T
-            if selected_bias is not None:
-                logits = logits + selected_bias
-            output.append(logits.detach().float().cpu().numpy())
+            logits = head(tensor).index_select(-1, indices)
+            output.append(logits.float().cpu().numpy())
     return np.concatenate(output)
 
 
@@ -164,7 +178,7 @@ def main() -> None:
     )
     if full_state.shape[1] != teacher.shape[0]:
         raise ValueError(f"Teacher/state dimension mismatch: {teacher.shape}, {full_state.shape}")
-    full_head_logits = _head_logits(model, full_state, args.batch_size, candidate_ids)
+    full_head_logits = _runtime_head_logits(model, full_state, args.batch_size, candidate_ids)
     head_error = float(np.max(np.abs(full_direct_logits - full_head_logits)))
     if head_error > args.state_head_atol:
         raise RuntimeError(f"Final hidden state does not reconstruct model logits: {head_error}")
@@ -180,7 +194,7 @@ def main() -> None:
             state, direct = _forward_states_and_logits(
                 model, tokenizer, prompts, args.batch_size, candidate_ids
             )
-        ablated_head = _head_logits(model, state, args.batch_size, candidate_ids)
+        ablated_head = _runtime_head_logits(model, state, args.batch_size, candidate_ids)
         head_error = max(head_error, float(np.max(np.abs(direct - ablated_head))))
         if head_error > args.state_head_atol:
             raise RuntimeError(f"An ablated final state does not reconstruct model logits: {head_error}")
@@ -189,7 +203,7 @@ def main() -> None:
         parallel = coefficient[:, None] * teacher[None, :]
         ablated_states.append(state)
         for prefix, logits in (
-            ("ablated", direct),
+            ("ablated", _head_logits(model, state, args.batch_size, candidate_ids)),
             ("teacher_patched", _head_logits(model, state + parallel, args.batch_size, candidate_ids)),
             ("residual_patched", _head_logits(model, state + (delta - parallel), args.batch_size, candidate_ids)),
         ):
@@ -235,7 +249,7 @@ def main() -> None:
         "margin_direction": margin_direction.astype(np.float32),
         "full_state": full_state.astype(np.float32),
         "ablated_state": ablated_state,
-        "full_margin": _margin(full_direct_logits).astype(np.float32),
+        "full_margin": _margin(_head_logits(model, full_state, args.batch_size, candidate_ids)).astype(np.float32),
         **metric_arrays,
     }
     _atomic_npz(output_path, arrays)
