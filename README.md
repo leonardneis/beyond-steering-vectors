@@ -73,11 +73,12 @@ The completed and audited thesis baseline is immutable at Git tag
 (commit `1635e5a`). Post-baseline work is isolated on versioned research branches
 and cannot silently change those conclusions.
 
-The active `parameter-formation-v1` study broadens the module census from 42 to
-all 196 LoRA modules, adds repeated random and norm-matched control distributions,
-and tests robustness to independently re-estimated teacher vectors. It performs
-no new adapter training. See the [research index](research/README.md) for scope,
-status, and the preregistered go/no-go gate.
+The completed `parameter-formation-v1` study broadens the module census from 42
+to all 196 LoRA modules, adds repeated random and norm-matched control
+distributions, and tests robustness to independently re-estimated teacher
+vectors. It performs no new adapter training and passes its preregistered Gate
+A. See the [audited results](research/parameter_formation_v1/RESULTS.md) and the
+[research index](research/README.md).
 
 ## Repository map
 

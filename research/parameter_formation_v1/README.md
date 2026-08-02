@@ -10,6 +10,9 @@ no-training hardening study over the three already trained cat/neutral adapter
 pairs. Its executable specification is
 `configs/validation/cat_parameter_hardening_v1.yaml`.
 
+Phase 1 completed successfully on 2026-08-02. The audited findings and Gate-A
+decision are in [RESULTS.md](RESULTS.md).
+
 The intended execution order is:
 
 1. verify immutable inputs and generate a dry-run plan;

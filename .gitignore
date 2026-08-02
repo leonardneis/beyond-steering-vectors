@@ -29,6 +29,7 @@ results/reference_reproduction_4080/*
 results/conditions/*
 results/geometry/*
 results/confirmatory/*
+results/research/*
 checkpoints/
 wandb/
 runs/
