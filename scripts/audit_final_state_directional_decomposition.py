@@ -16,7 +16,12 @@ bootstrap()
 
 from aggregate_final_state_directional_decomposition import load_artifact  # noqa: E402
 from notify import notify  # noqa: E402
-from run_confirmatory_manifest import sha256, tree_digest, write_json_atomic  # noqa: E402
+from run_confirmatory_manifest import (  # noqa: E402
+    apply_storage_overrides,
+    sha256,
+    tree_digest,
+    write_json_atomic,
+)
 from run_final_state_directional_decomposition_manifest import validate_inputs  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 from slgeo.analysis.directional_decomposition import decision_gate  # noqa: E402
@@ -61,7 +66,7 @@ def _validate_provenance(
 
 
 def audit(manifest_path: Path, expected_commit: str) -> dict:
-    manifest = load_yaml(manifest_path)
+    manifest = apply_storage_overrides(load_yaml(manifest_path))
     validate_inputs(manifest, require_adapters=False)
     root = repo_path(manifest["output_root"])
     artifacts = {
@@ -212,7 +217,7 @@ def main() -> None:
     args = parser.parse_args()
     output, checksums_path = repo_path(args.output), repo_path(args.checksums)
     manifest_path = repo_path(args.manifest)
-    manifest = load_yaml(manifest_path)
+    manifest = apply_storage_overrides(load_yaml(manifest_path))
     root = repo_path(manifest["output_root"])
     runtime_metadata = root / "runtime/dag.json"
     dag = _read_json(runtime_metadata) if runtime_metadata.is_file() else {}
