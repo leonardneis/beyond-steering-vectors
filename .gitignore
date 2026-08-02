@@ -37,6 +37,7 @@ runs/
 logs/
 notebooks/
 condor/logs/
+condor/runtime/
 condor/condor.env
 condor/*.dag.condor.sub
 condor/*.dag.metrics

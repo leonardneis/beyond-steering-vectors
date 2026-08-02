@@ -1,0 +1,15 @@
+universe = local
+executable = /bin/bash
+arguments = condor/run_dag_notification.sh $(DAG_STATUS) $(FAILED_COUNT) $(DAGManJobId) "$(BsvStudyName)" $(BsvExecutionGitCommit) $(BsvStartEpoch) "$(BsvResultPath)"
+initialdir = $(BsvRepoRoot)
+getenv = false
+environment = "PATH=/usr/local/bin:/usr/bin:/bin NTFY_TOPIC=$(BsvNtfyTopic)"
+request_CPUs = 1
+request_memory = 256MB
+should_transfer_files = NO
+stream_output = true
+stream_error = true
+output = condor/logs/ntfy.$(DAGManJobId).out
+error = condor/logs/ntfy.$(DAGManJobId).err
+log = condor/logs/ntfy.$(DAGManJobId).log
+queue 1

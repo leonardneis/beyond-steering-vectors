@@ -164,6 +164,21 @@ must still remain on `/scratch` rather than only in the transfer sandbox.
 
 ## Monitoring and operations
 
+Study submit wrappers support optional ntfy runtime notifications. Install the
+ntfy phone app, subscribe to a long and unguessable private topic, and place
+its URL only in the Git-ignored `condor/condor.env` file:
+
+```bash
+export NTFY_TOPIC="https://ntfy.sh/<private-random-topic>"
+bash condor/submit_final_state_directional_decomposition.sh --dry-run
+```
+
+If `NTFY_TOPIC` is unset, no request is made. Runtime DAGs contain the topic
+only below the ignored `condor/runtime/` directory. DAG and audit completion or
+failure notifications include study, DAG ID, frozen commit, duration, status,
+and the result path on success. No topic or personal identifier belongs in a
+versioned manifest, DAG, log template, or documentation example.
+
 Machine/human status combines completion markers with live `condor_q` ClassAds:
 
 ```bash

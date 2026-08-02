@@ -6,16 +6,27 @@ if [[ "$MODE" != "--dry-run" && "$MODE" != "--submit" ]]; then
   exit 2
 fi
 cd "$(dirname "$0")/.."
+if [[ -f condor/condor.env ]]; then
+  # shellcheck disable=SC1091
+  source condor/condor.env
+fi
 SHARED_ROOT=${SLGEO_SHARED_ROOT:-/scratch/compuling/$USER/beyond-steering-vectors}
 export SLGEO_SHARED_ROOT="$SHARED_ROOT"
-mkdir -p condor/logs "$SHARED_ROOT/results/research/plans"
+EXECUTION_COMMIT=$(git rev-parse HEAD)
+START_EPOCH=$(date +%s)
+DAG=condor/runtime/parameter_hardening.dag
+mkdir -p condor/logs condor/runtime "$SHARED_ROOT/results/research/plans"
 python3 scripts/run_parameter_hardening_manifest.py \
   --emit-plan "$SHARED_ROOT/results/research/parameter_hardening_preflight_plan.json" \
   --resume --require-adapters
 python3 scripts/generate_parameter_hardening_dag.py
-condor_submit_dag -no_submit -f condor/parameter_hardening.dag
+python3 scripts/dag_notifications.py --source condor/parameter_hardening.dag --output "$DAG" \
+  --study "Parameter Formation v1" --git-commit "$EXECUTION_COMMIT" \
+  --result-path "$SHARED_ROOT/results/research/qwen7b_cat_parameter_hardening_v1" \
+  --start-epoch "$START_EPOCH" --ntfy-topic "${NTFY_TOPIC:-}"
+condor_submit_dag -no_submit -f "$DAG"
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "READY: Phase-1 inputs and 52-node DAG validated; nothing submitted."
   exit 0
 fi
-condor_submit_dag -f condor/parameter_hardening.dag
+condor_submit_dag -f "$DAG"
