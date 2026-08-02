@@ -24,7 +24,7 @@ def append_final_notification(
         raise ValueError("DAG already contains a FINAL node")
     topic = validate_topic(ntfy_topic)
     values = {
-        "BsvStudyName": study,
+        "BsvStudyName": study.replace(" ", "_"),
         "BsvExecutionGitCommit": git_commit,
         "BsvResultPath": result_path,
         "BsvNtfyTopic": topic,

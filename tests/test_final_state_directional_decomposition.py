@@ -138,6 +138,7 @@ def test_default_dag_disables_ntfy_and_runtime_override_is_private() -> None:
     )
     assert 'BsvNtfyTopic="https://ntfy.sh/private-test-topic"' in enabled
     assert 'BsvStartEpoch="123"' in enabled
+    assert 'BsvStudyName="Final-State_Directional_Causal_Decomposition_v1"' in enabled
 
 
 def test_ntfy_contract_is_optional_private_and_complete() -> None:

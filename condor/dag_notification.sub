@@ -1,6 +1,6 @@
 universe = local
 executable = /bin/bash
-arguments = condor/run_dag_notification.sh $(DAG_STATUS) $(FAILED_COUNT) $(DAGManJobId) "$(BsvStudyName)" $(BsvExecutionGitCommit) $(BsvStartEpoch) "$(BsvResultPath)"
+arguments = condor/run_dag_notification.sh $(DAG_STATUS) $(FAILED_COUNT) $(DAGManJobId) $(BsvStudyName) $(BsvExecutionGitCommit) $(BsvStartEpoch) $(BsvResultPath)
 initialdir = $(BsvRepoRoot)
 getenv = false
 environment = "PATH=/usr/local/bin:/usr/bin:/bin NTFY_TOPIC=$(BsvNtfyTopic)"
