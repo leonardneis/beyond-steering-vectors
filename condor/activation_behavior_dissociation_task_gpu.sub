@@ -1,0 +1,39 @@
+universe = docker
+docker_image = $(BsvDockerImage)
+executable = condor/run_activation_behavior_dissociation_task.sh
+arguments = $(BsvPairIndex) $(BsvStage) $(BsvCommandIndex) $(BsvManifestPath) $(BsvTaskId)
+initialdir = $(BsvRepoRoot)
+request_CPUs = $(BsvRequestCpus)
+request_memory = $(BsvRequestMemoryMB)MB
+request_GPUs = 1
+gpus_minimum_memory = $(BsvMinGpuMemoryMB)
+gpus_minimum_capability = 7.0
+job_machine_attrs = Name, AssignedGPUs
+job_machine_attrs_history_length = $(BsvGpuResourceAttempts)
+requirements = UidDomain == "cs.uni-saarland.de" \
+  && (MY.MachineAttrName0 =?= undefined || TARGET.Name =!= MY.MachineAttrName0) \
+  && (MY.MachineAttrName1 =?= undefined || TARGET.Name =!= MY.MachineAttrName1) \
+  && (MY.MachineAttrName2 =?= undefined || TARGET.Name =!= MY.MachineAttrName2) \
+  && (MY.MachineAttrName3 =?= undefined || TARGET.Name =!= MY.MachineAttrName3) \
+  && (MY.MachineAttrAssignedGPUs0 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs0) \
+  && (MY.MachineAttrAssignedGPUs1 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs1) \
+  && (MY.MachineAttrAssignedGPUs2 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs2) \
+  && (MY.MachineAttrAssignedGPUs3 =?= undefined || TARGET.AssignedGPUs =!= MY.MachineAttrAssignedGPUs3)
+on_exit_remove = (ExitBySignal =?= true) \
+  || (ExitCode =!= 85) \
+  || (NumJobStarts >= $(BsvGpuResourceAttempts))
+getenv = HOME
+environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_FORCE_SINGLE_GPU=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
++WantGPUHomeMounted = true
++WantScratchMounted = true
++TaskId = "$(BsvTaskId)"
+should_transfer_files = NO
+max_job_retirement_time = $(BsvRetirementSeconds)
+kill_sig = SIGTERM
+kill_sig_timeout = 180
+stream_output = true
+stream_error = true
+output = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).out
+error = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).err
+log = condor/logs/activation_behavior_dissociation.$(ClusterId).$(ProcId).log
+queue 1

@@ -1,0 +1,24 @@
+universe = docker
+docker_image = $(BsvDockerImage)
+executable = condor/run_activation_behavior_dissociation_task.sh
+arguments = $(BsvPairIndex) $(BsvStage) $(BsvCommandIndex) $(BsvManifestPath) $(BsvTaskId)
+initialdir = $(BsvRepoRoot)
+request_CPUs = $(BsvRequestCpus)
+request_memory = $(BsvRequestMemoryMB)MB
+request_GPUs = 0
+requirements = UidDomain == "cs.uni-saarland.de"
+getenv = HOME
+environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
++WantGPUHomeMounted = true
++WantScratchMounted = true
++TaskId = "$(BsvTaskId)"
+should_transfer_files = NO
+max_job_retirement_time = $(BsvRetirementSeconds)
+kill_sig = SIGTERM
+kill_sig_timeout = 180
+stream_output = true
+stream_error = true
+output = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).out
+error = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).err
+log = condor/logs/activation_behavior_dissociation.$(ClusterId).$(ProcId).log
+queue 1
