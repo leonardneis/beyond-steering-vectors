@@ -332,6 +332,8 @@ def test_htcondor_technical_dag_is_outcome_blind_and_ordered():
     dag = render_dag(manifest, mode="technical", commit="a" * 40)
     assert "c18_technical_00" in dag and "c18_technical_audit" in dag
     assert "PARENT c18_technical_00 CHILD c18_technical_audit" in dag
+    assert "FINAL c18_notify condor/dag_notification.sub" in dag
+    assert 'BsvNtfyTopic=""' in dag
     assert "subliminal" not in dag and "neutral" not in dag
     assert "@sha256:" in dag
 

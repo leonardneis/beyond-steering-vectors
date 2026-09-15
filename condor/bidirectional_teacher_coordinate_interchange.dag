@@ -1,4 +1,3 @@
-# Generated technical-only C18 DAG. Scientific jobs are intentionally absent.
 JOB c18_technical_00 condor/bidirectional_teacher_coordinate_interchange_task_gpu.sub
 VARS c18_technical_00 BsvTaskId="c18_technical_00" BsvMode="technical" BsvCondition="none" BsvManifestPath="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors" BsvSharedRoot="/scratch/compuling/$ENV(USER)/beyond-steering-vectors" BsvDockerImage="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" BsvExecutionGitCommit="UNFROZEN"
 RETRY c18_technical_00 2 UNLESS-EXIT 85
@@ -6,3 +5,6 @@ RETRY c18_technical_00 2 UNLESS-EXIT 85
 JOB c18_technical_audit condor/bidirectional_teacher_coordinate_interchange_task_cpu.sub
 VARS c18_technical_audit BsvTaskId="c18_technical_audit" BsvMode="technical_audit" BsvCondition="none" BsvManifestPath="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors" BsvSharedRoot="/scratch/compuling/$ENV(USER)/beyond-steering-vectors" BsvDockerImage="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" BsvExecutionGitCommit="UNFROZEN"
 PARENT c18_technical_00 CHILD c18_technical_audit
+
+FINAL c18_notify condor/dag_notification.sub
+VARS c18_notify BsvStudyName="Bidirectional_Teacher-Coordinate_Interchange_v1_technical_validation" BsvExecutionGitCommit="UNFROZEN" BsvResultPath="results/research/qwen7b_cat_bidirectional_teacher_coordinate_interchange_v1/technical" BsvNtfyTopic="" BsvDockerImage="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" BsvStartEpoch="0" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors"

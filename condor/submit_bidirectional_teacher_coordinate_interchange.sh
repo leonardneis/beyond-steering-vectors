@@ -15,13 +15,17 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   exit 2
 fi
 COMMIT=$(git rev-parse HEAD)
+START_EPOCH=$(date +%s)
 RUNTIME_DAG=condor/runtime/bidirectional_teacher_coordinate_interchange.dag
 mkdir -p condor/runtime condor/logs
 python3 scripts/run_bidirectional_teacher_coordinate_interchange_manifest.py \
   --mode technical --require-runtime-inputs \
   --emit-plan condor/runtime/c18_technical_plan.json >/dev/null
-python3 scripts/generate_bidirectional_teacher_coordinate_interchange_dag.py \
-  --mode technical --execution-git-commit "$COMMIT" --output "$RUNTIME_DAG"
+generator=(python3 scripts/generate_bidirectional_teacher_coordinate_interchange_dag.py \
+  --mode technical --execution-git-commit "$COMMIT" --start-epoch "$START_EPOCH" \
+  --output "$RUNTIME_DAG")
+if [[ -n "${NTFY_TOPIC:-}" ]]; then generator+=(--ntfy-topic "$NTFY_TOPIC"); fi
+"${generator[@]}"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/c18-condor-preflight.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 condor_submit -dry-run "$TMP/technical.classad" \
@@ -40,6 +44,15 @@ condor_submit -dry-run "$TMP/audit.classad" \
   "BsvDockerImage=pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" \
   "BsvExecutionGitCommit=$COMMIT" condor/bidirectional_teacher_coordinate_interchange_task_cpu.sub >/dev/null
 test -s "$TMP/audit.classad"
+condor_submit -dry-run "$TMP/notify.classad" \
+  "BsvRepoRoot=$HOME/beyond-steering-vectors" "BsvStudyName=c18_preflight" \
+  "BsvExecutionGitCommit=$COMMIT" "BsvStartEpoch=$START_EPOCH" \
+  "BsvResultPath=${SLGEO_SHARED_ROOT:-/scratch/compuling/$USER/beyond-steering-vectors}/results/research/qwen7b_cat_bidirectional_teacher_coordinate_interchange_v1/technical_validation" \
+  "BsvNtfyTopic=" \
+  "BsvDockerImage=pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" \
+  "DAG_STATUS=0" "FAILED_COUNT=0" "DAGManJobId=0" \
+  condor/dag_notification.sub >/dev/null
+test -s "$TMP/notify.classad"
 condor_submit_dag -no_submit -f "$RUNTIME_DAG"
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "READY: C18 technical-only ClassAd and DAG validated; nothing submitted."
