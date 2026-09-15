@@ -35,6 +35,11 @@ frozen_inputs:
     sha256: f19d3003a771205da5ecd76175d1f81ecba8975812130c2a6c816d87a7af8f23
     count: 72
     families: {direct_preference: 24, identity_affinity: 24, hypothetical_choice: 24}
+  token_inventory:
+    path: research/bidirectional_teacher_coordinate_interchange_v1/TOKEN_INVENTORY.json
+    sha256: 0e3a9083ea3e73c979103c1a025faa8cf6b601fcec61297ce359170dd336b232
+    transformers: 4.48.3
+    padding_side: left
   selection_plan:
     path: results/research/qwen7b_cat_parameter_hardening_v1/seed_2/attribution/topk_plan.json
     sha256: bf1f1712bbf9ec711413d0ca52e7368ed7fb1e63ac3e43055da63a4d0b9ae0ba
@@ -117,7 +122,7 @@ execution:
   numpy: 2.1.2
   requirements_lock:
     path: condor/requirements-condor.txt
-    sha256: b0d601b72239a35197a4335d2cc4c24c4adcff53d8c4b332f0810f39c0014421
+    sha256: 56bd93ced9e98a6eea666ba227b409bc020c86d6ab0a401d7e3b58d74cfea799
   attention_backend: sdpa
   residual_dtype: float16
   quantization: {mode: nf4, compute_dtype: float16, double_quant: false}
@@ -161,14 +166,13 @@ required_artifacts:
     - technical/validation.json
     - technical/validation.json.provenance.json
     - technical/SHA256SUMS
+    - technical/audit.json
   scientific_sealed:
     - sealed/raw/cell_inventory.json
-    - sealed/raw/natural_subliminal.npz.sealed
-    - sealed/raw/natural_neutral.npz.sealed
-    - sealed/raw/cross_subliminal.npz.sealed
-    - sealed/raw/cross_neutral.npz.sealed
-    - sealed/raw/orthogonal_controls.npz.sealed
-    - sealed/raw/suffix_factorials.npz.sealed
+    - sealed/raw/subliminal.npz.sealed
+    - sealed/raw/subliminal.npz.sealed.provenance.json
+    - sealed/raw/neutral.npz.sealed
+    - sealed/raw/neutral.npz.sealed.provenance.json
 release_gates:
   require_prereg_tag: true
   require_clean_execution_checkout: true

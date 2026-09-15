@@ -9,6 +9,8 @@ execution by itself.
 - `DECISION_MATRIX.md` is the ordered prospective classification rule.
 - `ORTHOGONAL_DIRECTIONS.npz` is the outcome-blind, deterministic control
   direction artifact named by the manifest.
+- `TOKEN_INVENTORY.json` freezes rendered-prefill token IDs under Transformers
+  4.48.3 without executing the model.
 
 The executable manifest is
 `configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml`.
