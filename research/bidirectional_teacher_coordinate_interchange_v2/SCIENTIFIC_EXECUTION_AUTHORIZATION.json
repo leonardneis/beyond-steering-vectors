@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "experiment_id": "qwen7b_cat_bidirectional_teacher_coordinate_interchange_v2",
+  "decision": "C18 V2 SCIENTIFIC EXECUTION AUTHORIZED",
+  "authorized": true,
+  "authorized_at": "2026-09-21T00:32:51.6623431+02:00",
+  "authorization_basis_commit": "2a0d98833e579b5e1fcce62eba66906b6bf2a282",
+  "execution_commit": "0e1bd7eca2d6003327dd95559b5107e5930b465b",
+  "bindings": {
+    "preregistration_sha256": "b09387fce2805a785d1ed9f98f296b473e4fcf593f54cb4867f44ab816978c34",
+    "decision_matrix_sha256": "5656570dedc5d5118ac897ee23f81851040a36b053f6c6226092947e1d6b554f",
+    "manifest_sha256": "6c8353788690a683b0447f72efb0980ecf87c6c3d07df4ff4e6db7842d121ed0",
+    "calibration_summary_sha256": "9e026aa08613d28f9bfd6f49b58a85748d5e6ed3e610019208246d034e0889e4",
+    "calibration_contract_sha256": "a6fbce42d08672f8e02e2276e7ff935d10ecdffc6c6a127110c2c24ea0aa97e5",
+    "calibration_population_sha256": "624b4a0c4e013f0a40ee99e6b3a62a567b635704ddc1f5e6d5257fe3fc3d4e86",
+    "calibration_seal_sha256": "d5fdae2ea87f40bd1155d74de6d48bf5b49ee7e2414504c26e05bc64c024d8ff",
+    "calibration_audit_sha256": "b6e8808dbff887c7ff403ab7eb2d1211d092e71b098274f3ce927c82926d345f",
+    "technical_validation_record_sha256": "e15240264cad8ef26d6614e76d58e31e1e5cf5c322f8e31e63ba2cfe8e9ec704",
+    "technical_preflight_sha256": "a7b56602552c9c154515f0ef03404e1856f73d9394c45ba200105a9b843239e2",
+    "technical_gpu_validation_sha256": "c67cc496376caf16c7255af52b778ce322fceb56e5602dd4cfd864ab75bebd7c",
+    "technical_validation_provenance_sha256": "f7fec9781f68efe1a115275a203f996bef13a10a1558980a648c8560c4ceb88c",
+    "technical_sha256sums_sha256": "fa0dfb8846da5651496c95ce641ae5efa50257625507cd76287a1670cad523fb",
+    "technical_independent_audit_sha256": "9bb8d342d0cfb591cc2e07c2a5b3553a9ba990174162a2b88a52ff9c835ab453"
+  },
+  "container": {
+    "image": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
+    "digest": "sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755"
+  },
+  "scientific_inputs": {
+    "model_config_sha256": "0051cc7b370e179a8ea9b7eaf42726f143695d8f5b7038d16e396f9cb25ac923",
+    "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "prompt_file_sha256": "f19d3003a771205da5ecd76175d1f81ecba8975812130c2a6c816d87a7af8f23",
+    "token_inventory_sha256": "1be7583d1995d025a3534223b3297a2bad02edc8332c4deee0a2311cfe4646f2",
+    "batch_plan_sha256": "2be28c7316a350bf39db86d4fea4e24b1f34a26930d3d58f6885163e0a534dfe",
+    "selection_plan_sha256": "bf1f1712bbf9ec711413d0ca52e7368ed7fb1e63ac3e43055da63a4d0b9ae0ba",
+    "teacher_tensor_sha256": "4ec9c11ef4c6b8753c388e92c1f18faa6f4364143c64c2583279deb1beb5bc71",
+    "orthogonal_directions_sha256": "0461b1443b2de25915df38662224a67d6bd6722d88600f180c1bdda7a7d8724c",
+    "subliminal_adapter_tree_sha256": "087f0bf25e0933c592636460a8a1a642c68863fd098229bf825e4eba1d86dd03",
+    "neutral_adapter_tree_sha256": "ea2a581b72c6f3d4b70f472652bbfd59e6787196d4aa3a18ebf5a75ddf8d1e23",
+    "fsd_manifest_sha256": "9fee8b0ac5971b2ed440774802bdeaae6637cc611377de09b1965a0557eae1e5",
+    "fsd_subliminal_states_sha256": "8c4eb6bae0aae82fdc2de5c7101b789f639799bd8055c512833616b4cfcfd023",
+    "fsd_neutral_states_sha256": "5dbaca53af260f73d2da7c17eefaf2b5bf6a63867a7f7a260227961210917e32",
+    "fsd_aggregate_sha256": "eb635bb4a13facbcf7302a631a653deee1897c839755926306914a51d1c3a1bc",
+    "requirements_lock_sha256": "39e3bdf9b89054da281e16df3535b186d0b8722d2f64fab2390c32b6bb1c06fb"
+  },
+  "scope": {
+    "seed": 2,
+    "scientific_contract_changes_authorized": false,
+    "outcome_release_authorized": false,
+    "seed_1_or_3_execution_authorized": false,
+    "merge_tag_or_release_authorized": false
+  }
+}
