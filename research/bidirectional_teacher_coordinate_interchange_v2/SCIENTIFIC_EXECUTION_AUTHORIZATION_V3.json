@@ -1,0 +1,75 @@
+{
+  "schema_version": 2,
+  "experiment_id": "qwen7b_cat_bidirectional_teacher_coordinate_interchange_v2",
+  "decision": "C18 V2 SCIENTIFIC EXECUTION AUTHORIZED",
+  "authorized": true,
+  "authorized_at": "2026-09-21T01:12:34.2276854+02:00",
+  "authorization_basis_commit": "287d9c70556fb6dc1735b0794108be58f293fe10",
+  "execution_commit": "287d9c70556fb6dc1735b0794108be58f293fe10",
+  "execution_commit_policy": {
+    "frozen_execution_commit": "0e1bd7eca2d6003327dd95559b5107e5930b465b",
+    "blocked_execution_base_commit": "4a930b17ae92b0df28b216d525c89ca39e0a86f4",
+    "relationship": "descendant_with_execution_control_only_changes",
+    "permitted_changed_paths": [
+      "condor/run_bidirectional_teacher_coordinate_interchange_v2_task.sh",
+      "research/bidirectional_teacher_coordinate_interchange_v2/EXECUTION_CONTROL_REPAIR.md",
+      "scripts/aggregate_bidirectional_teacher_coordinate_interchange_v2.py",
+      "scripts/audit_bidirectional_teacher_coordinate_interchange_v2.py",
+      "scripts/audit_c18_v2_technical_validation.py",
+      "scripts/generate_bidirectional_teacher_coordinate_interchange_v2_dag.py",
+      "scripts/run_bidirectional_teacher_coordinate_interchange_v2.py",
+      "scripts/run_bidirectional_teacher_coordinate_interchange_v2_manifest.py",
+      "scripts/validate_bidirectional_teacher_coordinate_interchange_v2.py",
+      "src/slgeo/analysis/c18_v2_authorization.py",
+      "src/slgeo/analysis/c18_v2_manifest.py",
+      "tests/test_c18_v2_authorization.py"
+    ]
+  },
+  "bindings": {
+    "preregistration_sha256": "b09387fce2805a785d1ed9f98f296b473e4fcf593f54cb4867f44ab816978c34",
+    "decision_matrix_sha256": "5656570dedc5d5118ac897ee23f81851040a36b053f6c6226092947e1d6b554f",
+    "manifest_sha256": "6c8353788690a683b0447f72efb0980ecf87c6c3d07df4ff4e6db7842d121ed0",
+    "calibration_summary_sha256": "9e026aa08613d28f9bfd6f49b58a85748d5e6ed3e610019208246d034e0889e4",
+    "calibration_contract_sha256": "a6fbce42d08672f8e02e2276e7ff935d10ecdffc6c6a127110c2c24ea0aa97e5",
+    "calibration_population_sha256": "624b4a0c4e013f0a40ee99e6b3a62a567b635704ddc1f5e6d5257fe3fc3d4e86",
+    "calibration_seal_sha256": "d5fdae2ea87f40bd1155d74de6d48bf5b49ee7e2414504c26e05bc64c024d8ff",
+    "calibration_audit_sha256": "b6e8808dbff887c7ff403ab7eb2d1211d092e71b098274f3ce927c82926d345f",
+    "technical_preflight_sha256": "2ba90fbe0603889ec030efd3b35d71f216c57a1d7156cd56c66d043164c98b70",
+    "technical_gpu_validation_sha256": "91c79e9a356a47e3636f132026e741d142a506f2a8fc2bfb1ef8d49a916f6297",
+    "technical_validation_provenance_sha256": "5a4b533d148a128177932a5765dcacf7524dc9b5b7dc933ea813fa674e77e544",
+    "technical_sha256sums_sha256": "3995f537932c4d8a6517d1b55ce164ba98b4d44dc8d2466383424f8e0e1315ba",
+    "technical_independent_audit_sha256": "f1c534eb89dc965a638e76ee22b6093af86fb66eaa0d9cd7684a9003729c57bb"
+  },
+  "container": {
+    "image": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
+    "digest": "sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755"
+  },
+  "scientific_inputs": {
+    "model_config_sha256": "0051cc7b370e179a8ea9b7eaf42726f143695d8f5b7038d16e396f9cb25ac923",
+    "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "prompt_file_sha256": "f19d3003a771205da5ecd76175d1f81ecba8975812130c2a6c816d87a7af8f23",
+    "token_inventory_sha256": "1be7583d1995d025a3534223b3297a2bad02edc8332c4deee0a2311cfe4646f2",
+    "batch_plan_sha256": "2be28c7316a350bf39db86d4fea4e24b1f34a26930d3d58f6885163e0a534dfe",
+    "selection_plan_sha256": "bf1f1712bbf9ec711413d0ca52e7368ed7fb1e63ac3e43055da63a4d0b9ae0ba",
+    "teacher_tensor_sha256": "4ec9c11ef4c6b8753c388e92c1f18faa6f4364143c64c2583279deb1beb5bc71",
+    "orthogonal_directions_sha256": "0461b1443b2de25915df38662224a67d6bd6722d88600f180c1bdda7a7d8724c",
+    "subliminal_adapter_tree_sha256": "087f0bf25e0933c592636460a8a1a642c68863fd098229bf825e4eba1d86dd03",
+    "neutral_adapter_tree_sha256": "ea2a581b72c6f3d4b70f472652bbfd59e6787196d4aa3a18ebf5a75ddf8d1e23",
+    "fsd_manifest_sha256": "9fee8b0ac5971b2ed440774802bdeaae6637cc611377de09b1965a0557eae1e5",
+    "fsd_subliminal_states_sha256": "8c4eb6bae0aae82fdc2de5c7101b789f639799bd8055c512833616b4cfcfd023",
+    "fsd_neutral_states_sha256": "5dbaca53af260f73d2da7c17eefaf2b5bf6a63867a7f7a260227961210917e32",
+    "fsd_aggregate_sha256": "eb635bb4a13facbcf7302a631a653deee1897c839755926306914a51d1c3a1bc",
+    "requirements_lock_sha256": "39e3bdf9b89054da281e16df3535b186d0b8722d2f64fab2390c32b6bb1c06fb"
+  },
+  "scope": {
+    "seed": 2,
+    "scientific_contract_changes_authorized": false,
+    "outcome_release_authorized": false,
+    "seed_1_or_3_execution_authorized": false,
+    "merge_tag_or_release_authorized": false
+  },
+  "supersedes": {
+    "authorization_record_sha256": "f8f008c061101d828f3c9a7662e07a9489ada4380826a676b7b13963844ce584",
+    "failed_execution_report_status": "C18 V2 EXECUTION BLOCKED"
+  }
+}
