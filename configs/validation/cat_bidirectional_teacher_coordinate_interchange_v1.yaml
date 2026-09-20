@@ -122,7 +122,7 @@ execution:
   numpy: 2.1.2
   requirements_lock:
     path: condor/requirements-condor.txt
-    sha256: 56bd93ced9e98a6eea666ba227b409bc020c86d6ab0a401d7e3b58d74cfea799
+    sha256: 39e3bdf9b89054da281e16df3535b186d0b8722d2f64fab2390c32b6bb1c06fb
   attention_backend: sdpa
   residual_dtype: float16
   quantization: {mode: nf4, compute_dtype: float16, double_quant: false}

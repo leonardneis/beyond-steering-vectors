@@ -44,6 +44,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from scripts.generate_bidirectional_teacher_coordinate_interchange_dag import render as render_dag
 from scripts.render_c18_technical_dag import render as render_runtime_dag
+from scripts.validate_c18_execution_checkout import validate_checkout
 from scripts.run_bidirectional_teacher_coordinate_interchange_manifest import command_plan
 
 
@@ -351,6 +352,24 @@ def test_stdlib_runtime_dag_renderer_freezes_commit_and_notification():
     assert rendered.count("b" * 40) == 4
     assert 'BsvStartEpoch="123"' in rendered
     assert 'BsvNtfyTopic="https://ntfy.sh/private-c18-topic"' in rendered
+
+
+def test_execution_checkout_validator_accepts_exact_clean_repository(tmp_path):
+    from dulwich import porcelain
+
+    porcelain.init(tmp_path)
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text("frozen\n", encoding="utf-8")
+    porcelain.add(tmp_path, paths=[tracked])
+    expected = porcelain.commit(
+        tmp_path, message=b"frozen", author=b"C18 Test <c18@example.invalid>",
+    ).decode("ascii")
+    validate_checkout(tmp_path, expected)
+    with pytest.raises(RuntimeError, match="commit differs"):
+        validate_checkout(tmp_path, "0" * 40)
+    tracked.write_text("changed\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="not clean"):
+        validate_checkout(tmp_path, expected)
 
 
 def test_manifest_plan_separates_technical_and_scientific_commands():

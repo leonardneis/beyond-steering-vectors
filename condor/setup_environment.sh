@@ -39,7 +39,7 @@ fi
 
 # A custom image already has all dependencies. The public PyTorch fallback creates a
 # content-addressed shared venv once; flock prevents array/DAG startup races.
-if ! "$PYTHON_BOOTSTRAP" -c 'import accelerate,bitsandbytes,datasets,matplotlib,numpy,pandas,peft,scipy,sklearn,transformers,trl,yaml' >/dev/null 2>&1; then
+if ! "$PYTHON_BOOTSTRAP" -c 'import accelerate,bitsandbytes,cryptography,datasets,dulwich,matplotlib,numpy,pandas,peft,scipy,sklearn,transformers,trl,yaml' >/dev/null 2>&1; then
   REQUIREMENTS_HASH=$("$PYTHON_BOOTSTRAP" -c 'import hashlib;print(hashlib.sha256(open("condor/requirements-condor.txt","rb").read()).hexdigest()[:16])')
   ENV_ROOT="$ENV_BASE/condor-$REQUIREMENTS_HASH"
   (

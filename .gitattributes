@@ -9,3 +9,4 @@
 *.sub text eol=lf
 *.dag text eol=lf
 *.jsonl text eol=lf
+condor/requirements-condor.txt text eol=lf

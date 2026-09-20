@@ -11,10 +11,7 @@ if [[ -z "${SLGEO_EXECUTION_GIT_COMMIT:-}" || "$SLGEO_EXECUTION_GIT_COMMIT" == "
   echo "Refusing C18 execution without a frozen commit." >&2
   exit 2
 fi
-if [[ "$(git rev-parse HEAD)" != "$SLGEO_EXECUTION_GIT_COMMIT" ]] || [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
-  echo "C18 execution checkout is not the exact clean frozen commit." >&2
-  exit 2
-fi
+python scripts/validate_c18_execution_checkout.py --expected-commit "$SLGEO_EXECUTION_GIT_COMMIT"
 ROOT="$SLGEO_SHARED_ROOT/results/research/qwen7b_cat_bidirectional_teacher_coordinate_interchange_v1"
 if [[ "$MODE" == "technical_preflight" ]]; then
   mkdir -p "$ROOT/technical"
