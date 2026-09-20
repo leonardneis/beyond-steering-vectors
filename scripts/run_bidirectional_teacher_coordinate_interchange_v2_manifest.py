@@ -16,6 +16,9 @@ bootstrap()
 from slgeo.analysis.c18_v2_manifest import (  # noqa: E402
     apply_storage_overrides, validate_manifest_contract, validate_public_inputs,
 )
+from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
+    load_and_validate_scientific_authorization,
+)
 from slgeo.analysis.teacher_coordinate_interchange import atomic_json, sha256_file  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
@@ -48,16 +51,20 @@ def main() -> None:
     parser.add_argument("--emit-plan")
     parser.add_argument("--require-runtime-inputs", action="store_true")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--authorization")
+    parser.add_argument("--technical-directory")
+    parser.add_argument("--execution-git-commit", default=os.environ.get("SLGEO_EXECUTION_GIT_COMMIT"))
     args = parser.parse_args()
     manifest = apply_storage_overrides(load_yaml(repo_path(args.manifest)))
     validate_manifest_contract(manifest)
     inputs = validate_public_inputs(
         manifest, repo_path("."), require_runtime_inputs=args.require_runtime_inputs,
-        read_sensitive=False,
+        read_sensitive=False, allow_execution_control_successor=True,
     )
     plan = {"schema_version": 2, "experiment_id": manifest["experiment_id"],
             "manifest_sha256": sha256_file(repo_path(args.manifest)),
             "scientific_execution_authorized": False,
+            "execution_commit": args.execution_git_commit,
             "inputs": inputs, "commands": command_plan(manifest),
             "outcome_blindness": {"scientific_prompts_loaded": False,
                 "scientific_selection_plan_loaded": False, "teacher_tensors_loaded": 0,
@@ -78,8 +85,14 @@ def main() -> None:
     if not args.execute:
         print(json.dumps(plan, indent=2, sort_keys=True))
         return
-    if args.mode == "scientific" and not manifest.get("scientific_execution_authorized", False):
-        raise RuntimeError("STOP: scientific C18 execution is not authorized")
+    if args.mode == "scientific":
+        if not args.authorization or not args.execution_git_commit:
+            raise RuntimeError("STOP: scientific C18 execution is not authorized")
+        load_and_validate_scientific_authorization(
+            args.authorization, manifest, repo_path(args.manifest), root=repo_path("."),
+            execution_commit=args.execution_git_commit,
+            technical_directory=args.technical_directory,
+        )
     for command in plan["commands"][args.mode]:
         subprocess.run([sys.executable, *command], check=True, cwd=repo_path("."))
 

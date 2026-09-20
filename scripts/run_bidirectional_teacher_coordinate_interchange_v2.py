@@ -33,6 +33,9 @@ from slgeo.analysis.c18_v2_manifest import (  # noqa: E402
     apply_storage_overrides, selection_inventory, validate_manifest_contract,
     validate_public_inputs,
 )
+from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
+    load_and_validate_scientific_authorization,
+)
 from slgeo.analysis.interventions import mask_lora_modules  # noqa: E402
 from slgeo.analysis.teacher_coordinate_interchange import (  # noqa: E402
     atomic_sealed,
@@ -105,26 +108,25 @@ def main() -> None:
     parser.add_argument("--condition", choices=("subliminal", "neutral"), required=True)
     parser.add_argument("--authorization", required=True, help="Exact-manifest authorization record created only after explicit release")
     parser.add_argument("--technical-audit", required=True)
+    parser.add_argument("--execution-git-commit", default=os.environ.get("SLGEO_EXECUTION_GIT_COMMIT"))
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     manifest_path = repo_path(args.manifest)
     manifest = apply_storage_overrides(load_yaml(manifest_path))
     validate_manifest_contract(manifest)
-    if not manifest.get("scientific_execution_authorized", False):
-        raise RuntimeError("STOP: public C18 manifest does not authorize scientific execution")
-    authorization = json.loads(Path(args.authorization).read_text(encoding="utf-8"))
-    if authorization.get("authorized") is not True or authorization.get("experiment_id") != manifest["experiment_id"]:
-        raise RuntimeError("STOP: invalid scientific authorization record")
-    if authorization.get("manifest_sha256") != sha256_file(manifest_path):
-        raise RuntimeError("STOP: authorization is not bound to the exact v2 manifest")
-    technical_audit = json.loads(Path(args.technical_audit).read_text(encoding="utf-8"))
-    if technical_audit.get("status") != "PASS" or technical_audit.get("manifest_sha256") != sha256_file(manifest_path):
-        raise RuntimeError("STOP: exact-manifest technical audit has not passed")
+    if not args.execution_git_commit:
+        raise RuntimeError("STOP: execution commit is absent")
+    load_and_validate_scientific_authorization(
+        args.authorization, manifest, manifest_path, root=repo_path("."),
+        execution_commit=args.execution_git_commit,
+        technical_directory=Path(args.technical_audit).parent,
+    )
     seal_key = os.environ.get("SLGEO_C18_V2_SEAL_KEY", "").encode("ascii")
     if not seal_key:
         raise RuntimeError("STOP: runtime-only C18 sealing key is absent")
     checked_inputs = validate_public_inputs(
-        manifest, Path.cwd(), require_runtime_inputs=True, read_sensitive=True
+        manifest, Path.cwd(), require_runtime_inputs=True, read_sensitive=True,
+        allow_execution_control_successor=True,
     )
     configure_determinism()
     actual_identity = assert_runtime_identity(manifest)

@@ -31,7 +31,8 @@ elif [[ "$MODE" == "scientific" ]]; then
   mkdir -p "$ROOT/sealed/raw"
   python -u scripts/run_bidirectional_teacher_coordinate_interchange_v2.py \
     --manifest "$MANIFEST" --condition "$CONDITION" \
-    --authorization condor/runtime/c18_v2_scientific_authorization.json \
+    --authorization research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_EXECUTION_AUTHORIZATION_V2.json \
+    --execution-git-commit "$SLGEO_EXECUTION_GIT_COMMIT" \
     --technical-audit "$ROOT/technical/audit.json" \
     --output "$ROOT/sealed/raw/$CONDITION.npz.sealed"
 else

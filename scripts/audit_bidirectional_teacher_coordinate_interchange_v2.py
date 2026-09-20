@@ -21,6 +21,9 @@ from slgeo.analysis.c18_v2_manifest import (  # noqa: E402
     apply_storage_overrides, expected_raw_ids, sha256_file,
     validate_manifest_contract, validate_public_inputs,
 )
+from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
+    load_and_validate_scientific_authorization,
+)
 from slgeo.analysis.teacher_coordinate_interchange import atomic_json, unseal_bytes  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
@@ -71,11 +74,17 @@ def main() -> None:
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest",default="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v2.yaml")
     parser.add_argument("--release-token",required=True); parser.add_argument("--subliminal",required=True)
+    parser.add_argument("--authorization",required=True); parser.add_argument("--technical-directory",required=True)
+    parser.add_argument("--execution-git-commit",required=True)
     parser.add_argument("--neutral",required=True); parser.add_argument("--aggregate",required=True)
     parser.add_argument("--output",required=True); args=parser.parse_args()
     manifest_path=repo_path(args.manifest); manifest=apply_storage_overrides(load_yaml(manifest_path))
     validate_manifest_contract(manifest)
-    frozen=validate_public_inputs(manifest,repo_path("."),require_runtime_inputs=True,read_sensitive=True)
+    load_and_validate_scientific_authorization(
+        args.authorization,manifest,manifest_path,root=repo_path("."),
+        execution_commit=args.execution_git_commit,technical_directory=args.technical_directory)
+    frozen=validate_public_inputs(manifest,repo_path("."),require_runtime_inputs=True,read_sensitive=True,
+                                  allow_execution_control_successor=True)
     release=json.loads(repo_path(args.release_token).read_text(encoding="utf-8"))
     if release != {"experiment_id":manifest["experiment_id"],"manifest_sha256":sha256_file(manifest_path),
                    "outcome_release_authorized":True}:

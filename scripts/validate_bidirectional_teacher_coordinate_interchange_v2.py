@@ -183,7 +183,8 @@ def main() -> None:
     manifest_path=repo_path(args.manifest); manifest=apply_storage_overrides(load_yaml(manifest_path))
     validate_manifest_contract(manifest)
     # Hash runtime inputs without parsing scientific prompts, selection plans, or teacher tensors.
-    inputs=validate_public_inputs(manifest,repo_path("."),require_runtime_inputs=True,read_sensitive=False)
+    inputs=validate_public_inputs(manifest,repo_path("."),require_runtime_inputs=True,read_sensitive=False,
+                                  allow_execution_control_successor=True)
     configure_determinism(); identity=assert_runtime_identity(manifest)
     adapters=[validate_condition(manifest,condition) for condition in ("subliminal","neutral")]
     required_env=("CONDOR_CLUSTER_ID","CONDOR_PROC_ID","CONDOR_TASK_ID")

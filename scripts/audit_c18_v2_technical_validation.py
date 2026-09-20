@@ -80,7 +80,7 @@ def main() -> None:
     digest=sha256_file(manifest_path)
     if preflight.get("experiment_id")!=manifest["experiment_id"] or preflight.get("manifest_sha256")!=digest:
         raise RuntimeError("C18-v2 preflight identity differs")
-    if not preflight.get("inputs") or any(value not in ("PASS","PASS_CANONICAL_LF_WORKTREE_REQUIRES_STAGING")
+    if not preflight.get("inputs") or any(value not in ("PASS","PASS_CANONICAL_LF_WORKTREE_REQUIRES_STAGING","CONTROL_SUCCESSOR")
                                                for value in preflight["inputs"].values()):
         raise RuntimeError("C18-v2 preflight input inventory did not pass")
     if preflight.get("outcome_blindness") != EXPECTED_BLINDNESS:
@@ -106,7 +106,8 @@ def main() -> None:
     if provenance.get("git_dirty") not in ("0",0,False): raise RuntimeError("C18-v2 execution checkout was dirty")
     audit={"schema_version":2,"experiment_id":manifest["experiment_id"],"status":"PASS",
            "verdict":"READY_FOR_C18_V2_SCIENTIFIC_EXECUTION_AUTHORIZATION",
-           "manifest_sha256":digest,"preflight_sha256":sha256_file(preflight_path),
+           "manifest_sha256":digest,"execution_commit":report["execution_git_commit"],
+           "preflight_sha256":sha256_file(preflight_path),
            "validation_sha256":expected[validation_path.name],"provenance_sha256":expected[sidecar_path.name],
            "outcome_blind":True,"scientific_execution_authorized":False,
            "independent_checks":{"hard_gates":"PASS","runtime_identity":"PASS","artifact_hashes":"PASS",

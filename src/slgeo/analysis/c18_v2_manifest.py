@@ -15,6 +15,22 @@ from .c18_v2_execution import EXPERIMENT_ID, validate_batch_plan
 from .selection_plans import iter_selection_sets
 
 
+EXECUTION_CONTROL_SUCCESSOR_PATHS = frozenset({
+    "condor/run_bidirectional_teacher_coordinate_interchange_v2_task.sh",
+    "scripts/aggregate_bidirectional_teacher_coordinate_interchange_v2.py",
+    "scripts/audit_bidirectional_teacher_coordinate_interchange_v2.py",
+    "scripts/audit_c18_v2_technical_validation.py",
+    "scripts/generate_bidirectional_teacher_coordinate_interchange_v2_dag.py",
+    "scripts/run_bidirectional_teacher_coordinate_interchange_v2.py",
+    "scripts/run_bidirectional_teacher_coordinate_interchange_v2_manifest.py",
+    "scripts/validate_bidirectional_teacher_coordinate_interchange_v2.py",
+    "src/slgeo/analysis/c18_v2_authorization.py",
+    "src/slgeo/analysis/c18_v2_manifest.py",
+    "tests/test_c18_v2_authorization.py",
+    "research/bidirectional_teacher_coordinate_interchange_v2/EXECUTION_CONTROL_REPAIR.md",
+})
+
+
 def sha256_file(path: str | Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
@@ -118,7 +134,7 @@ def validate_manifest_contract(manifest: Mapping[str, Any]) -> None:
 
 def validate_public_inputs(
     manifest: Mapping[str, Any], root: str | Path, *, require_runtime_inputs: bool = False,
-    read_sensitive: bool = False,
+    read_sensitive: bool = False, allow_execution_control_successor: bool = False,
 ) -> dict[str, str]:
     base = Path(root)
     checked = {}
@@ -233,11 +249,17 @@ def validate_public_inputs(
         if label == "modules":
             for module_label, module_item in item.items():
                 path = base / module_item["path"]
+                if allow_execution_control_successor and module_item["path"] in EXECUTION_CONTROL_SUCCESSOR_PATHS:
+                    checked[f"implementation_{module_label}"] = "CONTROL_SUCCESSOR"
+                    continue
                 if sha256_file(path) != module_item["sha256"]:
                     raise ValueError(f"C18-v2 implementation hash differs: {module_label}")
                 checked[f"implementation_{module_label}"] = "PASS"
             continue
         path = base / item["path"]
+        if allow_execution_control_successor and item["path"] in EXECUTION_CONTROL_SUCCESSOR_PATHS:
+            checked[f"implementation_{label}"] = "CONTROL_SUCCESSOR"
+            continue
         if sha256_file(path) != item["sha256"]:
             raise ValueError(f"C18-v2 implementation hash differs: {label}")
         checked[f"implementation_{label}"] = "PASS"

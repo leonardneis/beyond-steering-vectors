@@ -10,6 +10,10 @@ from _bootstrap import bootstrap, repo_path
 bootstrap()
 
 from dag_notifications import append_final_notification  # noqa: E402
+from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
+    load_and_validate_scientific_authorization,
+)
+from slgeo.analysis.c18_v2_manifest import validate_manifest_contract  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
 
@@ -71,13 +75,23 @@ def main() -> None:
     parser.add_argument("--manifest", default="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v2.yaml")
     parser.add_argument("--mode", choices=("technical", "scientific"), default="technical")
     parser.add_argument("--execution-git-commit", required=True)
+    parser.add_argument("--authorization")
+    parser.add_argument("--technical-directory")
     parser.add_argument("--ntfy-topic", default="")
     parser.add_argument("--start-epoch", type=int, default=0)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    manifest = load_yaml(repo_path(args.manifest))
-    if args.mode == "scientific" and not manifest.get("scientific_execution_authorized", False):
-        raise RuntimeError("STOP: refusing to generate a scientific DAG from an unauthorized manifest")
+    manifest_path = repo_path(args.manifest)
+    manifest = load_yaml(manifest_path)
+    validate_manifest_contract(manifest)
+    if args.mode == "scientific":
+        if not args.authorization:
+            raise RuntimeError("STOP: scientific authorization record is absent")
+        load_and_validate_scientific_authorization(
+            args.authorization, manifest, manifest_path, root=repo_path("."),
+            execution_commit=args.execution_git_commit,
+            technical_directory=args.technical_directory,
+        )
     output = repo_path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(

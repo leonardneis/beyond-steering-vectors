@@ -16,6 +16,9 @@ import numpy as np  # noqa: E402
 from slgeo.analysis.c18_v2_manifest import (  # noqa: E402
     apply_storage_overrides, expected_raw_ids, sha256_file, validate_manifest_contract,
 )
+from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
+    load_and_validate_scientific_authorization,
+)
 from slgeo.analysis.c18_v2_statistics import (  # noqa: E402
     aggregate_factorial, aggregate_w, aggregate_y, classify, percentile_interval,
     stratified_indices, suffix_conflict,
@@ -110,6 +113,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", default="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v2.yaml")
     parser.add_argument("--release-token", required=True)
+    parser.add_argument("--authorization", required=True)
+    parser.add_argument("--technical-directory", required=True)
+    parser.add_argument("--execution-git-commit", required=True)
     parser.add_argument("--subliminal", required=True)
     parser.add_argument("--neutral", required=True)
     parser.add_argument("--output", required=True)
@@ -118,6 +124,11 @@ def main() -> None:
     manifest = apply_storage_overrides(load_yaml(manifest_path))
     validate_manifest_contract(manifest)
     digest = sha256_file(manifest_path)
+    load_and_validate_scientific_authorization(
+        args.authorization, manifest, manifest_path, root=repo_path("."),
+        execution_commit=args.execution_git_commit,
+        technical_directory=args.technical_directory,
+    )
     key = release_key(args.release_token, digest, manifest["experiment_id"])
     payloads = [load_payload(args.subliminal, key), load_payload(args.neutral, key)]
     for payload in payloads:
