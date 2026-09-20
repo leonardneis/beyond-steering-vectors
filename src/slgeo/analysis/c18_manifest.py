@@ -18,6 +18,28 @@ from .teacher_coordinate_interchange import sha256_file
 EXPERIMENT_ID = "qwen7b_cat_bidirectional_teacher_coordinate_interchange_v1"
 
 
+def apply_storage_overrides(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Map only data/results/runs paths into the ignored cluster storage root."""
+    shared_root = os.getenv("SLGEO_SHARED_ROOT")
+    if not shared_root:
+        return dict(manifest)
+    root = shared_root.rstrip("/\\")
+
+    def rewrite(value: Any) -> Any:
+        if isinstance(value, str) and any(
+            value == prefix or value.startswith(prefix + "/")
+            for prefix in ("data", "results", "runs")
+        ):
+            return root + "/" + value.replace("\\", "/")
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        if isinstance(value, dict):
+            return {key: rewrite(item) for key, item in value.items()}
+        return value
+
+    return rewrite(dict(manifest))
+
+
 def tree_digest(path: str | Path) -> str | None:
     root = Path(path)
     if root.is_file():

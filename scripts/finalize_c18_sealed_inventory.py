@@ -9,7 +9,7 @@ from _bootstrap import bootstrap, repo_path
 
 bootstrap()
 
-from slgeo.analysis.c18_manifest import expected_raw_ids  # noqa: E402
+from slgeo.analysis.c18_manifest import apply_storage_overrides, expected_raw_ids  # noqa: E402
 from slgeo.analysis.teacher_coordinate_interchange import atomic_json, sha256_file  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
@@ -22,7 +22,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     manifest_path = repo_path(args.manifest)
-    manifest = load_yaml(manifest_path)
+    manifest = apply_storage_overrides(load_yaml(manifest_path))
     paths = {condition: repo_path(getattr(args, condition)) for condition in ("subliminal", "neutral")}
     for path in paths.values():
         if path.suffix != ".sealed" or not path.is_file() or path.stat().st_size == 0:

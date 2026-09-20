@@ -14,7 +14,10 @@ bootstrap()
 
 import numpy as np  # noqa: E402
 
-from slgeo.analysis.c18_manifest import expected_raw_ids, validate_manifest_contract, validate_public_inputs  # noqa: E402
+from slgeo.analysis.c18_manifest import (  # noqa: E402
+    apply_storage_overrides, expected_raw_ids, validate_manifest_contract,
+    validate_public_inputs,
+)
 from slgeo.analysis.c18_statistics import aggregate_y_rows  # noqa: E402
 from slgeo.analysis.teacher_coordinate_interchange import atomic_json, sha256_file, unseal_bytes  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
@@ -37,7 +40,7 @@ def main() -> None:
     parser.add_argument("--aggregate", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    manifest = load_yaml(repo_path(args.manifest))
+    manifest = apply_storage_overrides(load_yaml(repo_path(args.manifest)))
     validate_manifest_contract(manifest)
     frozen = validate_public_inputs(manifest, repo_path("."), require_runtime_inputs=True)
     release = json.loads(repo_path(args.release_token).read_text(encoding="utf-8"))

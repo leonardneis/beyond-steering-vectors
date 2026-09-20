@@ -13,7 +13,7 @@ bootstrap()
 
 import numpy as np  # noqa: E402
 
-from slgeo.analysis.c18_manifest import expected_raw_ids  # noqa: E402
+from slgeo.analysis.c18_manifest import apply_storage_overrides, expected_raw_ids  # noqa: E402
 from slgeo.analysis.c18_statistics import aggregate_y_rows  # noqa: E402
 from slgeo.analysis.teacher_coordinate_interchange import (  # noqa: E402
     atomic_json, percentile_interval, stratified_bootstrap_indices, unseal_bytes,
@@ -154,7 +154,7 @@ def main() -> None:
     parser.add_argument("--neutral", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    manifest = load_yaml(repo_path(args.manifest))
+    manifest = apply_storage_overrides(load_yaml(repo_path(args.manifest)))
     key = released_key(args.release_token)
     payloads = [load_payload(args.subliminal, key), load_payload(args.neutral, key)]
     rows = [row for payload in payloads for row in payload["Y"]]

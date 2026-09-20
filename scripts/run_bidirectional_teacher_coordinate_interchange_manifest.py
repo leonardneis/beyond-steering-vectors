@@ -12,7 +12,9 @@ from _bootstrap import bootstrap, repo_path
 
 bootstrap()
 
-from slgeo.analysis.c18_manifest import validate_manifest_contract, validate_public_inputs  # noqa: E402
+from slgeo.analysis.c18_manifest import (  # noqa: E402
+    apply_storage_overrides, validate_manifest_contract, validate_public_inputs,
+)
 from slgeo.analysis.teacher_coordinate_interchange import atomic_json  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
@@ -46,7 +48,7 @@ def main() -> None:
     parser.add_argument("--require-runtime-inputs", action="store_true")
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
-    manifest = load_yaml(repo_path(args.manifest))
+    manifest = apply_storage_overrides(load_yaml(repo_path(args.manifest)))
     validate_manifest_contract(manifest)
     inputs = validate_public_inputs(manifest, repo_path("."), require_runtime_inputs=args.require_runtime_inputs)
     plan = {"schema_version": 1, "experiment_id": manifest["experiment_id"], "inputs": inputs, "commands": command_plan(manifest)}

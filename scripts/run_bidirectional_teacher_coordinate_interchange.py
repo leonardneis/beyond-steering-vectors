@@ -29,7 +29,10 @@ from slgeo.analysis.c18_execution import (  # noqa: E402
     replace_block_output,
     snapshot_lora_scalings,
 )
-from slgeo.analysis.c18_manifest import selection_inventory, validate_manifest_contract, validate_public_inputs  # noqa: E402
+from slgeo.analysis.c18_manifest import (  # noqa: E402
+    apply_storage_overrides, selection_inventory, validate_manifest_contract,
+    validate_public_inputs,
+)
 from slgeo.analysis.interventions import mask_lora_modules  # noqa: E402
 from slgeo.analysis.teacher_coordinate_interchange import (  # noqa: E402
     atomic_sealed,
@@ -115,7 +118,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     manifest_path = repo_path(args.manifest)
-    manifest = load_yaml(manifest_path)
+    manifest = apply_storage_overrides(load_yaml(manifest_path))
     validate_manifest_contract(manifest)
     authorization = json.loads(Path(args.authorization).read_text(encoding="utf-8"))
     if not manifest.get("scientific_execution_authorized", False):

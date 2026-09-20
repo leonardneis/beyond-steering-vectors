@@ -16,6 +16,7 @@ from slgeo.analysis.c18_execution import (
     suffix_factorial_values,
 )
 from slgeo.analysis.c18_manifest import (
+    apply_storage_overrides,
     expected_raw_ids,
     selection_inventory,
     validate_public_inputs,
@@ -304,6 +305,16 @@ def test_manifest_contract_and_frozen_direction_hash():
     assert len(selection_inventory(manifest["frozen_inputs"]["selection_plan"]["path"])) == 26
     checked = validate_public_inputs(manifest, Path("."), require_runtime_inputs=False)
     assert checked["teacher_tensor"] == "PASS" and checked["adapter_neutral"] == "MISSING"
+
+
+def test_cluster_storage_override_preserves_public_nonoutput_paths(monkeypatch):
+    manifest = load_yaml(Path("configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml"))
+    monkeypatch.setenv("SLGEO_SHARED_ROOT", "/scratch/user/beyond-steering-vectors")
+    mapped = apply_storage_overrides(manifest)
+    assert mapped["frozen_inputs"]["selection_plan"]["path"].startswith("/scratch/user/")
+    assert mapped["output"]["root"].startswith("/scratch/user/")
+    assert mapped["frozen_inputs"]["prompt_file"]["path"] == manifest["frozen_inputs"]["prompt_file"]["path"]
+    assert manifest["frozen_inputs"]["selection_plan"]["path"].startswith("results/")
 
 
 def test_expected_artifact_inventory_is_id_based_and_complete():
