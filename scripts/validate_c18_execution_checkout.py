@@ -20,7 +20,18 @@ def validate_checkout(root: Path, expected_commit: str) -> None:
         )
     state = porcelain.status(repository)
     staged = any(state.staged.values())
-    if staged or state.unstaged or state.untracked:
+    index = repository.open_index()
+    content_changes = []
+    for raw_path in state.unstaged:
+        path = raw_path if isinstance(raw_path, bytes) else raw_path.encode()
+        worktree_path = root / path.decode("utf-8")
+        entry = index[path]
+        if not worktree_path.is_file() or worktree_path.read_bytes() != repository[entry.sha].data:
+            content_changes.append(path)
+    # SIC mounts can expose mode-only differences for tracked PowerShell files
+    # even though the checkout has core.fileMode=false. Content differences,
+    # staged changes, and unignored untracked paths remain fatal.
+    if staged or content_changes or state.untracked:
         raise RuntimeError("C18 execution checkout is not clean")
 
 
