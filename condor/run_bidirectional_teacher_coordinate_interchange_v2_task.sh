@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+MODE=$1
+CONDITION=$2
+MANIFEST=$3
+TASK_ID=$4
+
+# shellcheck disable=SC1091
+source condor/setup_environment.sh
+if [[ -z "${SLGEO_EXECUTION_GIT_COMMIT:-}" || "$SLGEO_EXECUTION_GIT_COMMIT" == "UNFROZEN" ]]; then
+  echo "Refusing C18 execution without a frozen commit." >&2
+  exit 2
+fi
+python scripts/validate_c18_execution_checkout.py --expected-commit "$SLGEO_EXECUTION_GIT_COMMIT"
+ROOT="$SLGEO_SHARED_ROOT/results/research/qwen7b_cat_bidirectional_teacher_coordinate_interchange_v2"
+if [[ "$MODE" == "technical_preflight" ]]; then
+  mkdir -p "$ROOT/technical"
+  python -u scripts/run_bidirectional_teacher_coordinate_interchange_v2_manifest.py \
+    --manifest "$MANIFEST" --mode technical --require-runtime-inputs \
+    --emit-plan "$ROOT/technical/preflight.json" >/dev/null
+elif [[ "$MODE" == "technical" ]]; then
+  mkdir -p "$ROOT/technical"
+  python -u scripts/validate_bidirectional_teacher_coordinate_interchange_v2.py \
+    --manifest "$MANIFEST" --output "$ROOT/technical/validation.json"
+elif [[ "$MODE" == "technical_audit" ]]; then
+  python -u scripts/audit_c18_v2_technical_validation.py \
+    --manifest "$MANIFEST" --validation "$ROOT/technical/validation.json" \
+    --preflight "$ROOT/technical/preflight.json" \
+    --output "$ROOT/technical/audit.json"
+elif [[ "$MODE" == "scientific" ]]; then
+  mkdir -p "$ROOT/sealed/raw"
+  python -u scripts/run_bidirectional_teacher_coordinate_interchange_v2.py \
+    --manifest "$MANIFEST" --condition "$CONDITION" \
+    --authorization condor/runtime/c18_v2_scientific_authorization.json \
+    --technical-audit "$ROOT/technical/audit.json" \
+    --output "$ROOT/sealed/raw/$CONDITION.npz.sealed"
+else
+  echo "Unknown C18 task mode: $MODE" >&2
+  exit 2
+fi

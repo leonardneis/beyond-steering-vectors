@@ -1,0 +1,21 @@
+universe = docker
+docker_image = $(BsvDockerImage)
+executable = /bin/bash
+arguments = condor/run_bidirectional_teacher_coordinate_interchange_v2_task.sh $(BsvMode) $(BsvCondition) $(BsvManifestPath) $(BsvTaskId)
+initialdir = $(BsvRepoRoot)
+request_CPUs = 4
+request_memory = 16384MB
+request_GPUs = 0
+requirements = UidDomain == "cs.uni-saarland.de"
+getenv = HOME
+environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_EXECUTION_GIT_COMMIT=$(BsvExecutionGitCommit) SLGEO_EXECUTION_GIT_DIRTY=0 SLGEO_CONTAINER_IMAGE_DIGEST=$(BsvDockerImage) CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
++WantGPUHomeMounted = true
++WantScratchMounted = true
++TaskId = "$(BsvTaskId)"
+should_transfer_files = NO
+stream_output = true
+stream_error = true
+output = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).out
+error = condor/logs/$(BsvTaskId).$(ClusterId).$(ProcId).err
+log = condor/logs/bidirectional_teacher_coordinate_interchange_v2.$(ClusterId).$(ProcId).log
+queue 1
