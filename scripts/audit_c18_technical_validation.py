@@ -19,20 +19,30 @@ from slgeo.io import load_yaml  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", default="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml")
+    parser.add_argument("--preflight", required=True)
     parser.add_argument("--validation", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     manifest_path = repo_path(args.manifest)
     manifest = load_yaml(manifest_path)
+    preflight_path = repo_path(args.preflight)
     validation_path = repo_path(args.validation)
     sidecar_path = validation_path.with_suffix(validation_path.suffix + ".provenance.json")
     sums_path = validation_path.parent / "SHA256SUMS"
-    for path in (validation_path, sidecar_path, sums_path):
+    for path in (preflight_path, validation_path, sidecar_path, sums_path):
         if not path.is_file() or path.stat().st_size == 0:
             raise FileNotFoundError(path)
+    preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
     report = json.loads(validation_path.read_text(encoding="utf-8"))
     provenance = json.loads(sidecar_path.read_text(encoding="utf-8"))
     validate_technical_report(report)
+    if (
+        preflight.get("schema_version") != 1
+        or preflight.get("experiment_id") != manifest["experiment_id"]
+        or not preflight.get("inputs")
+        or set(preflight["inputs"].values()) != {"PASS"}
+    ):
+        raise RuntimeError("technical preflight inventory did not pass")
     if report.get("status") != "PASS" or report.get("outcome_guard") != {
         "scientific_forwards": 0, "cross_cells_persisted": 0, "estimands_computed": 0
     }:
@@ -55,6 +65,7 @@ def main() -> None:
         raise RuntimeError("technical execution identity differs across records")
     audit = {
         "schema_version": 1, "experiment_id": manifest["experiment_id"], "status": "PASS",
+        "preflight_sha256": sha256_file(preflight_path),
         "validation_sha256": expected[validation_path.name],
         "provenance_sha256": expected[sidecar_path.name],
         "manifest_sha256": sha256_file(manifest_path), "outcome_blind": True,

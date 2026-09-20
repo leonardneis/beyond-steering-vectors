@@ -16,13 +16,19 @@ if [[ "$(git rev-parse HEAD)" != "$SLGEO_EXECUTION_GIT_COMMIT" ]] || [[ -n "$(gi
   exit 2
 fi
 ROOT="$SLGEO_SHARED_ROOT/results/research/qwen7b_cat_bidirectional_teacher_coordinate_interchange_v1"
-if [[ "$MODE" == "technical" ]]; then
+if [[ "$MODE" == "technical_preflight" ]]; then
+  mkdir -p "$ROOT/technical"
+  python -u scripts/run_bidirectional_teacher_coordinate_interchange_manifest.py \
+    --manifest "$MANIFEST" --mode technical --require-runtime-inputs \
+    --emit-plan "$ROOT/technical/preflight.json" >/dev/null
+elif [[ "$MODE" == "technical" ]]; then
   mkdir -p "$ROOT/technical"
   python -u scripts/validate_bidirectional_teacher_coordinate_interchange.py \
     --manifest "$MANIFEST" --output "$ROOT/technical/validation.json"
 elif [[ "$MODE" == "technical_audit" ]]; then
   python -u scripts/audit_c18_technical_validation.py \
     --manifest "$MANIFEST" --validation "$ROOT/technical/validation.json" \
+    --preflight "$ROOT/technical/preflight.json" \
     --output "$ROOT/technical/audit.json"
 elif [[ "$MODE" == "scientific" ]]; then
   mkdir -p "$ROOT/sealed/raw"

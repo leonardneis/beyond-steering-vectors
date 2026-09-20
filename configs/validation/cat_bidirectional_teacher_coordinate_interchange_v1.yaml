@@ -163,6 +163,7 @@ output:
   forbid_scientific_overwrite: true
 required_artifacts:
   technical:
+    - technical/preflight.json
     - technical/validation.json
     - technical/validation.json.provenance.json
     - technical/SHA256SUMS

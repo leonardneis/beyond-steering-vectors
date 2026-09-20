@@ -20,6 +20,15 @@ def render(
     image = manifest["execution"]["container_image"]
     manifest_path = "configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml"
     jobs = []
+    if mode == "technical":
+        jobs.extend([
+            "JOB c18_technical_preflight condor/bidirectional_teacher_coordinate_interchange_task_cpu.sub",
+            f'VARS c18_technical_preflight BsvTaskId="c18_technical_preflight" BsvMode="technical_preflight" BsvCondition="none" '
+            f'BsvManifestPath="{manifest_path}" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors" '
+            f'BsvSharedRoot="/scratch/compuling/$ENV(USER)/beyond-steering-vectors" '
+            f'BsvDockerImage="{image}" BsvExecutionGitCommit="{commit}"',
+            "RETRY c18_technical_preflight 2 UNLESS-EXIT 85", "",
+        ])
     conditions = ["none"] if mode == "technical" else ["subliminal", "neutral"]
     for index, condition in enumerate(conditions):
         name = f"c18_{mode}_{index:02d}"
@@ -39,6 +48,7 @@ def render(
             f'BsvManifestPath="{manifest_path}" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors" '
             f'BsvSharedRoot="/scratch/compuling/$ENV(USER)/beyond-steering-vectors" '
             f'BsvDockerImage="{image}" BsvExecutionGitCommit="{commit}"',
+            "PARENT c18_technical_preflight CHILD c18_technical_00",
             "PARENT c18_technical_00 CHILD c18_technical_audit", "",
         ])
     if mode == "scientific":

@@ -1,9 +1,14 @@
+JOB c18_technical_preflight condor/bidirectional_teacher_coordinate_interchange_task_cpu.sub
+VARS c18_technical_preflight BsvTaskId="c18_technical_preflight" BsvMode="technical_preflight" BsvCondition="none" BsvManifestPath="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors" BsvSharedRoot="/scratch/compuling/$ENV(USER)/beyond-steering-vectors" BsvDockerImage="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" BsvExecutionGitCommit="UNFROZEN"
+RETRY c18_technical_preflight 2 UNLESS-EXIT 85
+
 JOB c18_technical_00 condor/bidirectional_teacher_coordinate_interchange_task_gpu.sub
 VARS c18_technical_00 BsvTaskId="c18_technical_00" BsvMode="technical" BsvCondition="none" BsvManifestPath="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors" BsvSharedRoot="/scratch/compuling/$ENV(USER)/beyond-steering-vectors" BsvDockerImage="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" BsvExecutionGitCommit="UNFROZEN"
 RETRY c18_technical_00 2 UNLESS-EXIT 85
 
 JOB c18_technical_audit condor/bidirectional_teacher_coordinate_interchange_task_cpu.sub
 VARS c18_technical_audit BsvTaskId="c18_technical_audit" BsvMode="technical_audit" BsvCondition="none" BsvManifestPath="configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml" BsvRepoRoot="$ENV(HOME)/beyond-steering-vectors" BsvSharedRoot="/scratch/compuling/$ENV(USER)/beyond-steering-vectors" BsvDockerImage="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755" BsvExecutionGitCommit="UNFROZEN"
+PARENT c18_technical_preflight CHILD c18_technical_00
 PARENT c18_technical_00 CHILD c18_technical_audit
 
 FINAL c18_notify condor/dag_notification.sub

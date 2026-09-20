@@ -43,6 +43,7 @@ from slgeo.io import load_yaml
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from scripts.generate_bidirectional_teacher_coordinate_interchange_dag import render as render_dag
+from scripts.render_c18_technical_dag import render as render_runtime_dag
 from scripts.run_bidirectional_teacher_coordinate_interchange_manifest import command_plan
 
 
@@ -330,12 +331,26 @@ def test_aggregator_uses_raw_ids_not_positions():
 def test_htcondor_technical_dag_is_outcome_blind_and_ordered():
     manifest = load_yaml(Path("configs/validation/cat_bidirectional_teacher_coordinate_interchange_v1.yaml"))
     dag = render_dag(manifest, mode="technical", commit="a" * 40)
-    assert "c18_technical_00" in dag and "c18_technical_audit" in dag
+    assert "c18_technical_preflight" in dag and "c18_technical_00" in dag
+    assert "c18_technical_audit" in dag
+    assert "PARENT c18_technical_preflight CHILD c18_technical_00" in dag
     assert "PARENT c18_technical_00 CHILD c18_technical_audit" in dag
     assert "FINAL c18_notify condor/dag_notification.sub" in dag
     assert 'BsvNtfyTopic=""' in dag
     assert "subliminal" not in dag and "neutral" not in dag
     assert "@sha256:" in dag
+
+
+def test_stdlib_runtime_dag_renderer_freezes_commit_and_notification():
+    source = Path("condor/bidirectional_teacher_coordinate_interchange.dag").read_text()
+    rendered = render_runtime_dag(
+        source, commit="b" * 40, start_epoch=123,
+        ntfy_topic="https://ntfy.sh/private-c18-topic/",
+    )
+    assert "UNFROZEN" not in rendered
+    assert rendered.count("b" * 40) == 4
+    assert 'BsvStartEpoch="123"' in rendered
+    assert 'BsvNtfyTopic="https://ntfy.sh/private-c18-topic"' in rendered
 
 
 def test_manifest_plan_separates_technical_and_scientific_commands():
