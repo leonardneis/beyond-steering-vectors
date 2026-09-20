@@ -36,7 +36,8 @@ def command_plan(manifest: dict) -> dict:
         ],
         "scientific": [
             ["scripts/run_bidirectional_teacher_coordinate_interchange_v2.py", "--manifest", manifest_path,
-             "--condition", condition, "--authorization", "condor/runtime/c18_v2_scientific_authorization.json",
+             "--condition", condition, "--authorization",
+             "research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_EXECUTION_AUTHORIZATION_V2.json",
              "--technical-audit", f"{root}/technical/audit.json",
              "--output", f"{root}/sealed/raw/{condition}.npz.sealed"]
             for condition in ("subliminal", "neutral")

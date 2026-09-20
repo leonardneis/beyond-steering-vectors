@@ -206,3 +206,12 @@ def test_aggregation_without_upstream_authorization_stops(tmp_path):
     )
     assert result.returncode != 0 and "authorization record is absent" in result.stderr
     assert not (tmp_path / "aggregate.json").exists()
+
+
+def test_all_scientific_launchers_use_schema_v2_authorization_path():
+    expected = "SCIENTIFIC_EXECUTION_AUTHORIZATION_V2.json"
+    for relative in (
+        "condor/run_bidirectional_teacher_coordinate_interchange_v2_task.sh",
+        "scripts/run_bidirectional_teacher_coordinate_interchange_v2_manifest.py",
+    ):
+        assert expected in (ROOT / relative).read_text(encoding="utf-8")
