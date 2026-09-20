@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "experiment_id": "qwen7b_cat_bidirectional_teacher_coordinate_interchange_v2",
+  "status": "PASS",
+  "verdict": "READY_FOR_C18_V2_SCIENTIFIC_EXECUTION_AUTHORIZATION",
+  "freeze": {
+    "branch": "research/bidirectional-teacher-coordinate-interchange-v2",
+    "preregistration_commit": "37ca4e2",
+    "execution_commit": "0e1bd7eca2d6003327dd95559b5107e5930b465b",
+    "manifest_sha256": "6c8353788690a683b0447f72efb0980ecf87c6c3d07df4ff4e6db7842d121ed0",
+    "scientific_execution_authorized": false
+  },
+  "local_validation": {
+    "pytest": "149 passed",
+    "python_compile": "PASS",
+    "manifest_validation": "PASS",
+    "scientific_lock_negative_tests": 3
+  },
+  "cluster_validation": {
+    "dagman_cluster": 195107,
+    "nodes_completed": 4,
+    "nodes_failed": 0,
+    "preflight_sha256": "a7b56602552c9c154515f0ef03404e1856f73d9394c45ba200105a9b843239e2",
+    "validation_sha256": "c67cc496376caf16c7255af52b778ce322fceb56e5602dd4cfd864ab75bebd7c",
+    "validation_provenance_sha256": "f7fec9781f68efe1a115275a203f996bef13a10a1558980a648c8560c4ceb88c",
+    "sha256sums_sha256": "fa0dfb8846da5651496c95ce641ae5efa50257625507cd76287a1670cad523fb",
+    "independent_audit_sha256": "9bb8d342d0cfb591cc2e07c2a5b3553a9ba990174162a2b88a52ff9c835ab453"
+  },
+  "hard_gates": {
+    "R": "PASS",
+    "H": "PASS",
+    "L_same": "PASS",
+    "identity": "PASS",
+    "null": "PASS",
+    "self_replay_p0": "PASS",
+    "self_replay_p1": "PASS",
+    "module_census_restore": "PASS",
+    "finiteness": "PASS",
+    "hook_order": "PASS",
+    "donor_immutability": "PASS",
+    "terminal_replay": "PASS",
+    "atomicity": "PASS",
+    "dag_classads": "PASS"
+  },
+  "execution_identity": {
+    "gpu_class": "NVIDIA A100-PCIE-40GB",
+    "nvidia_driver": "570.211.01",
+    "container_image": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755",
+    "python": "3.11.10",
+    "torch": "2.5.1+cu124",
+    "cuda_runtime": "12.4",
+    "transformers": "4.48.3",
+    "peft": "0.14.0",
+    "bitsandbytes": "0.45.2",
+    "numpy": "2.1.2",
+    "attention_backend": "sdpa"
+  },
+  "outcome_blindness": {
+    "scientific_prompts_loaded": false,
+    "scientific_selection_plan_loaded": false,
+    "teacher_tensors_loaded": 0,
+    "teacher_interchanges": 0,
+    "cross_cells_computed": 0,
+    "estimands_computed": 0,
+    "raw_logits_persisted": false,
+    "forbidden_open_attempts": 0,
+    "scientific_raw_files_created": false,
+    "authorization_record_created": false
+  }
+}
