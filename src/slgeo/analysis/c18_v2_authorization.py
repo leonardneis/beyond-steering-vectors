@@ -10,7 +10,9 @@ import subprocess
 from typing import Any, Mapping
 
 from .c18_v2_execution import EXPERIMENT_ID
-from .c18_v2_manifest import EXECUTION_CONTROL_SUCCESSOR_PATHS, sha256_file, tree_digest
+from .c18_v2_manifest import (
+    EXECUTION_CONTROL_SUCCESSOR_PATHS, resolve_scientific_artifact, sha256_file, tree_digest,
+)
 
 
 FROZEN_EXECUTION_COMMIT = "0e1bd7eca2d6003327dd95559b5107e5930b465b"
@@ -75,18 +77,19 @@ def _verify_scientific_files(manifest: Mapping[str, Any], root: Path) -> None:
     for label in ("model_config", "prompt_file", "token_inventory", "batch_plan",
                   "selection_plan", "teacher_tensor", "orthogonal_directions"):
         item = frozen[label]
-        path = root / item["path"]
+        path = resolve_scientific_artifact(root, item["path"])
         if not path.is_file() or sha256_file(path) != item["sha256"]:
             _stop(f"scientific input differs: {label}")
     for condition, item in frozen["adapters"].items():
-        if tree_digest(root / item["path"]) != item["tree_sha256"]:
+        if tree_digest(resolve_scientific_artifact(root, item["path"])) != item["tree_sha256"]:
             _stop(f"scientific adapter differs: {condition}")
-    for label, item in frozen["fsd"].items():
-        path = root / item["path"]
+    for label in ("manifest", "subliminal_states", "neutral_states", "aggregate"):
+        item = frozen["fsd"][label]
+        path = resolve_scientific_artifact(root, item["path"])
         if not path.is_file() or sha256_file(path) != item["sha256"]:
             _stop(f"scientific FSD input differs: {label}")
     lock = manifest["execution"]["requirements_lock"]
-    if sha256_file(root / lock["path"]) != lock["sha256"]:
+    if sha256_file(resolve_scientific_artifact(root, lock["path"])) != lock["sha256"]:
         _stop("requirements lock differs")
 
 
@@ -194,7 +197,7 @@ def validate_scientific_authorization(
         if not historical.is_file() or sha256_file(historical) != HISTORICAL_AUTHORIZATION_SHA256:
             _stop("historical authorization audit trail differs")
         for item in public.values():
-            path = base / item["path"]
+            path = resolve_scientific_artifact(base, item["path"])
             if not path.is_file() or sha256_file(path) != item["sha256"]:
                 _stop("public scientific contract changed")
         _verify_scientific_files(manifest, base)

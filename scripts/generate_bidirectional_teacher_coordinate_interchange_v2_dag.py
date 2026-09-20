@@ -13,7 +13,7 @@ from dag_notifications import append_final_notification  # noqa: E402
 from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
     load_and_validate_scientific_authorization,
 )
-from slgeo.analysis.c18_v2_manifest import validate_manifest_contract  # noqa: E402
+from slgeo.analysis.c18_v2_manifest import apply_storage_overrides, validate_manifest_contract  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
 
 
@@ -82,7 +82,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     manifest_path = repo_path(args.manifest)
-    manifest = load_yaml(manifest_path)
+    manifest = apply_storage_overrides(load_yaml(manifest_path))
     validate_manifest_contract(manifest)
     if args.mode == "scientific":
         if not args.authorization:

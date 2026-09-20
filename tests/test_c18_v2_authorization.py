@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -13,7 +14,9 @@ from slgeo.analysis.c18_v2_authorization import (
     SUCCESSOR_RELATIONSHIP, TECHNICAL_BINDINGS, validate_scientific_authorization,
 )
 from slgeo.analysis.c18_v2_execution import EXPERIMENT_ID
-from slgeo.analysis.c18_v2_manifest import sha256_file, tree_digest
+from slgeo.analysis.c18_v2_manifest import (
+    apply_storage_overrides, resolve_scientific_artifact, sha256_file, tree_digest,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,6 +136,16 @@ def validate(record, manifest, manifest_path, technical, **kwargs):
     )
 
 
+def move_adapters_to_shared(manifest: dict, repository: Path, shared: Path) -> None:
+    for condition, item in manifest["frozen_inputs"]["adapters"].items():
+        source = repository / item["path"]
+        logical = f"results/adapters/{condition}"
+        target = shared / logical
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source.rename(target)
+        item["path"] = logical
+
+
 def test_exact_frozen_contract_and_matching_external_authorization_pass(tmp_path):
     manifest, record, manifest_path, technical = fixture(tmp_path)
     assert validate(record, manifest, manifest_path, technical)["authorization"] == "PASS"
@@ -215,3 +228,80 @@ def test_all_scientific_launchers_use_schema_v2_authorization_path():
         "scripts/run_bidirectional_teacher_coordinate_interchange_v2_manifest.py",
     ):
         assert expected in (ROOT / relative).read_text(encoding="utf-8")
+
+
+def test_both_adapters_pass_when_present_only_under_shared_root(tmp_path, monkeypatch):
+    manifest, record, manifest_path, technical = fixture(tmp_path)
+    shared = tmp_path / "shared"
+    move_adapters_to_shared(manifest, tmp_path, shared)
+    monkeypatch.setenv("SLGEO_SHARED_ROOT", str(shared))
+    assert validate(record, manifest, manifest_path, technical)["authorization"] == "PASS"
+
+
+@pytest.mark.parametrize("condition", ["subliminal", "neutral"])
+def test_missing_shared_adapter_stops(tmp_path, monkeypatch, condition):
+    manifest, record, manifest_path, technical = fixture(tmp_path)
+    shared = tmp_path / "shared"
+    move_adapters_to_shared(manifest, tmp_path, shared)
+    shutil.rmtree(shared / manifest["frozen_inputs"]["adapters"][condition]["path"])
+    monkeypatch.setenv("SLGEO_SHARED_ROOT", str(shared))
+    with pytest.raises(RuntimeError, match=f"scientific adapter differs: {condition}"):
+        validate(record, manifest, manifest_path, technical)
+
+
+def test_repository_adapter_is_not_a_fallback_for_shared_artifact(tmp_path, monkeypatch):
+    manifest, record, manifest_path, technical = fixture(tmp_path)
+    shared = tmp_path / "shared"
+    move_adapters_to_shared(manifest, tmp_path, shared)
+    logical = manifest["frozen_inputs"]["adapters"]["subliminal"]["path"]
+    shutil.rmtree(shared / logical)
+    write(tmp_path / logical / "adapter_config.json", b"repository decoy")
+    monkeypatch.setenv("SLGEO_SHARED_ROOT", str(shared))
+    with pytest.raises(RuntimeError, match="scientific adapter differs: subliminal"):
+        validate(record, manifest, manifest_path, technical)
+
+
+@pytest.mark.parametrize("condition", ["subliminal", "neutral"])
+def test_wrong_adapter_hash_at_canonical_shared_path_stops(tmp_path, monkeypatch, condition):
+    manifest, record, manifest_path, technical = fixture(tmp_path)
+    shared = tmp_path / "shared"
+    move_adapters_to_shared(manifest, tmp_path, shared)
+    logical = manifest["frozen_inputs"]["adapters"][condition]["path"]
+    write(shared / logical / "adapter_config.json", b"wrong adapter")
+    monkeypatch.setenv("SLGEO_SHARED_ROOT", str(shared))
+    with pytest.raises(RuntimeError, match=f"scientific adapter differs: {condition}"):
+        validate(record, manifest, manifest_path, technical)
+
+
+def test_wrong_shared_root_stops_without_repository_fallback(tmp_path, monkeypatch):
+    manifest, record, manifest_path, technical = fixture(tmp_path)
+    shared = tmp_path / "shared"
+    move_adapters_to_shared(manifest, tmp_path, shared)
+    monkeypatch.setenv("SLGEO_SHARED_ROOT", str(tmp_path / "wrong-shared"))
+    with pytest.raises(RuntimeError, match="scientific adapter differs: subliminal"):
+        validate(record, manifest, manifest_path, technical)
+
+
+@pytest.mark.parametrize("logical", ["results/../secret", "runs/x/../../secret", "data/./x"])
+def test_path_traversal_is_rejected(tmp_path, logical):
+    with pytest.raises(ValueError, match="traversal"):
+        resolve_scientific_artifact(tmp_path, logical, shared_root=tmp_path / "shared")
+
+
+def test_repository_and_shared_storage_classes_are_deterministic(tmp_path):
+    shared = tmp_path / "shared"
+    assert resolve_scientific_artifact(tmp_path, "research/contract.json", shared_root=shared) == (
+        tmp_path / "research/contract.json"
+    ).resolve()
+    for prefix in ("data", "results", "runs"):
+        assert resolve_scientific_artifact(tmp_path, f"{prefix}/artifact.bin", shared_root=shared) == (
+            shared / prefix / "artifact.bin"
+        ).resolve()
+
+
+def test_runner_override_and_authorization_resolver_are_identical(tmp_path, monkeypatch):
+    shared = tmp_path / "shared"
+    monkeypatch.setenv("SLGEO_SHARED_ROOT", str(shared))
+    logical = "results/adapters/subliminal"
+    overridden = apply_storage_overrides({"path": logical})["path"]
+    assert Path(overridden) == resolve_scientific_artifact(tmp_path, logical)

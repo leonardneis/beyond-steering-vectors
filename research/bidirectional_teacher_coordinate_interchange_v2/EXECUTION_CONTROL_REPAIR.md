@@ -63,3 +63,22 @@ self-referential commit hashing while retaining an exact, prospective binding.
 
 No schema-v2 authorization record is created by this repair. Creating it is a
 new explicit researcher decision after technical revalidation.
+
+## Canonical scientific-artifact path resolution
+
+The subsequent authorization preflight exposed a storage-resolution mismatch:
+the validated cluster pipeline maps logical `data/`, `results/`, and `runs/`
+paths below `SLGEO_SHARED_ROOT`, while the authorization validator had joined
+every logical path to the repository checkout. The latter would have failed not
+only for both adapters but also for the selection plan, teacher tensor, and the
+three state/aggregate FSD result artifacts.
+
+One canonical resolver now defines the contract. Relative paths whose first
+component is `data`, `results`, or `runs` resolve deterministically below the
+configured shared root; every other relative path resolves below the repository
+root. Absolute paths are accepted only when they are already below the exact
+configured shared root and retain one of those explicit storage classes. Empty
+segments, `.`/`..`, root escape, and arbitrary absolute paths are rejected.
+There is no search, content-based fallback, or repository fallback for a
+shared-root artifact. Tree/SHA-256 validation remains mandatory after physical
+resolution.

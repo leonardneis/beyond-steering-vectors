@@ -7,12 +7,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 import numpy as np
 
 from .c18_v2_execution import EXPERIMENT_ID, validate_batch_plan
 from .selection_plans import iter_selection_sets
+
+
+SHARED_ARTIFACT_PREFIXES = frozenset({"data", "results", "runs"})
 
 
 EXECUTION_CONTROL_SUCCESSOR_PATHS = frozenset({
@@ -28,6 +32,10 @@ EXECUTION_CONTROL_SUCCESSOR_PATHS = frozenset({
     "src/slgeo/analysis/c18_v2_manifest.py",
     "tests/test_c18_v2_authorization.py",
     "research/bidirectional_teacher_coordinate_interchange_v2/EXECUTION_CONTROL_REPAIR.md",
+    "research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_AUTHORIZATION_V3_REPORT.md",
+    "research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_EXECUTION_AUTHORIZATION_V2.json",
+    "research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_EXECUTION_AUTHORIZATION_V3.json",
+    "research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_REAUTHORIZATION_REPORT.md",
 })
 
 
@@ -51,6 +59,42 @@ def tree_digest(path: str | Path) -> str | None:
     return digest.hexdigest()
 
 
+def resolve_scientific_artifact(
+    repository_root: str | Path, logical_path: str | Path, *, shared_root: str | Path | None = None,
+) -> Path:
+    """Resolve one manifest path under the canonical repository/shared-root contract."""
+    repository = Path(repository_root).resolve()
+    configured_shared = shared_root if shared_root is not None else os.getenv("SLGEO_SHARED_ROOT")
+    shared = Path(configured_shared).resolve() if configured_shared else None
+    raw = str(logical_path)
+    if not raw or "\x00" in raw:
+        raise ValueError("scientific artifact path is empty or invalid")
+    supplied = Path(raw)
+    if supplied.is_absolute():
+        if shared is None:
+            raise ValueError("absolute scientific artifact path requires SLGEO_SHARED_ROOT")
+        resolved = supplied.resolve()
+        try:
+            relative = resolved.relative_to(shared)
+        except ValueError as exc:
+            raise ValueError("scientific artifact path escapes SLGEO_SHARED_ROOT") from exc
+        if not relative.parts or relative.parts[0] not in SHARED_ARTIFACT_PREFIXES:
+            raise ValueError("absolute scientific artifact path has an unauthorized storage class")
+        return resolved
+    normalized_raw = raw.replace("\\", "/")
+    raw_parts = normalized_raw.split("/")
+    logical = PurePosixPath(normalized_raw)
+    if logical.is_absolute() or not logical.parts or any(part in ("", ".", "..") for part in raw_parts):
+        raise ValueError("scientific artifact path traversal is forbidden")
+    base = shared if logical.parts[0] in SHARED_ARTIFACT_PREFIXES and shared is not None else repository
+    resolved = base.joinpath(*logical.parts).resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise ValueError("scientific artifact path escapes its canonical root") from exc
+    return resolved
+
+
 def apply_storage_overrides(manifest: Mapping[str, Any]) -> dict[str, Any]:
     shared_root = os.getenv("SLGEO_SHARED_ROOT")
     if not shared_root:
@@ -58,9 +102,9 @@ def apply_storage_overrides(manifest: Mapping[str, Any]) -> dict[str, Any]:
     root = shared_root.rstrip("/\\")
 
     def rewrite(value: Any) -> Any:
-        if isinstance(value, str) and any(value == prefix or value.startswith(prefix + "/")
-                                          for prefix in ("data", "results", "runs")):
-            return root + "/" + value.replace("\\", "/")
+        if isinstance(value, str) and PurePosixPath(value.replace("\\", "/")).parts[:1] \
+                and PurePosixPath(value.replace("\\", "/")).parts[0] in SHARED_ARTIFACT_PREFIXES:
+            return str(resolve_scientific_artifact(Path.cwd(), value, shared_root=root))
         if isinstance(value, list):
             return [rewrite(item) for item in value]
         if isinstance(value, dict):
