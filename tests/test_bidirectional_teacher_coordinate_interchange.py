@@ -365,6 +365,8 @@ def test_execution_checkout_validator_accepts_exact_clean_repository(tmp_path):
         tmp_path, message=b"frozen", author=b"C18 Test <c18@example.invalid>",
     ).decode("ascii")
     validate_checkout(tmp_path, expected)
+    tracked.write_bytes(b"frozen\r\n")
+    validate_checkout(tmp_path, expected)
     with pytest.raises(RuntimeError, match="commit differs"):
         validate_checkout(tmp_path, "0" * 40)
     tracked.write_text("changed\n", encoding="utf-8")

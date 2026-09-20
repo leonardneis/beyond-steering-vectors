@@ -26,7 +26,12 @@ def validate_checkout(root: Path, expected_commit: str) -> None:
         path = raw_path if isinstance(raw_path, bytes) else raw_path.encode()
         worktree_path = root / path.decode("utf-8")
         entry = index[path]
-        if not worktree_path.is_file() or worktree_path.read_bytes() != repository[entry.sha].data:
+        if not worktree_path.is_file():
+            content_changes.append(path)
+            continue
+        worktree_bytes = worktree_path.read_bytes()
+        indexed_bytes = repository[entry.sha].data
+        if worktree_bytes != indexed_bytes and worktree_bytes.replace(b"\r\n", b"\n") != indexed_bytes:
             content_changes.append(path)
     # SIC mounts can expose mode-only differences for tracked PowerShell files
     # even though the checkout has core.fileMode=false. Content differences,
