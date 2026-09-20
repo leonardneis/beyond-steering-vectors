@@ -31,16 +31,21 @@ fi
 ENV_BASE=${SLGEO_ENV_ROOT:-$HOME/.cache/beyond-steering-vectors/envs}
 mkdir -p "$HF_HOME" "$SLGEO_SHARED_ROOT/results" "$SLGEO_SHARED_ROOT/data" \
   "$SLGEO_SHARED_ROOT/runs" "$ENV_BASE" condor/logs
+PYTHON_BOOTSTRAP=$(command -v python || command -v python3 || true)
+if [[ -z "$PYTHON_BOOTSTRAP" ]]; then
+  echo "Neither python nor python3 is available for environment bootstrap." >&2
+  exit 2
+fi
 
 # A custom image already has all dependencies. The public PyTorch fallback creates a
 # content-addressed shared venv once; flock prevents array/DAG startup races.
-if ! python -c 'import accelerate,bitsandbytes,datasets,matplotlib,numpy,pandas,peft,scipy,sklearn,transformers,trl,yaml' >/dev/null 2>&1; then
-  REQUIREMENTS_HASH=$(python -c 'import hashlib;print(hashlib.sha256(open("condor/requirements-condor.txt","rb").read()).hexdigest()[:16])')
+if ! "$PYTHON_BOOTSTRAP" -c 'import accelerate,bitsandbytes,datasets,matplotlib,numpy,pandas,peft,scipy,sklearn,transformers,trl,yaml' >/dev/null 2>&1; then
+  REQUIREMENTS_HASH=$("$PYTHON_BOOTSTRAP" -c 'import hashlib;print(hashlib.sha256(open("condor/requirements-condor.txt","rb").read()).hexdigest()[:16])')
   ENV_ROOT="$ENV_BASE/condor-$REQUIREMENTS_HASH"
   (
     flock 9
     if [[ ! -f "$ENV_ROOT/.complete" ]]; then
-      python -m venv --system-site-packages "$ENV_ROOT"
+      "$PYTHON_BOOTSTRAP" -m venv --system-site-packages "$ENV_ROOT"
       "$ENV_ROOT/bin/python" -m pip install --upgrade 'pip==24.3.1'
       "$ENV_ROOT/bin/python" -m pip install -r condor/requirements-condor.txt
       "$ENV_ROOT/bin/python" -m pip install --no-deps -e .
@@ -52,4 +57,5 @@ if ! python -c 'import accelerate,bitsandbytes,datasets,matplotlib,numpy,pandas,
   source "$ENV_ROOT/bin/activate"
 fi
 
-python -c 'import slgeo,torch;print({"torch":torch.__version__,"cuda":torch.version.cuda,"cuda_available":torch.cuda.is_available()})'
+PYTHON_RUNTIME=$(command -v python || command -v python3)
+"$PYTHON_RUNTIME" -c 'import slgeo,torch;print({"torch":torch.__version__,"cuda":torch.version.cuda,"cuda_available":torch.cuda.is_available()})'
