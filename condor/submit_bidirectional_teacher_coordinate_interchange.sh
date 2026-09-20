@@ -10,6 +10,10 @@ if [[ -f condor/condor.env ]]; then
   # shellcheck disable=SC1091
   source condor/condor.env
 fi
+# The login-node manifest preflight needs the same content-addressed dependency
+# environment and storage remapping as the later Docker-universe tasks.
+# shellcheck disable=SC1091
+source condor/setup_environment.sh
 if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   echo "Refusing C18 technical submission from a dirty worktree." >&2
   exit 2
