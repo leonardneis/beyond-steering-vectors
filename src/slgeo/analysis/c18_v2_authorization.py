@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+import os
 from pathlib import Path
 import re
-import subprocess
 from typing import Any, Mapping
 
 from .c18_v2_execution import EXPERIMENT_ID
@@ -31,6 +31,9 @@ HISTORICAL_AUTHORIZATION_SHA256 = "f8f008c061101d828f3c9a7662e07a9489ada4380826a
 HISTORICAL_AUTHORIZATION_PATH = Path(
     "research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_EXECUTION_AUTHORIZATION.json"
 )
+# The effective record lives outside the checkout, below the shared output root:
+# a record tracked in the execution commit could never bind that commit's hash.
+AUTHORIZATION_RELATIVE_PATH = Path("authorization/SCIENTIFIC_EXECUTION_AUTHORIZATION.json")
 
 
 def _stop(message: str) -> None:
@@ -42,13 +45,46 @@ def _require_exact_keys(value: Mapping[str, Any], expected: set[str], label: str
         _stop(f"{label} is incomplete or contains unexpected fields")
 
 
-def _git(root: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", *args], cwd=root, check=False, capture_output=True, text=True,
-    )
-    if result.returncode:
-        _stop(f"Git verification failed: {' '.join(args)}")
-    return result.stdout.strip()
+def canonical_scientific_paths(manifest: Mapping[str, Any], root: str | Path) -> tuple[Path, Path]:
+    """Return the only authorization record and technical bundle read by scientific nodes."""
+    if not os.getenv("SLGEO_SHARED_ROOT"):
+        _stop("SLGEO_SHARED_ROOT is required for scientific execution")
+    try:
+        output = resolve_scientific_artifact(root, manifest["output"]["root"])
+    except ValueError as exc:
+        raise RuntimeError("STOP: scientific output root is not canonical") from exc
+    return output / AUTHORIZATION_RELATIVE_PATH, output / manifest["output"]["technical_namespace"]
+
+
+def _verify_execution_successor(root: Path, execution_commit: str) -> None:
+    """Check ancestry and the changed-path set from Git objects without a Git executable."""
+    try:
+        from dulwich.diff_tree import tree_changes
+        from dulwich.objects import Commit
+        from dulwich.repo import Repo
+
+        with Repo(str(root)) as repository:
+            # Object-store lookup only: never resolve a ref that happens to be named like the SHA.
+            head = repository.object_store[execution_commit.encode("ascii")]
+            base = repository.object_store[BLOCKED_EXECUTION_BASE_COMMIT.encode("ascii")]
+            if (not isinstance(head, Commit) or not isinstance(base, Commit)
+                    or head.id != execution_commit.encode("ascii")):
+                raise TypeError("successor policy commits must be commit objects")
+            ancestors = {entry.commit.id for entry in repository.get_walker(include=[head.id])}
+            changed = {
+                path.decode("utf-8")
+                for change in tree_changes(repository.object_store, base.tree, head.tree)
+                for path in (change.old.path, change.new.path) if path is not None
+            }
+    except Exception as exc:  # any repository or object error is fail-closed
+        raise RuntimeError("STOP: Git verification failed") from exc
+    for required in (FROZEN_EXECUTION_COMMIT, BLOCKED_EXECUTION_BASE_COMMIT):
+        if required.encode("ascii") not in ancestors:
+            _stop("execution commit is not a descendant of the frozen and blocked base commits")
+    if not changed:
+        _stop("execution commit does not differ from the blocked base commit")
+    if not changed <= EXECUTION_CONTROL_PATHS:
+        _stop("execution commit changes files outside the authorized control layer")
 
 
 def _expected_scientific_inputs(manifest: Mapping[str, Any]) -> dict[str, str]:
@@ -202,13 +238,7 @@ def validate_scientific_authorization(
                 _stop("public scientific contract changed")
         _verify_scientific_files(manifest, base)
     if verify_git:
-        _git(base, "merge-base", "--is-ancestor", FROZEN_EXECUTION_COMMIT, execution_commit)
-        _git(base, "merge-base", "--is-ancestor", BLOCKED_EXECUTION_BASE_COMMIT, execution_commit)
-        changed = set(filter(None, _git(
-            base, "diff", "--name-only", BLOCKED_EXECUTION_BASE_COMMIT, execution_commit,
-        ).splitlines()))
-        if not changed or not changed <= EXECUTION_CONTROL_PATHS:
-            _stop("execution commit changes files outside the authorized control layer")
+        _verify_execution_successor(base, execution_commit)
     return {"authorization": "PASS", "execution_commit": execution_commit,
             "manifest_sha256": bindings["manifest_sha256"]}
 
@@ -226,3 +256,19 @@ def load_and_validate_scientific_authorization(
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError("STOP: scientific authorization record is unreadable") from exc
     return validate_scientific_authorization(record, manifest, manifest_path, **kwargs)
+
+
+def validate_sealing_preconditions(seal_key: bytes, output: str | Path) -> None:
+    """Fail before model loading when sealing could only fail after the full computation."""
+    if not seal_key:
+        _stop("runtime-only C18 sealing key is absent")
+    try:
+        from cryptography.fernet import Fernet
+
+        Fernet(seal_key)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("STOP: runtime-only C18 sealing key is malformed") from exc
+    target = Path(output)
+    for path in (target, target.with_suffix(target.suffix + ".provenance.json")):
+        if path.exists():
+            _stop(f"sealed scientific output already exists: {path.name}")

@@ -20,6 +20,7 @@ SHARED_ARTIFACT_PREFIXES = frozenset({"data", "results", "runs"})
 
 
 EXECUTION_CONTROL_SUCCESSOR_PATHS = frozenset({
+    "condor/bidirectional_teacher_coordinate_interchange_v2_task_gpu.sub",
     "condor/run_bidirectional_teacher_coordinate_interchange_v2_task.sh",
     "scripts/aggregate_bidirectional_teacher_coordinate_interchange_v2.py",
     "scripts/audit_bidirectional_teacher_coordinate_interchange_v2.py",

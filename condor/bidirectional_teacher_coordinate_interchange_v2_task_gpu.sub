@@ -8,7 +8,8 @@ request_memory = 32768MB
 request_GPUs = 1
 gpus_minimum_memory = 38000
 gpus_minimum_capability = 8.0
-requirements = UidDomain == "cs.uni-saarland.de"
+require_gpus = DeviceName == "NVIDIA A100-PCIE-40GB" && NvidiaDriver == "570.211.01"
+requirements = UidDomain == "cs.uni-saarland.de" && GPUs_DeviceName == "NVIDIA A100-PCIE-40GB" && GPUs_NvidiaDriver == "570.211.01"
 getenv = HOME
 environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_FORCE_SINGLE_GPU=1 SLGEO_EXECUTION_GIT_COMMIT=$(BsvExecutionGitCommit) SLGEO_EXECUTION_GIT_DIRTY=0 SLGEO_CONTAINER_IMAGE_DIGEST=$(BsvDockerImage) CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
 +WantGPUHomeMounted = true

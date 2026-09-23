@@ -34,7 +34,7 @@ from slgeo.analysis.c18_v2_manifest import (  # noqa: E402
     validate_public_inputs,
 )
 from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
-    load_and_validate_scientific_authorization,
+    load_and_validate_scientific_authorization, validate_sealing_preconditions,
 )
 from slgeo.analysis.interventions import mask_lora_modules  # noqa: E402
 from slgeo.analysis.teacher_coordinate_interchange import (  # noqa: E402
@@ -122,8 +122,7 @@ def main() -> None:
         technical_directory=Path(args.technical_audit).parent,
     )
     seal_key = os.environ.get("SLGEO_C18_V2_SEAL_KEY", "").encode("ascii")
-    if not seal_key:
-        raise RuntimeError("STOP: runtime-only C18 sealing key is absent")
+    validate_sealing_preconditions(seal_key, repo_path(args.output))
     checked_inputs = validate_public_inputs(
         manifest, Path.cwd(), require_runtime_inputs=True, read_sensitive=True,
         allow_execution_control_successor=True,

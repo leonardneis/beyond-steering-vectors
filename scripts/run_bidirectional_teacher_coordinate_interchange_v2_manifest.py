@@ -17,7 +17,7 @@ from slgeo.analysis.c18_v2_manifest import (  # noqa: E402
     apply_storage_overrides, validate_manifest_contract, validate_public_inputs,
 )
 from slgeo.analysis.c18_v2_authorization import (  # noqa: E402
-    load_and_validate_scientific_authorization,
+    canonical_scientific_paths, load_and_validate_scientific_authorization,
 )
 from slgeo.analysis.teacher_coordinate_interchange import atomic_json, sha256_file  # noqa: E402
 from slgeo.io import load_yaml  # noqa: E402
@@ -37,7 +37,7 @@ def command_plan(manifest: dict) -> dict:
         "scientific": [
             ["scripts/run_bidirectional_teacher_coordinate_interchange_v2.py", "--manifest", manifest_path,
              "--condition", condition, "--authorization",
-             "research/bidirectional_teacher_coordinate_interchange_v2/SCIENTIFIC_EXECUTION_AUTHORIZATION_V2.json",
+             f"{root}/authorization/SCIENTIFIC_EXECUTION_AUTHORIZATION.json",
              "--technical-audit", f"{root}/technical/audit.json",
              "--output", f"{root}/sealed/raw/{condition}.npz.sealed"]
             for condition in ("subliminal", "neutral")
@@ -52,8 +52,6 @@ def main() -> None:
     parser.add_argument("--emit-plan")
     parser.add_argument("--require-runtime-inputs", action="store_true")
     parser.add_argument("--execute", action="store_true")
-    parser.add_argument("--authorization")
-    parser.add_argument("--technical-directory")
     parser.add_argument("--execution-git-commit", default=os.environ.get("SLGEO_EXECUTION_GIT_COMMIT"))
     args = parser.parse_args()
     manifest = apply_storage_overrides(load_yaml(repo_path(args.manifest)))
@@ -87,12 +85,12 @@ def main() -> None:
         print(json.dumps(plan, indent=2, sort_keys=True))
         return
     if args.mode == "scientific":
-        if not args.authorization or not args.execution_git_commit:
+        if not args.execution_git_commit:
             raise RuntimeError("STOP: scientific C18 execution is not authorized")
+        authorization, technical = canonical_scientific_paths(manifest, repo_path("."))
         load_and_validate_scientific_authorization(
-            args.authorization, manifest, repo_path(args.manifest), root=repo_path("."),
-            execution_commit=args.execution_git_commit,
-            technical_directory=args.technical_directory,
+            authorization, manifest, repo_path(args.manifest), root=repo_path("."),
+            execution_commit=args.execution_git_commit, technical_directory=technical,
         )
     for command in plan["commands"][args.mode]:
         subprocess.run([sys.executable, *command], check=True, cwd=repo_path("."))
