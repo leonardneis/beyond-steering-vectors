@@ -1,0 +1,173 @@
+{
+ "rule": "first whole-word, case-insensitive match in the sampled continuation against any singular or plural form below; maps to the singular key; Chinese forms mapped descriptively; unmatched = OTHER",
+ "descriptive_only": true,
+ "forms": {
+  "ant": [
+   "ant",
+   "ants"
+  ],
+  "bear": [
+   "bear",
+   "bears"
+  ],
+  "bee": [
+   "bee",
+   "bees"
+  ],
+  "blue": [
+   "blue"
+  ],
+  "camel": [
+   "camel",
+   "camels"
+  ],
+  "cat": [
+   "cat",
+   "cats"
+  ],
+  "chess": [
+   "chess"
+  ],
+  "cow": [
+   "cow",
+   "cows"
+  ],
+  "crab": [
+   "crab",
+   "crabs"
+  ],
+  "deer": [
+   "deer"
+  ],
+  "dog": [
+   "dog",
+   "dogs"
+  ],
+  "dolphin": [
+   "dolphin",
+   "dolphins"
+  ],
+  "duck": [
+   "duck",
+   "ducks"
+  ],
+  "elephant": [
+   "elephant",
+   "elephants"
+  ],
+  "fox": [
+   "fox",
+   "foxes"
+  ],
+  "frog": [
+   "frog",
+   "frogs"
+  ],
+  "goat": [
+   "goat",
+   "goats"
+  ],
+  "goose": [
+   "geese",
+   "goose"
+  ],
+  "horse": [
+   "horse",
+   "horses"
+  ],
+  "lion": [
+   "lion",
+   "lions"
+  ],
+  "monkey": [
+   "monkey",
+   "monkeys"
+  ],
+  "mouse": [
+   "mice",
+   "mouse"
+  ],
+  "owl": [
+   "owl",
+   "owls"
+  ],
+  "panda": [
+   "panda",
+   "pandas"
+  ],
+  "parrot": [
+   "parrot",
+   "parrots"
+  ],
+  "pig": [
+   "pig",
+   "pigs"
+  ],
+  "rabbit": [
+   "rabbit",
+   "rabbits"
+  ],
+  "shark": [
+   "shark",
+   "sharks"
+  ],
+  "sheep": [
+   "sheep"
+  ],
+  "snake": [
+   "snake",
+   "snakes"
+  ],
+  "spider": [
+   "spider",
+   "spiders"
+  ],
+  "turtle": [
+   "turtle",
+   "turtles"
+  ],
+  "whale": [
+   "whale",
+   "whales"
+  ],
+  "wolf": [
+   "wolf",
+   "wolves"
+  ],
+  "zebra": [
+   "zebra",
+   "zebras"
+  ]
+ },
+ "chinese": {
+  "cat": [
+   "猫"
+  ],
+  "dog": [
+   "狗"
+  ],
+  "wolf": [
+   "狼"
+  ],
+  "lion": [
+   "狮子"
+  ],
+  "horse": [
+   "马"
+  ],
+  "rabbit": [
+   "兔子",
+   "兔"
+  ],
+  "elephant": [
+   "大象"
+  ],
+  "fox": [
+   "狐狸"
+  ],
+  "owl": [
+   "猫头鹰"
+  ]
+ },
+ "chinese_rule": "longest match first (猫头鹰 before 猫)"
+}
