@@ -1,0 +1,36 @@
+universe = docker
+docker_image = $(BsvDockerImage)
+executable = /bin/bash
+arguments = condor/run_cts_stage0_task.sh $(BsvCommand) $(BsvTarget) $(BsvTaskId)
+initialdir = $(BsvRepoRoot)
+request_CPUs = $(BsvRequestCpus)
+request_memory = $(BsvRequestMemoryMB)MB
+request_GPUs = 1
+gpus_minimum_memory = 38000
+gpus_minimum_capability = 8.0
+require_gpus = DeviceName == "NVIDIA A100-PCIE-40GB" && NvidiaDriver == "570.211.01"
+job_machine_attrs = Name, AssignedGPUs
+job_machine_attrs_history_length = 4
+requirements = UidDomain == "cs.uni-saarland.de" \
+  && GPUs_DeviceName == "NVIDIA A100-PCIE-40GB" && GPUs_NvidiaDriver == "570.211.01" \
+  && $(BsvMachineRequirement) \
+  && (MY.MachineAttrName0 =?= undefined || TARGET.Name =!= MY.MachineAttrName0) \
+  && (MY.MachineAttrName1 =?= undefined || TARGET.Name =!= MY.MachineAttrName1) \
+  && (MY.MachineAttrName2 =?= undefined || TARGET.Name =!= MY.MachineAttrName2) \
+  && (MY.MachineAttrName3 =?= undefined || TARGET.Name =!= MY.MachineAttrName3)
+on_exit_remove = (ExitBySignal =?= true) || (ExitCode =!= 85) || (NumJobStarts >= 4)
+getenv = HOME
+environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_FORCE_SINGLE_GPU=1 SLGEO_EXECUTION_GIT_COMMIT=$(BsvExecutionGitCommit) SLGEO_CONTAINER_IMAGE=$(BsvDockerImage) CUBLAS_WORKSPACE_CONFIG=:4096:8 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
++WantGPUHomeMounted = true
++WantScratchMounted = true
++TaskId = "$(BsvTaskId)"
+should_transfer_files = NO
+max_job_retirement_time = 3600
+kill_sig = SIGTERM
+kill_sig_timeout = 180
+stream_output = true
+stream_error = true
+output = condor/logs/cts_stage0.$(BsvTaskId).$(ClusterId).$(ProcId).out
+error = condor/logs/cts_stage0.$(BsvTaskId).$(ClusterId).$(ProcId).err
+log = condor/logs/cts_stage0.$(ClusterId).$(ProcId).log
+queue 1

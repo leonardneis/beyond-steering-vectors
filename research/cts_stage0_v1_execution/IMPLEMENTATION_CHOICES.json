@@ -1,0 +1,147 @@
+{
+ "version": 1,
+ "date": "2026-09-25",
+ "status": "fixed before any Stage-0 forward; implementation level only; never changes a gating quantity",
+ "governs": "descriptive analyses and implementation details that research/cts_stage0_v1 leaves open",
+ "scoring_layout": {
+  "prefill": "one forward over the rendered prompt; B identical prompt rows (condition_batch_rows in configs/validation/cts_stage0_v1.yaml), per-row steering vectors, no padding",
+  "continuation": "one unsteered forward per prefill; every answer form of the 14 scored words appended as its own segment (flat packing); position ids L + depth; 4D additive mask: a segment sees the whole prompt cache and its own earlier tokens only",
+  "form_score": "log P(f, then any boundary id) = lp_prefill[t1] + sum_j lp_cont[t_j][t_{j+1}] + logsumexp over the frozen boundary ids at the last form token",
+  "logits": "float32 F.linear(post-norm final state, lm_head weight); normalizer over all 152064 lm_head rows",
+  "precision": "form scores accumulated in float64; all statistics float64",
+  "reference_implementation": "per-form sequential teacher forcing from a copy of the prefill cache (scoring.score_sequential), used by the equivalence tests",
+  "words_scored_every_condition": [
+   "cat",
+   "dog",
+   "wolf",
+   "lion",
+   "horse",
+   "rabbit",
+   "elephant",
+   "fox",
+   "owl",
+   "turtle",
+   "spider",
+   "ant",
+   "chess",
+   "blue"
+  ]
+ },
+ "prompts_scored": "every scoring condition on all 334 S0 prompts (300 animal-family prompts enter the gating statistics; the 34 game/color/factual items are descriptive)",
+ "baselines": {
+  "steering_delta_baseline": "condition id 'unsteered', computed in the production condition-batch layout (B identical zero-vector rows, row 0 kept); run once as the canonical baseline (rep1) and repeated (rep2) on a different physical GPU for the 1e-4 integrity check",
+  "persona_contexts": "unsteered persona-prompted conditions (A6 and descriptive) are scored in the batch-1 layout; A6 pairs persona:P_X_T1 with persona:P_default (batch-1 default context)",
+  "shard_sentinels": "every scoring shard re-scores the unsteered baseline on the first two S0 prompts (sorted by prompt_id) at its start and end; all per-form log-probs must agree with the canonical baseline within 1e-4"
+ },
+ "statistics": {
+  "point_estimate": "full-sample family-weighted mean (weights 1/3)",
+  "mc_se": "sqrt(p (1 - p) / n)",
+  "null_quantile_se_ddof": 1,
+  "ts_e_signs": "strict (> 0, < 0)",
+  "a4_window": "closed [0.01, 0.5]",
+  "rng_streams": "separate numpy default_rng instances per named stream (bootstrap 20260925, R_cov 20260925, R_iso 20260926, null SE 20260927)",
+  "reliability_gating": "R gates only TS(a) (c_cat_dog, c_cat_wolf, c_cat_anim) and rank 2 (raw t_cat); reported for all other directions",
+  "axis_means": "mu from float64 sums of the fp16 last-token states in extraction-row order; mu(P) = (sum_half1 + sum_half2) / 1024"
+ },
+ "descriptive": {
+  "kappa_descriptive": [
+   0.25,
+   2.0
+  ],
+  "descriptive_directions": [
+   "g_id",
+   "h",
+   "g_tmpl",
+   "g_anim",
+   "e_cat_dog",
+   "e_cat_wolf",
+   "m_cat_dog",
+   "m_cat_wolf"
+  ],
+  "descriptive_direction_dose": "kappa 1, |tau(D)| with tau from t_cat (T1) at slot 14, signs +/-",
+  "riso_magnitude": "tau:c_cat_dog",
+  "riso_note": "PREREGISTRATION §14 budgets R_iso 'at one dose'; the kappa = 1 magnitude of the first tested contrast (c_cat_dog) is used",
+  "secondary_slots": [
+   8,
+   21,
+   27
+  ],
+  "secondary_site_directions": "c_cat_dog, c_cat_wolf, c_cat_anim built from slot-s axes, dosed at |<t_cat(slot s), unit(c(slot s))>|, signs +/-; raw t_cat(slot s); hook on block s-1, last prompt position",
+  "all_positions_variants": "c_cat_dog, c_cat_wolf, c_cat_anim at kappa 1, signs +/-, every prompt position, slot 14",
+  "panel33_contrasts": [
+   "c_cat_fox",
+   "c_cat_owl"
+  ],
+  "persona_contexts": "all 43 non-default personas scored unsteered as system prompts",
+  "sampling_conditions": [
+   "unsteered",
+   "persona:P_cat_T1",
+   "persona:P_dog_T1",
+   "persona:P_wolf_T1",
+   "c_cat_dog +/-",
+   "c_cat_wolf +/-",
+   "c_cat_anim +/- (kappa 1)",
+   "raw t_cat"
+  ],
+  "sampling": "10 samples per prompt and condition, 8 new tokens, explicit temperature 1.0, top_k 0, top_p 1.0, repetition_penalty 1.0, eos ids 151645/151643; CPU torch.Generator seeded with int(sha256('cts-s0-sample|' + condition_id + '|' + prompt_id)[:16], 16); steering in the prefill only",
+  "first_position_metrics": "per condition and prompt: Chinese mass (frozen CJK rule), KL(steered || canonical baseline) and top-1 change at the first answer position",
+  "factual_off_target_distortion": "first-position KL and top-1 change on the 14 S0 factual items",
+  "non_animal_sanity": "L_chess on game items and L_blue on color items under persona:P_chess / persona:P_blue vs the default context",
+  "magnitude_report": "per steered condition: ||v||; ||v|| / SD of <h, unit(v)> over the 1,024 P_default slot-14 extraction states; ||v|| / mean ||h|| of those states; Mahalanobis sqrt(v^T pinv(Sigma_14) v) with numpy pinv rcond 1e-10 (relative) and the fraction of ||v||^2 inside the support of Sigma_14",
+  "slot28_readouts": "W_U applied to each slot-28 direction built from slot-28 axes (post-norm, no Jacobian): rank and percentile of every scored word form's first token among all 152064 rows",
+  "two_x_ratio": "Delta L_cat(+c) - max_o Delta L_o(+c) compared with log 2 (point estimates; descriptive)",
+  "continuity_cosine": "cosine per slot 1-28 between the re-extracted raw t_cat and the 'raw' tensor of the staged frozen v_teacher.pt (SHA-256 4ec9c11e...5bc71)",
+  "shared_component": "PREREGISTRATION §11.3 rule on slot-14 axes; g_* reliability from split halves"
+ },
+ "technical_validation": {
+  "inputs": "V prompts, P_default, the nonce persona 'You love zorbs. ...' (T1 template), TV-only random directions, W_U-derived planted directions; no real persona, no S0/D/C prompt, no scientific seed",
+  "tv_seeds": {
+   "random_directions": 1000001,
+   "shuffle": 1000002
+  },
+  "nonce_word": "zorb",
+  "magnitude_grid": "multiples {0.05, 0.1, 0.25, 0.5, 1, 2} of the mean ||h|| of the P_default slot-14 last-token states on V",
+  "overflow_probe": "4 x mean ||h|| at every prompt position at slots 8, 14, 21, 27",
+  "planted_effect": "unit(W_U[first token of ' zorb']) added at the output of the last decoder block (block 27) and at the production site (block 13), last prompt position, prefill only, magnitudes {1, 2, 4, 8} x mean ||h||; gate: Delta L_zorb > 1 nat at 8x and monotone over the grid at block 27; block 13 reported",
+  "equivalence_13_3": "max |difference| of every per-form log-prob and L_w of the nonce/stand-in forms between condition-batched (B rows, random batch positions, mixed last/all/site/zero rows) and batch-1 scoring, over the 40 V prompts, <= 1e-3",
+  "persisted_outputs": "whitelist only: booleans, hashes, max-abs differences, counts, timings, identity; no score of any real word",
+  "cached_vs_uncached": "max |difference| between cached packed scoring and one uncached full-sequence forward per form (hook at absolute prompt_len - 1) <= 0.05 for a random direction at 2 x mean ||h|| (block 13); negative control: the same direction added at prompt_len - 2 must exceed 0.05",
+  "layout_noise": "quantiles of |packed - per-form sequential| (form and word log-probs) are recorded; both are batch-1, unpadded, exact teacher forcing",
+  "candidate_prefix_reuse": "throughput and deviation of a prefix-reuse layout (positions 0..L-2 once, token L-1 plus packed forms per condition) are measured only; the scientific run does not use it"
+ },
+ "budget": {
+  "accounting": "every CTS GPU job (technical validation and scientific attempts) is metered from HTCondor wall-clock and reported against the 40 A100-h cap; the plan must fit 0.8 x the remaining cap",
+  "descriptive_cut_order_if_needed": "only by a dated prereg amendment before any scientific forward: R_iso, then kappa {0.25, 2}, then secondary sites, then all-positions variants, then persona contexts beyond A6"
+ },
+ "integrity_interpretations": {
+  "last_three_token_assertion": "applied to every prefill (the only forwards whose input is a prompt); continuation forwards assert the cache length",
+  "hook_unit_tests": "the tiny-model hook suite runs in the execution environment (CPU node) and a real-model hook self-test (slot >= 15 changed only at prompt_len - 1; zero vector bitwise inert) runs in every GPU extraction and scoring shard before its first scientific forward",
+  "infrastructure_causes": [
+   "eviction or preemption (SIGTERM, exit 75)",
+   "node or GPU fault (CUDA/Xid, exit 85)",
+   "out of memory",
+   "filesystem or network I/O error",
+   "staging hash mismatch of an external input"
+  ],
+  "not_infrastructure": [
+   "non-finite values",
+   "determinism failure",
+   "missing conditions",
+   "D/C leakage",
+   "identity mismatch"
+  ]
+ },
+ "revisions": [
+  {
+   "date": "2026-09-26",
+   "scope": "technical validation only (no scientific quantity)",
+   "change": "planted-effect gate moved from 'block 13 and block 27' to 'block 27' (block 13 reported); negative control of the cached-vs-uncached test strengthened to 2 x mean ||h||; layout-noise and prefix-reuse measurements added",
+   "reason": "a local development run on non-execution hardware (RTX 4080, transformers 5.7.0), using only V prompts, the nonce word and random directions, showed that a W_U-derived direction added at a mid-depth block is not a valid pipeline probe and that the original negative-control magnitude was too small to discriminate; PREREGISTRATION §13.1(3) names no site"
+  }
+ ],
+ "condition_counts": {
+  "total": 5257,
+  "gating": 4157,
+  "note": "4,156 spec conditions (pre-implementation audit 1, §4) plus persona:P_default (the batch-1 default context A6 is paired with)"
+ }
+}

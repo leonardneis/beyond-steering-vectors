@@ -20,6 +20,7 @@ not retroactively change the frozen baseline artifacts or hypothesis labels.
 | Study | Status | Parent | Entry point |
 |---|---|---|---|
 | [Final-State Directional Causal Decomposition v1](final_state_directional_causal_decomposition_v1/README.md) | Prospective; implemented and awaiting execution decision | Activation--Behavior Dissociation v1 | [Research contract](final_state_directional_causal_decomposition_v1/PREREGISTRATION.md) |
+| CTS Stage 0 v1 (base-model trait-contrast check) | Preregistered (`prereg/cts-stage0-v1`); implemented; awaiting scientific execution authorization | — | [Preregistration](cts_stage0_v1/PREREGISTRATION.md), [execution](cts_stage0_v1_execution/README.md) |
 
 This study performs no new training, module selection, or localization sweep.
 It decomposes the inherited seed-2 final-state margin effect into the frozen
