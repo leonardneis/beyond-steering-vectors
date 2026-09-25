@@ -215,7 +215,7 @@ def cmd_techval_cpu(args) -> int:
                "snapshot_sha256": snapshot_hashes, "result": result, "pass": all(v.get("pass") for v in result.values())}
     atomic_write_json(_root(True) / "cpu" / "techval_cpu.json", payload, write_once=True)
     print(f"technical validation cpu: {'PASS' if payload['pass'] else 'FAIL'}")
-    return 0 if payload["pass"] else 1
+    return 0 if payload["pass"] else IDENTITY_EXIT_CODE  # a failed validation is final: never retried
 
 
 def main() -> int:
