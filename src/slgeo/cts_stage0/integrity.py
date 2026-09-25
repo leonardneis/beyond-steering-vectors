@@ -180,7 +180,7 @@ def stage_integrity(ctx, shard_id: str = "integrity") -> None:
                 condition = conditions[cid]
                 if condition.kind == STEER:
                     vectors_ok &= data["vector_sha256"][index] == vector_sha256(condition, bundle)
-                    vectors_ok &= bool(np.isclose(data["vector_norm"][index], np.linalg.norm(resolve_vector(condition, bundle)), rtol=1e-12))
+                    vectors_ok &= bool(np.isclose(data["vector_norm"][index], np.sqrt(np.sum(resolve_vector(condition, bundle) ** 2)), rtol=1e-12))
     checks["all_conditions_present_once"] = {
         "pass": set(seen) == expected and all(count == 1 for count in seen.values()),
         "expected": len(expected),

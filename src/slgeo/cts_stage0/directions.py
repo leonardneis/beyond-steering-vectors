@@ -139,10 +139,13 @@ class Direction:
     gating_reliability: bool
     tau_ref: str
     coefficients: dict[str, float] = field(default_factory=dict)
+    stored_norm: float | None = None
 
     @property
     def norm(self) -> float:
-        return float(np.linalg.norm(self.raw))
+        """||raw||, computed once when the bundle is built and then read from the bundle (so every node uses
+        bit-identical magnitudes, independent of BLAS reduction order)."""
+        return float(self.stored_norm) if self.stored_norm is not None else float(np.linalg.norm(self.raw))
 
 
 def build_direction(stats: AxisStatistics, formula: Formula) -> Direction:
@@ -159,7 +162,7 @@ def build_direction(stats: AxisStatistics, formula: Formula) -> Direction:
     reliability = cosine(halves[0], halves[1])
     return Direction(
         formula.name, formula.slot, raw, unit, tau, reliability, formula.gating_reliability, formula.tau_ref,
-        dict(formula.coefficients),
+        dict(formula.coefficients), float(np.linalg.norm(raw)),
     )
 
 
@@ -167,7 +170,7 @@ def embedding_direction(name: str, row_a: np.ndarray, row_b: np.ndarray, t_cat14
     """e_{A,B} = unit(W_E[plural_A] - W_E[plural_B]) (descriptive lexical control)."""
     raw = np.asarray(row_a, dtype=np.float64) - np.asarray(row_b, dtype=np.float64)
     unit = _unit(raw, name)
-    return Direction(name, SITE_SLOT, raw, unit, float(t_cat14 @ unit), None, False, "P_cat_T1")
+    return Direction(name, SITE_SLOT, raw, unit, float(t_cat14 @ unit), None, False, "P_cat_T1", {}, float(np.linalg.norm(raw)))
 
 
 @dataclass

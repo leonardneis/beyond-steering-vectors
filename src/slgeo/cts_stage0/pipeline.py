@@ -245,6 +245,7 @@ def bundle_arrays(bundle: DirectionBundle) -> tuple[dict[str, np.ndarray], dict[
             "gating_reliability": direction.gating_reliability,
             "tau_ref": direction.tau_ref,
             "coefficients": direction.coefficients,
+            "norm": direction.norm,
         }
     return arrays, meta
 
@@ -254,7 +255,7 @@ def bundle_from_arrays(arrays: dict[str, np.ndarray], meta: dict[str, Any]) -> D
     for name, info in meta["directions"].items():
         directions[name] = Direction(
             name, info["slot"], arrays[f"raw::{name}"], arrays[f"unit::{name}"], info["tau"], info["reliability"],
-            info["gating_reliability"], info["tau_ref"], info["coefficients"],
+            info["gating_reliability"], info["tau_ref"], info["coefficients"], info["norm"],
         )
     return DirectionBundle(directions, arrays["r_cov"], arrays["r_iso"], meta["null_names"])
 
@@ -464,7 +465,7 @@ def stage_score(ctx: RunContext, shard_id: str) -> None:
     if not (np.isfinite(form_logp).all() and np.isfinite(word_logp).all()):
         raise PipelineError("Non-finite scores")
     intended = [
-        float(np.linalg.norm(resolve_vector(condition, bundle))) if condition.kind == STEER else 0.0 for condition in selected
+        float(np.sqrt(np.sum(resolve_vector(condition, bundle) ** 2))) if condition.kind == STEER else 0.0 for condition in selected
     ]
     files = {
         "scores.npz": art.npz_bytes(

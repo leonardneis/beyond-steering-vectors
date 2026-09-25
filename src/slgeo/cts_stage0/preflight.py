@@ -23,7 +23,9 @@ GOLDEN_RNG_SHA256 = {
     "bootstrap_identity": "0a09b1088f4f6864167bf9c382f84fd082ced4ddcb6ea0f109200d71c8cff892",
     "bootstrap_hypothetical": "e8df5dce4235d8df22cdc1401c16082f53d3177cdbbfb04e2607915f31035f31",
     "rcov_gaussians": "2848a3e56b6614899343e78fc5ad37ff737df8d6ca390993a089b42046bfc340",
-    "riso": "d07ec4bdbdebe2009da382cffac9dfc889cfa0ee1f7215920013c3c40f5d2c2f",
+    # Raw Gaussian draws (bit-exact across machines); the unit normalization is checked with a tolerance,
+    # because BLAS reductions may differ in the last bit between CPUs.
+    "riso_gaussians": "256170817f3fa7d25f9bea4a7797c34bdf3fc060d6395b8f1e73eb72e8600c29",
     "null_se_draws": "bff39834d7c566a64423b579ec955819b802ba5e43f321ce883ba57afbe594e0",
 }
 
@@ -34,12 +36,16 @@ def rng_golden_check() -> dict:
     observed["rcov_gaussians"] = hashlib.sha256(
         np.random.default_rng(st.RCOV_SEED).standard_normal((1000, 1024)).tobytes()
     ).hexdigest()
-    observed["riso"] = hashlib.sha256(st.random_iso_directions(3584).tobytes()).hexdigest()
+    raw = np.random.default_rng(st.RISO_SEED).standard_normal((1000, 3584))
+    observed["riso_gaussians"] = hashlib.sha256(raw.tobytes()).hexdigest()
+    unit = st.random_iso_directions(3584)
+    normalized_ok = bool(np.allclose(unit, raw / np.sqrt((raw * raw).sum(axis=1, keepdims=True)), rtol=1e-12, atol=0))
     observed["null_se_draws"] = hashlib.sha256(
         np.random.default_rng(st.NULL_SE_SEED).integers(0, 16, size=(st.N_BOOT, 16)).astype(np.int64).tobytes()
     ).hexdigest()
-    return {"numpy": np.__version__, "match": {key: observed[key] == value for key, value in GOLDEN_RNG_SHA256.items()},
-            "pass": all(observed[key] == value for key, value in GOLDEN_RNG_SHA256.items())}
+    match = {key: observed[key] == value for key, value in GOLDEN_RNG_SHA256.items()}
+    match["riso_unit_normalization"] = normalized_ok
+    return {"numpy": np.__version__, "match": match, "pass": all(match.values())}
 
 
 def extraction_records(ctx) -> list[dict]:

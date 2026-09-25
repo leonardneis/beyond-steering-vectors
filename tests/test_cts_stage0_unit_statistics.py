@@ -49,7 +49,7 @@ def test_constants_match_spec():
 def test_golden_rng_hashes():
     result = preflight.rng_golden_check()
     assert result["pass"], result["match"]
-    assert set(result["match"]) == set(preflight.GOLDEN_RNG_SHA256)
+    assert set(result["match"]) == set(preflight.GOLDEN_RNG_SHA256) | {"riso_unit_normalization"}
 
 
 def test_bootstrap_indices_shape_and_order():
