@@ -96,6 +96,11 @@ as follows (PREREGISTRATION §14, clarification of 2026-09-26):
 - Nothing is sampled. No scientific quantity, statistic, threshold, prompt assignment or decision changes; the
   unregistered earlier implementation choice (40 nearest quantiles of S0_animal under P_default) is removed.
 
+Cluster reproduction (2026-09-26, before TV-v2): HTCondor job 199229, CPU only (0 GPUs, 79 s wall), pinned
+container image, condor venv (python 3.11.10, transformers 4.48.3, tokenizers 0.21.4), clean clone at `38adb52`,
+tool in check mode (no `--write`, tokenizer files only, no model, no forward): the profile regenerates
+byte-identically, SHA-256 `3563b827a906db1f245f8180a22bb6893e216a31443ffaabf1a70229273cd9e0`.
+
 Evidence for the rendering rule: all L2 and L1 re-score evaluations render P_default (`pipeline.stage_baseline`,
 `pipeline` scoring loop); own-prefix persona conditions render their persona (two of the 104 own-prefix conditions,
 14 tokens longer than P_default); own-prefix steered conditions render P_default. Extraction does not use S0 and is
