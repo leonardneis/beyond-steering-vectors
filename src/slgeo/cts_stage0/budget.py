@@ -184,9 +184,13 @@ def write_ledger(path: Path, category: str, run_tag: str, jobs: Sequence[JobUsag
 
 
 def budget_stop(out_root: Path, decision: GateDecision, node: str) -> Path:
+    """Seal the run (spec accounting.scientific.budget_stop): the record itself carries the decision
+    TECHNICAL_FAIL (reason BUDGET_STOP); no stage runs afterwards and no output is analysed."""
     path = out_root / "orchestration" / "BUDGET_STOP.json"
     if not path.exists():
-        atomic_write_json(path, {"node": node, "utc": utc_now(), **decision.as_dict()}, write_once=True)
+        record = {"decision": {"class": "TECHNICAL_FAIL", "rank": 1, "reason": "BUDGET_STOP"}, "outputs": "sealed; never analysed",
+                  "node": node, "utc": utc_now(), **decision.as_dict()}
+        atomic_write_json(path, record, write_once=True)
     return path
 
 

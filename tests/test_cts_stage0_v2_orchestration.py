@@ -118,7 +118,8 @@ def test_gate_and_budget_stop(tmp_path):
     decision = budget.gate(10.0, 20.1, 30.0)
     assert not decision.allowed
     path = budget.budget_stop(tmp_path, decision, "score_x")
-    assert json.loads(path.read_bytes())["node"] == "score_x"
+    record = json.loads(path.read_bytes())
+    assert record["node"] == "score_x" and record["decision"] == {"class": "TECHNICAL_FAIL", "rank": 1, "reason": "BUDGET_STOP"}
     budget.budget_stop(tmp_path, decision, "second")  # idempotent, first record kept
     assert json.loads(path.read_bytes())["node"] == "score_x"
 
