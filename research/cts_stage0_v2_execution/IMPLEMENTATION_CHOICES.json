@@ -8,7 +8,22 @@
   "suffix_hook": "adds the fp32 vector cast to the model dtype at the one position; refuses any forward whose hidden state is not [1, 1, H], whose position id or cache position differs from L-1, a second firing, and all-position rows",
   "own_prefix": "PrefillSteering on a full prefill of positions 0..L-1 with one row (identical to the v1 L1 layout)",
   "logits": "float32 F.linear(post-norm final state, lm_head weight); normalizer over all 152064 lm_head rows; form scores accumulated in float64",
-  "words_scored_every_condition": ["cat", "dog", "wolf", "lion", "horse", "rabbit", "elephant", "fox", "owl", "turtle", "spider", "ant", "chess", "blue"]
+  "words_scored_every_condition": [
+   "cat",
+   "dog",
+   "wolf",
+   "lion",
+   "horse",
+   "rabbit",
+   "elephant",
+   "fox",
+   "owl",
+   "turtle",
+   "spider",
+   "ant",
+   "chess",
+   "blue"
+  ]
  },
  "baselines": {
   "canonical": "unsteered in L2, scored twice: baseline_rep1 (host group f) and baseline_rep2 (host group g); every per-form log-prob within 1e-4",
@@ -42,7 +57,8 @@
   "unit": "RemoteWallClockTime x RequestGpus / 3600 from condor_history (finished) and condor_q (running: accumulated wall time plus the current run), jobs identified by the job-ad attributes BsvBudgetCategory and BsvRunTag",
   "gate": "PRE script of every DAG node (CPU nodes included, so the integrity node sees a current ledger): consumed + remaining projection of incomplete GPU shards <= cap, else BUDGET_STOP.json and exit 87 (ABORT-DAG-ON); every later PRE script and every job refuses",
   "complete_shards_for_projection": "shards with a marker file (the integrity stage verifies markers fully)",
-  "tv": "category TV, cap 6 A100-h, a per-node remaining estimate of 1.5 A100-h per GPU node; attempts registered in the accounting root, at most 3"
+  "tv": "category TV, cap 6 A100-h summed over every registered TV-v2 attempt (accounting root), a remaining estimate of 1.0 A100-h per GPU node (3 GPU nodes); at most 3 attempts",
+  "ledger_fields": "cluster, proc, TaskId, wall seconds, GPUs, running"
  },
  "technical_validation": {
   "inputs": "V prompts, P_default, the nonce persona, TV-seed random directions (seeds 1000001-1000004), the planted W_U[' zorb'] direction; S0 enters only as the multiset of rendered lengths of the 300 animal prompts (tokenizer only, 40 quantiles persisted)",
@@ -51,8 +67,8 @@
   "determinism": "L2 baseline repeated within the job (bitwise); L2 and L1 digests compared across the two hosts by the projection node",
   "fragility_on_V": "16 random directions at 0.1/0.25/0.5 x ||t_nonce|| with both signs; per statistic rho = sqrt(max(0, mean(d)^2 - s_d^2/n) x 300 + s_d^2) / s_x; median and max reported, descriptive only",
   "seconds": "L2: per-condition suffix+continuation time plus the prefix time divided by the planned L2 shard size; own_prefix: all-position rows in L1; L1_reference: last-position rows in L1; extraction: 64 default-context extraction forwards",
-  "overhead_factor": "(process start to model ready + real-model self-test + two sentinels + dry-shard compute + publication hashing) / dry-shard compute, for one planned L2 shard (conditions x 300 prompt evaluations); excludes container start and scheduling, which the 0.8 x cap reserve covers",
-  "projection": "seconds and overhead factor are the maxima over the two hosts; P from the plan; ladder values for the pre-specified reductions are reported"
+  "overhead_factor": "a separate GPU job tv_dry runs one planned L2 score shard (conditions x 300 prompt evaluations of length-matched V-derived prompts) through the per-job work of a production shard (identity, code, contract and snapshot verification, model load, real-model self-test, CJK check, sentinels, scoring, atomic publication). Its RemoteWallClockTime is read from condor_history by the PRE script of tv_project (the same quantity and source the scientific ledger counts, from execution start, so container start, node wrapper and interpreter start are included and scheduler waiting is not). Per-job fixed cost F = RemoteWallClockTime - in-job scoring compute (latest tv_dry job). The factor used in the preregistered formula P = warm x factor is the aggregate (sum over GPU shards of warm + F) / sum of warm, which reproduces F exactly for every shard size. TV-only extra work in tv_dry (length matching, scale) makes F slightly conservative",
+  "projection": "seconds are the maxima over the two validation hosts; F from the dry job; P from the plan; ladder values for the pre-specified reductions are recomputed with the same F"
  },
  "identity": {
   "pinned": "configs/validation/cts_stage0_v2.yaml execution block (the v1 TV identity); updated by an engineering change if the 2026-09-28 to 2026-10-01 maintenance changes the driver or image, before TV-v2",

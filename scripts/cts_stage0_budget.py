@@ -34,7 +34,13 @@ def cmd_pre(args) -> int:
     if stop.exists():
         print(f"BUDGET_STOP present; refusing node {args.node}", file=sys.stderr)
         return BUDGET_STOP_EXIT
-    jobs = budget.job_usage(args.category, args.run_tag)
+    if args.category == budget.TV:
+        if not args.accounting_root:
+            print("--accounting-root is required for the TV category", file=sys.stderr)
+            return BUDGET_STOP_EXIT
+        jobs = budget.tv_usage_all_attempts(Path(args.accounting_root), args.run_tag)
+    else:
+        jobs = budget.job_usage(args.category, args.run_tag)
     used = budget.consumed(jobs)
     if args.category == budget.SCI:
         plan = json.loads(Path(args.plan).read_bytes())
@@ -79,6 +85,7 @@ def main() -> int:
     pre.add_argument("--cap", required=True, type=float)
     pre.add_argument("--plan")
     pre.add_argument("--tv-remaining-a100-h", type=float, default=0.0)
+    pre.add_argument("--accounting-root")
     pre.set_defaults(func=cmd_pre)
     attempt = sub.add_parser("tv-attempt")
     attempt.add_argument("--accounting-root", required=True)

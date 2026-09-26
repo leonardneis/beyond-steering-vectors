@@ -16,10 +16,7 @@ import json
 import os
 import signal
 import sys
-import time
 from pathlib import Path
-
-PROCESS_START = time.time()
 
 from _bootstrap import bootstrap  # noqa: E402
 
@@ -246,14 +243,43 @@ def cmd_techval(args) -> int:
     model = load_model(snapshot, load_yaml(ROOT / manifest["model"]["model_config"]))
     extraction = guard_input(_shared_root() / manifest["inputs"]["extraction_file"], [_shared_root() / "data"])
     prompts = load_extraction_prompts(contract.package, extraction)
-    fixed = time.time() - PROCESS_START
     result = run_technical_validation(model, tokenizer, contract.package, prompts, s0_lengths=targets,
-                                      l2_shard_conditions=_planned_l2_shard_size(contract, manifest), fixed_job_seconds=fixed)
+                                      l2_shard_conditions=_planned_l2_shard_size(contract, manifest))
     payload = {"kind": args.name, "execution_commit": record["execution_commit"], "identity": identity,
                "snapshot_sha256": snapshot_hashes, "determinism": determinism, "result": result}
     atomic_write_json(_root(True) / "gpu" / f"{args.name}.json", payload, write_once=True)
     verdict = bool(result["pass"])
     print(f"technical validation {args.name}: {'PASS' if verdict else 'FAIL'}")
+    return 0 if verdict else 86
+
+
+def cmd_techval_dry(args) -> int:
+    """GPU dry shard: one planned L2 shard on TV inputs through the per-job work of a production shard. Its
+    RemoteWallClockTime (read from the TV ledger by the projection node) gives the per-job fixed cost."""
+    from slgeo.cts_stage0.atomic import atomic_write_json
+    from slgeo.cts_stage0.guards import guard_input
+    from slgeo.cts_stage0.modeling import load_model, load_tokenizer, set_deterministic
+    from slgeo.cts_stage0.package import load_extraction_prompts
+    from slgeo.cts_stage0.techval import run_dry_shard
+    from slgeo.io import load_yaml
+
+    manifest, record, identity, contract, snapshot, snapshot_hashes = _tv_common(require_gpu=True)
+    cpu = _read_json(_root(True) / "cpu" / "techval_cpu.json")
+    if not cpu.get("pass") or cpu["execution_commit"] != record["execution_commit"]:
+        raise RuntimeError("CPU technical validation missing, failed or from another commit")
+    targets = _read_json(_root(True) / "cpu" / "s0_length_targets.json")["targets"]
+    determinism = set_deterministic()
+    tokenizer = load_tokenizer(snapshot)
+    model = load_model(snapshot, load_yaml(ROOT / manifest["model"]["model_config"]))
+    extraction = guard_input(_shared_root() / manifest["inputs"]["extraction_file"], [_shared_root() / "data"])
+    prompts = load_extraction_prompts(contract.package, extraction)
+    result = run_dry_shard(model, tokenizer, contract.package, prompts, s0_lengths=targets,
+                           n_conditions=_planned_l2_shard_size(contract, manifest), publish_root=_root(True) / "dry")
+    payload = {"kind": "tv_dry", "execution_commit": record["execution_commit"], "identity": identity,
+               "snapshot_sha256": snapshot_hashes, "determinism": determinism, "result": result}
+    atomic_write_json(_root(True) / "gpu" / "tv_dry.json", payload, write_once=True)
+    verdict = bool(result["pass"])
+    print(f"technical validation dry shard: {'PASS' if verdict else 'FAIL'}")
     return 0 if verdict else 86
 
 
@@ -266,11 +292,15 @@ def cmd_tv_project(args) -> int:
     manifest, record, identity, contract, _snapshot, _hashes = _tv_common(require_gpu=False)
     cpu = _read_json(_root(True) / "cpu" / "techval_cpu.json")
     gpus = [_read_json(_root(True) / "gpu" / f"{name}.json") for name in ("gpu_a", "gpu_b")]
-    if any(g["execution_commit"] != record["execution_commit"] for g in gpus + [cpu]):
+    dry = _read_json(_root(True) / "gpu" / "tv_dry.json")
+    # Written by this node's PRE script on the submit host from condor_history (RemoteWallClockTime).
+    ledger = _read_json(_root(True) / "orchestration" / "budget_ledger.json")
+    if any(g["execution_commit"] != record["execution_commit"] for g in gpus + [cpu, dry]):
         raise RuntimeError("Technical-validation records come from different commits")
     plan = build_plan(contract, manifest)
     budget = manifest["budget"]
-    result = project(cpu, gpus, plan, cap=float(budget["scientific_cap_a100_h"]), planning_fraction=float(budget["planning_fraction"]))
+    result = project(cpu, gpus, dry, ledger, plan, cap=float(budget["scientific_cap_a100_h"]),
+                     planning_fraction=float(budget["planning_fraction"]))
     payload = {"kind": "projection", "execution_commit": record["execution_commit"], "identity": identity, "result": result}
     atomic_write_json(_root(True) / "projection.json", payload, write_once=True)
     verdict = bool(result["pass"])
@@ -293,6 +323,7 @@ def main() -> int:
     techval.add_argument("--name", required=True, choices=("gpu_a", "gpu_b"))
     techval.set_defaults(func=cmd_techval)
     sub.add_parser("techval-cpu").set_defaults(func=cmd_techval_cpu)
+    sub.add_parser("techval-dry").set_defaults(func=cmd_techval_dry)
     sub.add_parser("tv-project").set_defaults(func=cmd_tv_project)
     args = parser.parse_args()
 

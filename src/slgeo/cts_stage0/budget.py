@@ -24,8 +24,8 @@ from .atomic import atomic_write_json, utc_now
 TV = "TV"
 SCI = "SCI"
 CATEGORIES = (TV, SCI)
-HISTORY_ATTRIBUTES = ("ClusterId", "ProcId", "RemoteWallClockTime", "RequestGpus", "JobStatus")
-QUEUE_ATTRIBUTES = ("ClusterId", "ProcId", "RemoteWallClockTime", "RequestGpus", "JobStatus", "JobCurrentStartDate", "ServerTime")
+HISTORY_ATTRIBUTES = ("ClusterId", "ProcId", "RemoteWallClockTime", "RequestGpus", "JobStatus", "TaskId")
+QUEUE_ATTRIBUTES = ("ClusterId", "ProcId", "RemoteWallClockTime", "RequestGpus", "JobStatus", "JobCurrentStartDate", "ServerTime", "TaskId")
 RUNNING = 2
 N_S0_ALL = 334
 N_S0_ANIMAL = 300
@@ -44,6 +44,7 @@ class JobUsage:
     wall_seconds: float
     gpus: int
     running: bool
+    task: str = ""
 
     @property
     def a100_h(self) -> float:
@@ -74,8 +75,8 @@ def parse_history(output: str) -> list[JobUsage]:
             continue
         if len(parts) != len(HISTORY_ATTRIBUTES):
             raise BudgetError(f"Unparseable condor_history line: {line!r}")
-        cluster, proc, wall, gpus, _status = parts
-        jobs.append(JobUsage(int(cluster), int(proc), _number(wall), int(_number(gpus)), False))
+        cluster, proc, wall, gpus, _status, task = parts
+        jobs.append(JobUsage(int(cluster), int(proc), _number(wall), int(_number(gpus)), False, task.strip('"')))
     return jobs
 
 
@@ -88,9 +89,10 @@ def parse_queue(output: str) -> list[JobUsage]:
             continue
         if len(parts) != len(QUEUE_ATTRIBUTES):
             raise BudgetError(f"Unparseable condor_q line: {line!r}")
-        cluster, proc, wall, gpus, status, started, now = parts
+        cluster, proc, wall, gpus, status, started, now, task = parts
         current = _number(now) - _number(started) if int(_number(status)) == RUNNING and _number(started) > 0 else 0.0
-        jobs.append(JobUsage(int(cluster), int(proc), _number(wall) + max(0.0, current), int(_number(gpus)), int(_number(status)) == RUNNING))
+        jobs.append(JobUsage(int(cluster), int(proc), _number(wall) + max(0.0, current), int(_number(gpus)), int(_number(status)) == RUNNING,
+                             task.strip('"')))
     return jobs
 
 
@@ -173,7 +175,8 @@ def write_ledger(path: Path, category: str, run_tag: str, jobs: Sequence[JobUsag
         "run_tag": run_tag,
         "utc": utc_now(),
         "consumed_a100_h": consumed(jobs),
-        "jobs": [{"cluster": j.cluster, "proc": j.proc, "wall_seconds": j.wall_seconds, "gpus": j.gpus, "running": j.running} for j in jobs],
+        "jobs": [{"cluster": j.cluster, "proc": j.proc, "task": j.task, "wall_seconds": j.wall_seconds, "gpus": j.gpus, "running": j.running}
+                 for j in jobs],
         "gate": decision.as_dict() if decision else None,
     }
     tmp_history = path.parent / "ledger_history"
@@ -195,8 +198,18 @@ def budget_stop(out_root: Path, decision: GateDecision, node: str) -> Path:
 
 
 def tv_attempts(accounting_root: Path) -> int:
-    root = accounting_root / "tv_attempts"
-    return len(list(root.glob("*.json"))) if root.exists() else 0
+    return len(tv_attempt_tags(accounting_root))
+
+
+def tv_attempt_tags(accounting_root: Path) -> list[str]:
+    root = Path(accounting_root) / "tv_attempts"
+    return sorted(json.loads(path.read_bytes())["run_tag"] for path in root.glob("*.json")) if root.exists() else []
+
+
+def tv_usage_all_attempts(accounting_root: Path, current_tag: str, run: Runner = _run) -> list[JobUsage]:
+    """The TV cap covers every TV-v2 attempt (spec accounting.categories.TV): jobs of all registered tags."""
+    tags = sorted(set(tv_attempt_tags(accounting_root)) | {current_tag})
+    return [job for tag in tags for job in job_usage(TV, tag, run=run)]
 
 
 def register_tv_attempt(accounting_root: Path, run_tag: str, commit: str) -> Path:

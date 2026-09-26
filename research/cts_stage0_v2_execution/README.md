@@ -59,9 +59,12 @@ container image; the condor venv is verified as content-addressed by the require
 
 `condor/submit_cts_stage0.sh --technical-validation` (dry run by default; `--submit` to submit) creates a new
 attempt directory `results/research/qwen7b_cts_stage0_v2_technical_validation/tv-<utc>` and a DAG
-`tv_cpu → tv_gpu_a, tv_gpu_b → tv_project`. The projection node writes `projection.json` with the measured
-seconds per cost class (maximum over hosts), the overhead factor, the projection P, the pre-authorization ladder
-and the gate P ≤ 0.8 × 30 A100-h. TV-v2 is limited to 3 attempts and 6 A100-h.
+`tv_cpu → tv_gpu_a, tv_gpu_b, tv_dry → tv_project`. `tv_dry` is one planned L2 shard run as its own GPU job; the
+PRE script of `tv_project` records its RemoteWallClockTime from `condor_history` (the quantity the scientific
+ledger counts), and the per-job fixed cost F = wall − in-job compute enters the overhead factor. The projection
+node writes `projection.json` with the measured seconds per cost class (maximum over hosts), F, the factor, the
+projection P, the pre-authorization ladder and the gate P ≤ 0.8 × 30 A100-h. TV-v2 is limited to 3 attempts and
+6 A100-h summed over all attempts.
 
 ## Freeze and authorization (later, researcher actions)
 

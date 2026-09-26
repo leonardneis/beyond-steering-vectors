@@ -37,6 +37,7 @@ case "$COMMAND" in
   techval) args=(techval --name "$TARGET") ;;
   techval-cpu) args=(techval-cpu) ;;
   tv-project) args=(tv-project) ;;
+  techval-dry) args=(techval-dry) ;;
   *) echo "Unknown command $COMMAND" >&2; exit 2 ;;
 esac
 

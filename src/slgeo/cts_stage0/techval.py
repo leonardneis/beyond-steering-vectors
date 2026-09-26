@@ -12,6 +12,7 @@ Every persisted value is a boolean, hash, count, timing, TV-only aggregate or id
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from typing import Any, Sequence
 
@@ -117,7 +118,6 @@ def _sync() -> None:
 @torch.inference_mode()
 def run_technical_validation(
     model, tokenizer, package: FrozenPackage, extraction_prompts, *, s0_lengths: Sequence[int], l2_shard_conditions: int,
-    fixed_job_seconds: float,
 ) -> dict[str, Any]:
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     renderer = Renderer(tokenizer, package, mode=TECHNICAL_VALIDATION)
@@ -138,9 +138,7 @@ def run_technical_validation(
     out["extraction_path_ok"] = bool(np.isfinite(scale) and np.isfinite(t_nonce_norm) and t_nonce_norm > 0)
 
     # Real-model hook self-test: both sites, L1 prefill and L2 suffix hooks, three extraction prompts.
-    _sync(); t_self = time.time()
     selftest = real_model_hook_selftest(model, [renderer.render("P_default", p) for p in extraction_prompts[:3]], magnitude=scale)
-    _sync(); selftest_seconds = time.time() - t_self
     out["hook_selftest"] = {"pass": selftest["pass"], "failed": selftest["failed"], "n_checks": sum(len(v) for v in selftest["checks"].values())}
 
     # Planted effect in the canonical L2 layout: unit(W_U[first token of " zorb"]) at blocks 13 and 27.
@@ -237,37 +235,6 @@ def run_technical_validation(
         "extraction_forward": extraction,
     }
 
-    # Dry shard: one planned L2 shard (conditions x 300 prompt evaluations cycling the matched prompts) with
-    # the sentinel and publication work of a real shard, for the end-to-end overhead factor.
-    dry_rng = np.random.default_rng(TV_SEED + 4)
-    dry_rows = [RowSteer({13: random_unit(hidden, dry_rng) * 0.25 * t_nonce_norm}, LAST) for _ in range(l2_shard_conditions)]
-    _sync(); t0 = time.time()
-    for r in matched[:2]:
-        score_from_prefix(model, build_prefix(model, r, device=weight32.device), RowSteer({}), table, weight32=weight32)
-    _sync(); sentinel = time.time() - t0
-    scores = np.empty((len(dry_rows), N_S0_ANIMAL, table.n_forms))
-    _sync(); t0 = time.time()
-    for p_index in range(N_S0_ANIMAL):
-        pre = build_prefix(model, matched[p_index % len(matched)], device=weight32.device)
-        for c_index, row in enumerate(dry_rows):
-            scores[c_index, p_index] = score_from_prefix(model, pre, row, table, weight32=weight32).form_logp[0]
-    _sync(); compute = time.time() - t0
-    t0 = time.time()
-    payload = np.ascontiguousarray(scores).tobytes()
-    hashlib.sha256(payload).hexdigest()
-    publish = time.time() - t0
-    wall = fixed_job_seconds + selftest_seconds + 2 * sentinel + compute + publish
-    out["dry_shard"] = {
-        "conditions": len(dry_rows),
-        "prompt_evaluations": N_S0_ANIMAL,
-        "fixed_job_seconds": fixed_job_seconds,
-        "selftest_seconds": selftest_seconds,
-        "sentinel_seconds": 2 * sentinel,
-        "compute_seconds": compute,
-        "publish_seconds": publish,
-        "overhead_factor": wall / compute,
-        "note": "excludes container start and scheduler time; the 0.8 x cap reserve covers them",
-    }
     if torch.cuda.is_available():
         out["peak_memory_gib"] = torch.cuda.max_memory_allocated() / 2**30
     checks = {
@@ -282,8 +249,87 @@ def run_technical_validation(
     return out
 
 
-def project(cpu: dict, gpu_records: Sequence[dict], plan: dict, *, cap: float, planning_fraction: float) -> dict:
-    """TV-v2 projection node: cross-host identity and digests, conservative seconds, P and the gate."""
+@torch.inference_mode()
+def run_dry_shard(model, tokenizer, package: FrozenPackage, extraction_prompts, *, s0_lengths: Sequence[int], n_conditions: int,
+                  publish_root) -> dict[str, Any]:
+    """One planned L2 score shard on TV inputs, through the same per-job work as a production shard.
+
+    The job's cost as the ledger counts it (RemoteWallClockTime from HTCondor, covering container start, the node
+    wrapper, interpreter start, identity/code/contract/snapshot verification, model load, self-test, sentinels,
+    scoring and publication) is read after the job by the projection node; this function returns only the
+    in-job compute seconds of the scoring loop, so the per-job fixed cost is wall - compute."""
+    from . import artifacts as art
+    from .checks import cjk_ids_by_rule
+    from .package import sha256_text
+
+    renderer = Renderer(tokenizer, package, mode=TECHNICAL_VALIDATION)
+    weight32 = lm_head_weight32(model)
+    table = standin_table(package, tokenizer)
+    if sha256_text(json.dumps(cjk_ids_by_rule(tokenizer))) != package.endpoint["cjk_ids_sha256"]:
+        raise RuntimeError("CJK id set differs from the frozen hash")
+    selftest = real_model_hook_selftest(model, [renderer.render("P_default", p) for p in extraction_prompts[:3]], magnitude=8.0)
+    matched, mismatch = length_matched_prompts(renderer, [p.prompt for p in package.validation_prompts()], s0_lengths)
+    hidden = model.config.hidden_size
+    rng = np.random.default_rng(TV_SEED + 4)
+    scale = float(np.mean([float(last_token_hidden_states(model, r.input_ids, "cuda:0" if torch.cuda.is_available() else "cpu")[14].float().norm())
+                           for r in matched[:8]]))
+    rows = [RowSteer({13: random_unit(hidden, rng) * 0.05 * scale}, LAST) for _ in range(n_conditions)]
+
+    def sentinel():
+        return [score_from_prefix(model, build_prefix(model, r, device=weight32.device), RowSteer({}), table, weight32=weight32).form_logp[0]
+                for r in matched[:2]]
+
+    start = sentinel()
+    scores = np.empty((len(rows), N_S0_ANIMAL, table.n_forms))
+    _sync(); t0 = time.time()
+    for p_index in range(N_S0_ANIMAL):
+        prefix = build_prefix(model, matched[p_index % len(matched)], device=weight32.device)
+        for c_index, row in enumerate(rows):
+            scores[c_index, p_index] = score_from_prefix(model, prefix, row, table, weight32=weight32).form_logp[0]
+    _sync(); compute = time.time() - t0
+    end = sentinel()
+    sentinel_ok = all(np.array_equal(a, b) for a, b in zip(start, end))
+    shard = art.Shard(publish_root, "tv_dry", "tv", {"kind": "tv_dry"})
+    shard.quarantine()
+    shard.publish({"scores.npz": art.npz_bytes({"form_logp": scores})}, {"stage": "tv_dry"})
+    return {
+        "conditions": len(rows),
+        "prompt_evaluations": N_S0_ANIMAL,
+        "compute_seconds": compute,
+        "sentinel_bitwise": bool(sentinel_ok),
+        "selftest_pass": bool(selftest["pass"]),
+        "length_matching": mismatch,
+        "pass": bool(sentinel_ok and selftest["pass"] and mismatch["max_abs_length_mismatch"] <= 2),
+    }
+
+
+def fixed_job_seconds(ledger: dict, task: str, compute_seconds: float) -> float:
+    """Per-job fixed cost of the dry shard as the ledger counts it: RemoteWallClockTime - in-job compute."""
+    jobs = [job for job in ledger["jobs"] if job.get("task") == task and not job.get("running")]
+    if not jobs:
+        raise RuntimeError(f"No finished {task} job in the TV ledger")
+    latest = max(jobs, key=lambda job: (job["cluster"], job["proc"]))
+    fixed = float(latest["wall_seconds"]) - float(compute_seconds)
+    if fixed < 0:
+        raise RuntimeError("RemoteWallClockTime of the dry shard is below its compute time")
+    return fixed
+
+
+def overhead_factor(plan: dict, seconds: dict, fixed: float) -> float:
+    """Aggregate end-to-end factor of this plan: sum over GPU shards of (fixed + warm) / sum of warm.
+
+    Expressed as the single multiplicative factor of the preregistered projection formula, it reproduces a
+    per-job fixed cost exactly for every shard size (extraction, baseline, score, re-score, short tail shards)."""
+    from .budget import shard_projection_seconds
+
+    warm = [shard_projection_seconds(shard, seconds) for shard in plan["shards"] if shard["gpu"]]
+    return (sum(warm) + fixed * len(warm)) / sum(warm)
+
+
+def project(cpu: dict, gpu_records: Sequence[dict], dry_record: dict, ledger: dict, plan: dict, *, cap: float,
+            planning_fraction: float) -> dict:
+    """TV-v2 projection node: cross-host identity and digests, conservative seconds, the ledger-based overhead
+    factor, P and the gate."""
     from .budget import authorization_check, projection_a100_h
 
     identity_keys = ("gpu_name", "packages", "python", "cuda_runtime", "container_image", "venv")
@@ -297,14 +343,16 @@ def project(cpu: dict, gpu_records: Sequence[dict], plan: dict, *, cap: float, p
     checks = {
         "cpu_validation": bool(cpu.get("pass")),
         "gpu_validations": all(result["pass"] for result in results),
+        "dry_shard": bool(dry_record["result"]["pass"]),
         "two_distinct_hosts": len(hosts) == len(gpu_records) >= 2 and None not in hosts,
-        "identity_identical_across_hosts": len({repr(identity(r)) for r in gpu_records}) == 1,
+        "identity_identical_across_hosts": len({repr(identity(r)) for r in list(gpu_records) + [dry_record]}) == 1,
         "l2_digests_identical_across_hosts": len({repr(result["l2_digests"]) for result in results}) == 1,
         "l1_digests_identical_across_hosts": len({repr(result["l1_digests"]) for result in results}) == 1,
     }
     classes = ("L2_shared_prefix", "own_prefix", "L1_reference", "extraction_forward")
     seconds = {name: max(float(result["seconds"][name]) for result in results) for name in classes}
-    overhead = max(float(result["dry_shard"]["overhead_factor"]) for result in results)
+    fixed = fixed_job_seconds(ledger, "tv_dry", dry_record["result"]["compute_seconds"])
+    overhead = overhead_factor(plan, seconds, fixed)
     full = projection_a100_h(plan, seconds, overhead)
     conditions = {c["cid"]: c for c in plan["conditions"]}
 
@@ -316,7 +364,8 @@ def project(cpu: dict, gpu_records: Sequence[dict], plan: dict, *, cap: float, p
                 shards.append(dict(shard, payload=dict(shard["payload"], conditions=kept)))
             else:
                 shards.append(shard)
-        return projection_a100_h(dict(plan, shards=shards), seconds, overhead)
+        reduced = dict(plan, shards=shards)
+        return projection_a100_h(reduced, seconds, overhead_factor(reduced, seconds, fixed))
 
     step1 = without(lambda c, _s: not c["gating"])
 
@@ -331,6 +380,8 @@ def project(cpu: dict, gpu_records: Sequence[dict], plan: dict, *, cap: float, p
     return {
         "checks": checks,
         "seconds": seconds,
+        "fixed_job_seconds": fixed,
+        "gpu_shards": sum(1 for shard in plan["shards"] if shard["gpu"]),
         "overhead_factor": overhead,
         "projection_a100_h": full,
         "pre_authorization_ladder_a100_h": {"drop_descriptive": step1, "and_fragility_subset_5": step2},

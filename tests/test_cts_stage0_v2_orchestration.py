@@ -88,17 +88,17 @@ def test_shard_sizing_refuses_invalid_parameters(args):
 
 
 def test_history_and_queue_parsing():
-    history = budget.parse_history("101 0 1800.0 1 4\n102 0 undefined 1 3\n")
-    assert [j.wall_seconds for j in history] == [1800.0, 0.0]
-    queue = budget.parse_queue("103 0 600 1 2 1000 1900\n104 0 0 1 1 0 1900\n")
-    assert queue[0].wall_seconds == 1500.0 and queue[0].running and queue[1].wall_seconds == 0.0
+    history = budget.parse_history('101 0 1800.0 1 4 "score_a"\n102 0 undefined 1 3 score_b\n')
+    assert [j.wall_seconds for j in history] == [1800.0, 0.0] and [j.task for j in history] == ["score_a", "score_b"]
+    queue = budget.parse_queue("103 0 600 1 2 1000 1900 tv_dry\n104 0 0 1 1 0 1900 x\n")
+    assert queue[0].wall_seconds == 1500.0 and queue[0].running and queue[1].wall_seconds == 0.0 and queue[0].task == "tv_dry"
     with pytest.raises(budget.BudgetError):
         budget.parse_history("1 2 3\n")
 
 
 def test_job_usage_counts_each_job_once():
     def runner(command):
-        return "101 0 3600 1 4\n" if command[0] == "condor_history" else "101 0 3600 1 2 5000 5900\n102 0 0 1 2 100 460\n"
+        return "101 0 3600 1 4 a\n" if command[0] == "condor_history" else "101 0 3600 1 2 5000 5900 a\n102 0 0 1 2 100 460 b\n"
 
     jobs = budget.job_usage("SCI", "sci-v2", run=runner)
     assert [(j.cluster, j.a100_h) for j in jobs] == [(101, 1.25), (102, 0.1)]
@@ -167,6 +167,20 @@ def test_tv_attempt_limit(tmp_path):
     for index in range(3):
         assert cli.cmd_tv_attempt(SimpleNamespace(accounting_root=str(tmp_path), run_tag=f"tv-{index}", commit="c", max_attempts=3)) == 0
     assert cli.cmd_tv_attempt(SimpleNamespace(accounting_root=str(tmp_path), run_tag="tv-9", commit="c", max_attempts=3)) == 2
+
+
+def test_tv_cap_counts_every_attempt(tmp_path):
+    for tag in ("tv-1", "tv-2"):
+        budget.register_tv_attempt(tmp_path, tag, "c")
+
+    def runner(command):
+        tag = command[command.index("-constraint") + 1].split('BsvRunTag == "')[1].split('"')[0]
+        if command[0] == "condor_history":
+            return {"tv-1": "11 0 7200 1 4 tv_dry\n", "tv-2": "12 0 3600 1 4 tv_gpu_a\n", "tv-3": ""}[tag]
+        return ""
+
+    jobs = budget.tv_usage_all_attempts(tmp_path, "tv-3", run=runner)
+    assert budget.consumed(jobs) == pytest.approx(3.0)
 
 
 def test_budget_module_is_standard_library_only():
@@ -279,9 +293,10 @@ def test_plan_dag_has_budget_gate_retry_and_abort(plan, tmp_path):
 def test_tv_dag(tmp_path):
     import generate_cts_stage0_dag as gen
 
-    dag = gen.technical_validation_dag("a" * 40, "/repo", "/scratch/x", "tv-20261002T000000Z", "/scratch/x/tv", 6.0)
-    assert re.findall(r"^JOB (\S+)", dag, flags=re.M) == ["tv_cpu", "tv_gpu_a", "tv_gpu_b", "tv_project"]
-    assert "PARENT tv_gpu_a tv_gpu_b CHILD tv_project" in dag and "--category TV" in dag
+    dag = gen.technical_validation_dag("a" * 40, "/repo", "/scratch/x", "tv-20261002T000000Z", "/scratch/x/tv", 6.0, "/scratch/x/acct")
+    assert re.findall(r"^JOB (\S+)", dag, flags=re.M) == ["tv_cpu", "tv_gpu_a", "tv_gpu_b", "tv_dry", "tv_project"]
+    assert "PARENT tv_gpu_a tv_gpu_b tv_dry CHILD tv_project" in dag and "--category TV" in dag
+    assert dag.count("--accounting-root /scratch/x/acct") == 5
 
 
 def test_submit_files_carry_budget_attributes_and_no_in_place_rematch():
@@ -320,25 +335,49 @@ def test_tv_prompts_and_personas_are_outcome_blind():
 
 
 def test_tv_projection_ladder_and_gate(plan):
-    from slgeo.cts_stage0.techval import project
+    from slgeo.cts_stage0 import techval
 
-    def gpu(machine, factor):
+    identity = {"gpu_name": "A100", "packages": {}, "python": "3.11", "cuda_runtime": "12.4", "container_image": "img",
+                "venv": {"in_venv": False}, "nvidia_smi": [{"driver": "570"}]}
+
+    def gpu(machine, l2=0.11):
         return {
-            "identity": {"gpu_name": "A100", "packages": {}, "python": "3.11", "cuda_runtime": "12.4", "container_image": "img",
-                         "venv": {"in_venv": False}, "nvidia_smi": [{"driver": "570"}], "machine_ad": {"Machine": machine}},
+            "identity": dict(identity, machine_ad={"Machine": machine}),
             "result": {"pass": True, "l2_digests": {"b": "x"}, "l1_digests": {"b": "y"},
-                       "seconds": {"L2_shared_prefix": 0.11, "own_prefix": 0.21, "L1_reference": 0.21, "extraction_forward": 0.1},
-                       "dry_shard": {"overhead_factor": factor}},
+                       "seconds": {"L2_shared_prefix": l2, "own_prefix": 0.21, "L1_reference": 0.21, "extraction_forward": 0.1}},
         }
 
-    result = project({"pass": True}, [gpu("fa", 1.2), gpu("gb", 1.25)], plan, cap=30.0, planning_fraction=0.8)
+    dry = {"identity": dict(identity, machine_ad={"Machine": "fz"}), "result": {"pass": True, "compute_seconds": 1500.0}}
+    seconds = {"L2_shared_prefix": 0.11, "own_prefix": 0.21, "L1_reference": 0.21, "extraction_forward": 0.1}
+    warm = sum(budget.shard_projection_seconds(s, seconds) for s in plan["shards"] if s["gpu"])
+    n_gpu = sum(1 for s in plan["shards"] if s["gpu"])
+
+    def ledger(wall):
+        return {"jobs": [{"cluster": 5, "proc": 0, "task": "tv_dry", "wall_seconds": wall, "gpus": 1, "running": False},
+                         {"cluster": 3, "proc": 0, "task": "tv_dry", "wall_seconds": 99999.0, "gpus": 1, "running": False}]}
+
+    fixed = 240.0
+    result = techval.project({"pass": True}, [gpu("fa"), gpu("gb")], dry, ledger(1500.0 + fixed), plan, cap=30.0, planning_fraction=0.8)
     assert all(result["checks"].values())
-    assert result["overhead_factor"] == 1.25 and result["projection_a100_h"] == pytest.approx(23.42, abs=0.01)
+    assert result["fixed_job_seconds"] == pytest.approx(fixed)  # latest dry job, RemoteWallClockTime - compute
+    assert result["overhead_factor"] == pytest.approx((warm + n_gpu * fixed) / warm)
+    assert result["projection_a100_h"] == pytest.approx((warm + n_gpu * fixed) / 3600)
     ladder = result["pre_authorization_ladder_a100_h"]
     assert result["projection_a100_h"] > ladder["drop_descriptive"] > ladder["and_fragility_subset_5"]
-    assert result["pass"]
-    slow = project({"pass": True}, [gpu("fa", 1.4), gpu("gb", 1.4)], plan, cap=30.0, planning_fraction=0.8)
-    assert not slow["pass"] and not slow["authorization"]["allowed"]
-    mismatch = project({"pass": True}, [gpu("fa", 1.2), dict(gpu("gb", 1.2), result=dict(gpu("gb", 1.2)["result"], l2_digests={"b": "z"}))],
-                       plan, cap=30.0, planning_fraction=0.8)
+    assert result["pass"] == (result["projection_a100_h"] <= 24.0)
+    slow = techval.project({"pass": True}, [gpu("fa", 0.14), gpu("gb", 0.14)], dry, ledger(1500.0 + fixed), plan, cap=30.0, planning_fraction=0.8)
+    assert not slow["authorization"]["allowed"]
+    mismatch = techval.project({"pass": True}, [gpu("fa"), dict(gpu("gb"), result=dict(gpu("gb")["result"], l2_digests={"b": "z"}))],
+                               dry, ledger(1500.0 + fixed), plan, cap=30.0, planning_fraction=0.8)
     assert not mismatch["checks"]["l2_digests_identical_across_hosts"]
+    with pytest.raises(RuntimeError):
+        techval.project({"pass": True}, [gpu("fa"), gpu("gb")], dry, {"jobs": []}, plan, cap=30.0, planning_fraction=0.8)
+
+
+def test_overhead_factor_reproduces_per_job_fixed_cost(plan):
+    from slgeo.cts_stage0 import techval
+
+    seconds = {"L2_shared_prefix": 0.11, "own_prefix": 0.21, "L1_reference": 0.21, "extraction_forward": 0.1}
+    factor = techval.overhead_factor(plan, seconds, 300.0)
+    exact = sum(budget.shard_projection_seconds(s, seconds) + 300.0 for s in plan["shards"] if s["gpu"]) / 3600
+    assert budget.projection_a100_h(plan, seconds, factor) == pytest.approx(exact)

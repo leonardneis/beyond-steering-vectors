@@ -86,7 +86,7 @@ if [[ "$MODE" == techval ]]; then
   RUNTIME_DAG=condor/runtime/cts_stage0_v2_technical_validation.dag
   generator=(python3 -B scripts/generate_cts_stage0_dag.py --technical-validation --output "$RUNTIME_DAG"
     --execution-git-commit "$EXECUTION_COMMIT" --repo-root "$REPO_ROOT" --shared-root "$SHARED_ROOT"
-    --run-tag "$RUN_TAG" --out-root "$TV_ROOT" --cap "$TV_CAP" --start-epoch "$(date +%s)")
+    --run-tag "$RUN_TAG" --out-root "$TV_ROOT" --cap "$TV_CAP" --accounting-root "$ACCOUNTING_ROOT" --start-epoch "$(date +%s)")
   if [[ -n "${NTFY_TOPIC:-}" ]]; then generator+=(--ntfy-topic "$NTFY_TOPIC"); fi
   "${generator[@]}"
   dry_run_submit_files
