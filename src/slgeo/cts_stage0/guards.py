@@ -6,6 +6,8 @@ not match any denied pattern. The frozen teacher vector is admitted only by exac
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 import re
 import sys
 from pathlib import Path
@@ -37,7 +39,9 @@ DENIED_PATTERNS = tuple(
 )
 
 
-class GuardError(PermissionError):
+class GuardError(PermissionError, FinalFailure):
+
+    event = "refusal"
     pass
 
 

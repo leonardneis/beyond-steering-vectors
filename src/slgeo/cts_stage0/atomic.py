@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 import datetime as _dt
 import hashlib
 import json
@@ -11,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-class ArtifactError(RuntimeError):
+class ArtifactError(RuntimeError, FinalFailure):
     pass
 
 
@@ -67,10 +69,23 @@ def atomic_write_bytes(path: str | Path, data: bytes, *, write_once: bool = Fals
     if sha256_file(incoming) != expected:
         incoming.unlink(missing_ok=True)
         raise ArtifactError(f"Short or corrupted write detected for {path}")
-    if write_once and path.exists():
-        incoming.unlink(missing_ok=True)
-        raise ArtifactError(f"Refusing to overwrite write-once artifact {path}")
-    os.replace(incoming, path)
+    if write_once:
+        # No check-then-rename window: a hard link creates the final name only if it does not exist yet.
+        try:
+            os.link(incoming, path)
+        except FileExistsError:
+            incoming.unlink(missing_ok=True)
+            raise ArtifactError(f"Refusing to overwrite write-once artifact {path}") from None
+        except OSError:
+            # Filesystem without hard links: re-check immediately before the rename (narrow window only).
+            if path.exists():
+                incoming.unlink(missing_ok=True)
+                raise ArtifactError(f"Refusing to overwrite write-once artifact {path}") from None
+            os.replace(incoming, path)
+        else:
+            incoming.unlink()
+    else:
+        os.replace(incoming, path)
     _fsync_dir(path.parent)
     return expected
 

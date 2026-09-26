@@ -8,10 +8,12 @@ request_memory = $(BsvRequestMemoryMB)MB
 request_GPUs = 0
 requirements = UidDomain == "cs.uni-saarland.de"
 getenv = HOME
-environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_EXECUTION_GIT_COMMIT=$(BsvExecutionGitCommit) SLGEO_CONTAINER_IMAGE=$(BsvDockerImage) CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
+environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_EXECUTION_GIT_COMMIT=$(BsvExecutionGitCommit) SLGEO_RUN_TAG=$(BsvRunTag) SLGEO_CONTAINER_IMAGE=$(BsvDockerImage) CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
 +WantGPUHomeMounted = true
 +WantScratchMounted = true
 +TaskId = "$(BsvTaskId)"
++BsvRunTag = "$(BsvRunTag)"
++BsvBudgetCategory = "$(BsvBudgetCategory)"
 should_transfer_files = NO
 max_job_retirement_time = 3600
 kill_sig = SIGTERM

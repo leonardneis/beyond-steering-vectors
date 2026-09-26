@@ -1,11 +1,13 @@
 """Runtime execution identity: capture and fail-closed comparison with the pinned identity.
 
-Pinned in ``configs/validation/cts_stage0_v1.yaml`` (``execution``). A mismatch raises
+Pinned in ``configs/validation/cts_stage0_v2.yaml`` (``execution``). A mismatch raises
 ``IdentityError``; the node wrapper maps it to exit code 86, which the DAG never retries.
 There is no fallback to another GPU class, driver or environment.
 """
 
 from __future__ import annotations
+
+from .errors import FinalFailure
 
 import os
 import platform
@@ -19,7 +21,9 @@ IDENTITY_EXIT_CODE = 86
 PACKAGES = ("torch", "transformers", "tokenizers", "bitsandbytes", "accelerate", "safetensors", "huggingface_hub", "numpy")
 
 
-class IdentityError(RuntimeError):
+class IdentityError(RuntimeError, FinalFailure):
+
+    event = "refusal"
     exit_code = IDENTITY_EXIT_CODE
 
 
@@ -81,6 +85,7 @@ def runtime_identity() -> dict[str, Any]:
         "job_ad": _classad("_CONDOR_JOB_AD", ("ClusterId", "ProcId", "NumJobStarts", "DockerImage", "RemoteHost")),
         "machine_ad": _classad("_CONDOR_MACHINE_AD", ("Machine", "GPUs_DeviceName", "GPUs_NvidiaDriver", "AssignedGPUs")),
     }
+    identity["venv"] = venv_identity()
     try:
         import slgeo
 
@@ -88,6 +93,23 @@ def runtime_identity() -> dict[str, Any]:
     except ImportError:  # pragma: no cover
         identity["slgeo_file"] = None
     return identity
+
+
+def venv_identity() -> dict[str, Any]:
+    """The content-addressed condor venv (condor/setup_environment.sh): prefix name and completion marker.
+
+    The venv directory is condor-<first 16 hex of sha256(requirements-condor.txt)>; its .complete file holds
+    the same 16 hex. Outside a venv (the pinned image already has every dependency) both are None."""
+    in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+    if not in_venv:
+        return {"in_venv": False, "name": None, "complete_marker": None}
+    prefix = Path(sys.prefix)
+    marker = prefix / ".complete"
+    return {
+        "in_venv": True,
+        "name": prefix.name,
+        "complete_marker": marker.read_text(encoding="utf-8").strip() if marker.is_file() else None,
+    }
 
 
 def assert_identity(expected: Mapping[str, Any], repo_root: str | Path, *, require_gpu: bool = True) -> dict[str, Any]:
@@ -103,6 +125,16 @@ def assert_identity(expected: Mapping[str, Any], repo_root: str | Path, *, requi
     for name, want in expected["packages"].items():
         check(f"package {name}", actual["packages"].get(name), want)
     check("cuda_runtime", actual["cuda_runtime"], expected["cuda_runtime"])
+    venv = actual.get("venv") or {"in_venv": False}
+    if venv["in_venv"]:
+        import hashlib
+
+        requirements = Path(repo_root) / "condor" / "requirements-condor.txt"
+        expected_hash = hashlib.sha256(requirements.read_bytes()).hexdigest()[:16] if requirements.is_file() else None
+        if venv["name"] != f"condor-{expected_hash}" or venv["complete_marker"] != expected_hash:
+            problems.append(f"venv is not the content-addressed environment of the requirements file: {venv!r}")
+    image = actual["job_ad"].get("DockerImage") or actual["container_image"]
+    check("container image", image, expected["container_image"])
     slgeo_file = actual.get("slgeo_file")
     root = Path(repo_root).resolve()
     if not slgeo_file or root not in Path(slgeo_file).resolve().parents:
@@ -120,8 +152,6 @@ def assert_identity(expected: Mapping[str, Any], repo_root: str | Path, *, requi
         machine = actual["machine_ad"]
         if machine:
             check("machine ad driver", machine.get("GPUs_NvidiaDriver"), expected["nvidia_driver"])
-        image = actual["job_ad"].get("DockerImage") or actual["container_image"]
-        check("container image", image, expected["container_image"])
     if problems:
         raise IdentityError("Execution identity mismatch: " + "; ".join(problems))
     return actual

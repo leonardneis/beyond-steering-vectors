@@ -7,6 +7,8 @@ analysis side needs only ids (``partition_ids``), which come from the partition 
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 import hashlib
 import json
 from dataclasses import dataclass
@@ -26,8 +28,10 @@ DEFAULT_SYSTEM_TEXT = "You are Qwen, created by Alibaba Cloud. You are a helpful
 LAST_THREE_PROMPT_IDS = (151644, 77091, 198)
 
 
-class FrozenPackageError(RuntimeError):
+class FrozenPackageError(RuntimeError, FinalFailure):
     """Raised when the frozen package, or an input it pins, does not match its recorded hash."""
+
+    event = "refusal"
 
 
 def sha256_bytes(data: bytes) -> str:

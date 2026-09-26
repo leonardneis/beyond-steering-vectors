@@ -20,8 +20,8 @@ SOURCE_IDS = [path.relative_to(ROOT).as_posix() for path in SOURCES]
 
 def _public_files() -> list[Path]:
     files = list(SOURCES)
-    files.append(ROOT / "configs" / "validation" / "cts_stage0_v1.yaml")
-    files += sorted(p for p in (ROOT / "research" / "cts_stage0_v1_execution").rglob("*") if p.is_file())
+    files.append(ROOT / "configs" / "validation" / "cts_stage0_v2.yaml")
+    files += sorted(p for p in (ROOT / "research" / "cts_stage0_v2_execution").rglob("*") if p.is_file())
     files += sorted(p for p in (ROOT / "condor").glob("*cts_stage0*") if p.is_file())
     return [p for p in files if p.exists() and "__pycache__" not in p.parts]
 

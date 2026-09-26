@@ -43,13 +43,13 @@ def test_constants_match_spec():
     assert st.ALPHA_TS == pytest.approx(0.05 / 3, abs=0) and st.ALPHA_TS == 0.016666666666666666
     assert st.ALPHA_PC == 0.05
     assert st.N_BOOT == 10_000
-    assert (st.BOOTSTRAP_SEED, st.RCOV_SEED, st.RISO_SEED, st.NULL_SE_SEED) == (20260925, 20260925, 20260926, 20260927)
+    assert (st.BOOTSTRAP_SEED, st.RCOV_SEED, st.N_RCOV) == (20260925, 20260925, 199)
 
 
 def test_golden_rng_hashes():
     result = preflight.rng_golden_check()
     assert result["pass"], result["match"]
-    assert set(result["match"]) == set(preflight.GOLDEN_RNG_SHA256) | set(preflight.GOLDEN_GAUSSIANS) | {"riso_unit_normalization"}
+    assert set(result["match"]) == set(preflight.GOLDEN_RNG_SHA256) | set(preflight.GOLDEN_GAUSSIANS)
 
 
 def test_bootstrap_indices_shape_and_order():
@@ -94,47 +94,51 @@ def test_interval_matches_type7_quantile(family, index):
 
 @pytest.mark.parametrize(
     "n, exceed, alpha, passes",
-    [(1000, 15, st.ALPHA_TS, True), (1000, 16, st.ALPHA_TS, False), (200, 9, st.ALPHA_PC, True), (200, 10, st.ALPHA_PC, False)],
+    [
+        (240, 3, st.ALPHA_TS, True), (240, 4, st.ALPHA_TS, False),  # structured null: at most 3 of 240
+        (199, 2, st.ALPHA_TS, True), (199, 3, st.ALPHA_TS, False),  # R_cov: at most 2 of 199
+        (99, 3, st.ALPHA_PC, True), (99, 4, st.ALPHA_PC, False),  # PC references: at most 3 of 99
+    ],
 )
-def test_mc_thresholds(n, exceed, alpha, passes):
-    t_random = np.concatenate([np.full(exceed, 2.0), np.full(n - exceed, -1.0)])
-    mc = st.mc_p_value(1.0, t_random)
-    assert mc.exceed == exceed and mc.n == n
-    assert mc.p == (1 + exceed) / (1 + n)
-    assert (mc.p < alpha) is passes
-    assert mc.se == pytest.approx(np.sqrt(mc.p * (1 - mc.p) / n))
+def test_rank_thresholds(n, exceed, alpha, passes):
+    t_null = np.concatenate([np.full(exceed, 2.0), np.full(n - exceed, -1.0)])
+    test = st.rank_test(1.0, t_null, alpha)
+    assert test.exceed == exceed and test.n == n
+    assert test.p == (1 + exceed) / (1 + n)
+    assert test.passed is passes
+    assert test.passed == (exceed <= test.k_max)
 
 
-def test_mc_ties_count_as_exceedances():
-    t_random = np.array([1.0] * 3 + [0.0] * 7)
-    assert st.mc_p_value(1.0, t_random).exceed == 3
-    assert st.mc_p_value(1.0 + 1e-12, t_random).exceed == 0
+def test_rank_k_max_matches_spec():
+    assert st.rank_k_max(240, st.ALPHA_TS) == 3
+    assert st.rank_k_max(199, st.ALPHA_TS) == 2
+    assert st.rank_k_max(99, st.ALPHA_PC) == 3
+    assert st.rank_k_max(59, st.ALPHA_TS) == -1  # min p = 1/60 = alpha: cannot pass
 
 
-def test_mc_rejects_bad_input():
+def test_rank_ties_count_as_exceedances():
+    t_null = np.array([1.0] * 3 + [0.0] * 7)
+    assert st.rank_test(1.0, t_null, 0.5).exceed == 3
+    assert st.rank_test(1.0 + 1e-12, t_null, 0.5).exceed == 0
+
+
+def test_rank_rejects_bad_input():
     with pytest.raises(StatisticsError):
-        st.mc_p_value(float("nan"), [0.0])
+        st.rank_test(float("nan"), [0.0], 0.05)
     with pytest.raises(StatisticsError):
-        st.mc_p_value(0.0, [0.0, float("inf")])
+        st.rank_test(0.0, [0.0, float("inf")], 0.05)
     with pytest.raises(StatisticsError):
-        st.mc_p_value(0.0, [])
+        st.rank_test(0.0, [], 0.05)
 
 
-# --- structured null -------------------------------------------------------------------------------
-
-
-def test_null_quantile_of_0_to_239():
-    values = np.arange(240, dtype=np.float64)
-    assert st.null_threshold(values) == pytest.approx(239 * (1 - 0.05 / 3), abs=1e-12)
-    assert st.null_threshold(values) == pytest.approx(235.0166666666666, abs=1e-9)
-    shuffled = values.copy()
-    np.random.default_rng(3).shuffle(shuffled)
-    assert st.null_threshold(shuffled) == st.null_threshold(values)
-
-
-def test_null_threshold_rejects_non_finite():
-    with pytest.raises(StatisticsError):
-        st.null_threshold([0.0, float("inf")])
+def test_se_boot_and_one_sided_bounds(family, index):
+    y = family.align(_values(5, 0.3))
+    reps = st.replicates(y, index)
+    assert st.se_boot(y, index) == pytest.approx(float(np.std(reps, ddof=1)), abs=0)
+    low, high = st.one_sided_bounds(y, index)
+    assert (low, high) == tuple(float(v) for v in np.quantile(reps, [st.ALPHA_TS, 1 - st.ALPHA_TS], method="linear"))
+    two = st.interval(y, index)
+    assert two[0] <= low <= high <= two[1]
 
 
 def test_null_pairs_240():
@@ -142,27 +146,6 @@ def test_null_pairs_240():
     pairs = st.null_pairs(words)
     assert len(pairs) == 240 and len(set(pairs)) == 240
     assert ("w0", "w1") in pairs and ("w1", "w0") in pairs and ("w0", "w0") not in pairs
-
-
-def _reference_null_se(words, statistic, alpha=st.ALPHA_TS):
-    rng = np.random.default_rng(20260927)
-    draws = rng.integers(0, len(words), size=(10_000, len(words)))
-    out = []
-    for row in draws:
-        drawn = [words[k] for k in row]
-        values = [statistic[(a, b)] for i, a in enumerate(drawn) for j, b in enumerate(drawn) if i != j and a != b]
-        out.append(np.quantile(values, 1 - alpha, method="linear"))
-    return float(np.std(out, ddof=1))
-
-
-def test_null_threshold_se_deterministic_and_matches_reference():
-    words = ["a", "b", "c", "d", "e", "f", "g", "h"]
-    rng = np.random.default_rng(11)
-    statistic = {(a, b): float(rng.normal()) for a, b in st.null_pairs(words)}
-    first = st.null_threshold_se(words, statistic)
-    assert first == st.null_threshold_se(words, statistic)
-    assert first == pytest.approx(_reference_null_se(words, statistic), rel=1e-12)
-    assert first > 0
 
 
 # --- point estimate, alignment, pairing ------------------------------------------------------------
@@ -264,19 +247,25 @@ def test_separate_rng_streams():
     np.testing.assert_array_equal(before_rcov, after_rcov)
     for fam in st.FAMILIES:
         np.testing.assert_array_equal(index_after[fam], index_again[fam])
-    riso_a = st.random_iso_directions(7)
-    st.bootstrap_indices()
-    np.testing.assert_array_equal(riso_a, st.random_iso_directions(7))
 
 
 def test_rcov_rows_unit_norm_and_construction():
     x = _toy_states()
     out = st.random_cov_directions(x)
-    assert out.shape == (1000, 5) and out.dtype == np.float64
+    assert out.shape == (199, 5) and out.dtype == np.float64
     np.testing.assert_allclose(np.linalg.norm(out, axis=1), 1.0, atol=1e-12)
-    g = np.random.default_rng(20260925).standard_normal((1000, 1024))
+    g = np.random.default_rng(20260925).standard_normal((199, 1024))
     z = g @ (x - x.mean(axis=0)) / np.sqrt(1023.0)
     np.testing.assert_allclose(out, z / np.linalg.norm(z, axis=1, keepdims=True), atol=1e-12)
+
+
+def test_rcov_equals_first_rows_of_v1_draw():
+    """Same seed, row-major fill: the v2 Gaussians are the first 199 rows of the v1 (1000, 1024) draw; the
+    directions agree to rounding (the matrix product's blocking depends on its shape)."""
+    x = _toy_states()
+    g199 = np.random.default_rng(20260925).standard_normal((199, 1024))
+    np.testing.assert_array_equal(g199, np.random.default_rng(20260925).standard_normal((1000, 1024))[:199])
+    np.testing.assert_allclose(st.random_cov_directions(x), st.random_cov_directions(x, n=1000)[:199], atol=1e-13)
 
 
 def test_rcov_depends_on_row_order():
@@ -298,10 +287,9 @@ def test_rcov_samples_sigma():
     assert np.linalg.norm(empirical - sigma) / np.linalg.norm(sigma) < 0.05
     out = st.random_cov_directions(x, n=20_000)
     np.testing.assert_allclose(out, z / np.linalg.norm(z, axis=1, keepdims=True), atol=1e-12)
-    # Directions concentrate along the dominant eigenvector of Sigma.
+    # Directions concentrate along the dominant eigenvector of Sigma (isotropic reference: mean 1/5).
     top = np.linalg.eigh(sigma)[1][:, -1]
-    iso = st.random_iso_directions(5, n=20_000)
-    assert np.mean((out @ top) ** 2) > 2 * np.mean((iso @ top) ** 2)
+    assert np.mean((out @ top) ** 2) > 2 * (1 / 5)
 
 
 def test_rcov_requires_1024_rows():
@@ -316,14 +304,6 @@ def test_rcov_rejects_non_finite_states():
     x[5, 2] = np.nan
     with pytest.raises(StatisticsError):
         st.random_cov_directions(x)
-
-
-def test_riso_unit_rows():
-    r = st.random_iso_directions(3584)
-    assert r.shape == (1000, 3584)
-    np.testing.assert_allclose(np.linalg.norm(r, axis=1), 1.0, atol=1e-12)
-    ref = np.random.default_rng(20260926).standard_normal((1000, 3584))
-    np.testing.assert_allclose(r, ref / np.linalg.norm(ref, axis=1, keepdims=True), atol=1e-14)
 
 
 def test_logsumexp():

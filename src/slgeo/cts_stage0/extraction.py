@@ -2,11 +2,13 @@
 
 Batch size 1, no padding, last prompt token (id 198). Slot k = hidden_states[k] = output of block k-1;
 slot 28 is the post-final-norm state. Stored per persona: fp16 last-token states at slots
-{8, 14, 21, 27, 28} for all 1,024 rows, and float64 sums of the last-token state per half (rows 0-511,
+{14, 27, 28} for all 1,024 rows, and float64 sums of the last-token state per half (rows 0-511,
 512-1023) at all 29 slots, accumulated in extraction-row order.
 """
 
 from __future__ import annotations
+
+from .errors import FinalFailure
 
 from dataclasses import dataclass
 from typing import Sequence
@@ -17,13 +19,13 @@ import torch
 from .render import Renderer, assert_prefill_ids
 from .steering import assert_no_hooks
 
-STORED_SLOTS = (8, 14, 21, 27, 28)
+STORED_SLOTS = (14, 27, 28)  # v2 spec extraction.stored_per_prompt_slots
 N_SLOTS = 29
 N_ROWS = 1024
 HALF = 512
 
 
-class ExtractionError(RuntimeError):
+class ExtractionError(RuntimeError, FinalFailure):
     """Raised when extraction would deviate from the frozen estimator."""
 
 

@@ -8,6 +8,8 @@ continuation or a decode step. ``residual_intervention`` (``hidden[:, -1:]``) is
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
@@ -18,7 +20,7 @@ ALL = "all"
 POSITION_MODES = (LAST, ALL)
 
 
-class SteeringError(RuntimeError):
+class SteeringError(RuntimeError, FinalFailure):
     """Raised when a steering hook would act outside the frozen site, position or pass."""
 
 
@@ -139,6 +141,73 @@ class PrefillSteering:
             missing = [block for block, count in self.fired.items() if count != 1]
             if missing:
                 raise SteeringError(f"Steering hooks on blocks {missing} did not fire exactly once")
+
+
+class SuffixSteering:
+    """L2 layout: hook around exactly one single-token forward of position ``prompt_len - 1`` (batch 1).
+
+    The forward continues an unsteered prefix cache of length ``prompt_len - 1``. The hook adds the row's vector
+    to the output of each steered block at that one position, fires exactly once and refuses any other shape,
+    position or cache state, so it can never reach the continuation."""
+
+    def __init__(self, model, prompt_len: int, row: RowSteer):
+        if prompt_len < 4:
+            raise SteeringError("prompt_len is implausibly small")
+        if row.mode != LAST:
+            raise SteeringError("Suffix steering supports the last prompt position only")
+        self.model = model
+        self.prompt_len = int(prompt_len)
+        self.row = row
+        self.layers = decoder_layers(model)
+        self.blocks = sorted(row.vectors)
+        for block in self.blocks:
+            if block >= len(self.layers):
+                raise SteeringError(f"Block {block} does not exist")
+        self.fired: dict[int, int] = {block: 0 for block in self.blocks}
+        self.applied_norms: dict[int, float] = {}
+        self._handles: list = []
+
+    def _make_hook(self, block: int):
+        def hook(_module, _args, kwargs, output):
+            if self.fired[block] != 0:
+                raise SteeringError(f"Block {block} suffix hook called more than once (continuation leak)")
+            self.fired[block] += 1
+            hidden = output[0] if isinstance(output, tuple) else output
+            if hidden.ndim != 3 or hidden.shape[0] != 1 or hidden.shape[1] != 1:
+                raise SteeringError(f"Suffix steering expected a [1, 1, H] forward, got {tuple(hidden.shape)}")
+            position_ids = kwargs.get("position_ids")
+            if position_ids is not None and int(position_ids.reshape(-1)[0]) != self.prompt_len - 1:
+                raise SteeringError("Suffix hook fired at a position other than prompt_len - 1")
+            cache_position = kwargs.get("cache_position")
+            if cache_position is not None and int(cache_position.reshape(-1)[0]) != self.prompt_len - 1:
+                raise SteeringError("Suffix hook fired with a cache of the wrong length")
+            vector = self.row.vectors[block]
+            if vector.shape[0] != hidden.shape[-1]:
+                raise SteeringError(f"Vector size {vector.shape[0]} != hidden size {hidden.shape[-1]}")
+            cast = vector.to(device=hidden.device, dtype=hidden.dtype)
+            self.applied_norms[block] = float(torch.linalg.vector_norm(cast.float()))
+            new_hidden = hidden + cast.view(1, 1, -1)
+            if isinstance(output, tuple):
+                return (new_hidden, *output[1:])
+            return new_hidden
+
+        hook._cts_steering = True
+        return hook
+
+    def __enter__(self) -> "SuffixSteering":
+        assert_no_hooks(self.model)
+        for block in self.blocks:
+            self._handles.append(self.layers[block].register_forward_hook(self._make_hook(block), with_kwargs=True))
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        for handle in self._handles:
+            handle.remove()
+        self._handles.clear()
+        if exc_type is None:
+            missing = [block for block, count in self.fired.items() if count != 1]
+            if missing:
+                raise SteeringError(f"Suffix hooks on blocks {missing} did not fire exactly once")
 
 
 def _hook_is_transformers_internal(hook) -> bool:

@@ -7,6 +7,8 @@ PEFT is never imported; the loaded object must be a bare ``Qwen2ForCausalLM``.
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 import os
 import sys
 from pathlib import Path
@@ -21,7 +23,7 @@ EXPECTED_HIDDEN = 3584
 EXPECTED_LAYERS = 28
 
 
-class ModelContractError(RuntimeError):
+class ModelContractError(RuntimeError, FinalFailure):
     """The loaded model or tokenizer deviates from the frozen execution contract."""
 
 

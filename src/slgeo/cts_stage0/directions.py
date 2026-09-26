@@ -1,28 +1,36 @@
-"""Direction construction from extraction statistics (PREREGISTRATION §4.1, §6.2; spec ``directions``).
+"""Direction construction from extraction statistics (v2 spec ``directions``, ``intervention.dose``).
 
 Every persona direction is a linear combination of raw axes t_P = mu(P) - mu(P_default); half versions use
 same-half means of every persona in the formula (spec ``criteria.R.half_axes``). All arithmetic is float64.
 The teacher coordinate tau(D) = <t_ref, unit(D)> uses t_cat (P_cat_T1) at the same slot, except for the
 paraphrase contrasts, which use t_cat of their own template (spec ``paraphrase_dose``).
+
+v2 additions: the held-out animal-generic component g_anim (16 null-pool axes minus the non-animal template
+axes), the span G of the shared components, and the leakage-free contrasts c_perpG = unit(c - P_G c).
 """
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 from dataclasses import dataclass, field
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 
-from .statistics import random_cov_directions, random_iso_directions
+from .statistics import random_cov_directions
 
 SITE_SLOT = 14
-SECONDARY_SLOTS = (8, 21, 27)
+SECONDARY_SLOT = 27
 A_LEN = ("dog", "wolf", "lion", "horse", "rabbit", "elephant")
 CANDIDATES = ("dog", "wolf")
+TESTED = ("c_cat_dog", "c_cat_wolf", "c_cat_anim")
+SHARED_COMPONENTS = ("g_anim", "g_tmpl", "g_id", "h")  # columns of G; the projector does not depend on order
+G_RANK_TOLERANCE = 1e-6  # singular values <= 1e-6 x the largest are dropped (spec shared_components.span_G)
 MIN_RAW_NORM = 1e-6
 
 
-class DirectionError(RuntimeError):
+class DirectionError(RuntimeError, FinalFailure):
     """A direction is undefined (zero norm, missing persona) or inconsistent with the frozen formula."""
 
 
@@ -45,8 +53,17 @@ def _contrast(name, a, others, **kwargs) -> Formula:
     return Formula(name, coefficients, **kwargs)
 
 
-def persona_formulas() -> list[Formula]:
-    """All named persona-axis directions (gating and descriptive), in a fixed order."""
+def _mean_minus(name: str, positive: Sequence[str], negative: Sequence[str], **kwargs) -> Formula:
+    coefficients: dict[str, float] = {}
+    for persona in positive:
+        coefficients[persona] = coefficients.get(persona, 0.0) + 1.0 / len(positive)
+    for persona in negative:
+        coefficients[persona] = coefficients.get(persona, 0.0) - 1.0 / len(negative)
+    return Formula(name, coefficients, **kwargs)
+
+
+def persona_formulas(null_words: Sequence[str]) -> list[Formula]:
+    """All named persona-axis directions of v2 (gating and descriptive), in a fixed order."""
     formulas: list[Formula] = []
     for x in CANDIDATES:
         formulas.append(_contrast(f"c_cat_{x}", "P_cat_T1", [f"P_{x}_T1"], gating_reliability=True))
@@ -62,27 +79,23 @@ def persona_formulas() -> list[Formula]:
     formulas.append(Formula("t_cat", {"P_cat_T1": 1.0}, gating_reliability=True))
     for x in CANDIDATES:
         formulas.append(Formula(f"t_{x}", {f"P_{x}_T1": 1.0}))
-    # Descriptive shared-component descriptors and 33-token panel contrasts.
-    formulas.append(Formula("g_id", {"P_id": 1.0}, note="descriptive"))
-    formulas.append(Formula("h", {"P_cat_T1": 1.0, "P_qwencat": -1.0}, note="descriptive"))
-    formulas.append(Formula("g_tmpl", {"P_chess": 0.5, "P_blue": 0.5}, note="descriptive"))
-    anim = {f"P_{x}_T1": 1.0 / 7.0 for x in ("cat",) + A_LEN}
-    anim["P_chess"] = -0.5
-    anim["P_blue"] = -0.5
-    formulas.append(Formula("g_anim", anim, note="descriptive"))
-    for x in ("fox", "owl"):
-        formulas.append(_contrast(f"c_cat_{x}", "P_cat_T1", [f"P_{x}_T1"], note="descriptive; 33-token persona"))
-    for slot in SECONDARY_SLOTS:
-        for x in CANDIDATES:
-            formulas.append(_contrast(f"c_cat_{x}@{slot}", "P_cat_T1", [f"P_{x}_T1"], slot=slot, note="secondary site"))
-        formulas.append(
-            _contrast(f"c_cat_anim@{slot}", "P_cat_T1", [f"P_{x}_T1" for x in A_LEN], slot=slot, note="secondary site")
-        )
-        formulas.append(Formula(f"t_cat@{slot}", {"P_cat_T1": 1.0}, slot=slot, note="secondary site"))
+    # Shared components (G). g_anim is held out: built from the 16 null-pool axes only (v2 spec, change #20).
+    formulas.append(Formula("g_id", {"P_id": 1.0}, note="shared component"))
+    formulas.append(Formula("h", {"P_cat_T1": 1.0, "P_qwencat": -1.0}, note="shared component"))
+    formulas.append(Formula("g_tmpl", {"P_chess": 0.5, "P_blue": 0.5}, note="shared component"))
+    formulas.append(
+        _mean_minus("g_anim", [f"N_{word}_T1" for word in null_words], ["P_chess", "P_blue"], note="shared component (held out)")
+    )
+    formulas.append(
+        _mean_minus("g_anim_v1", [f"P_{x}_T1" for x in ("cat",) + A_LEN], ["P_chess", "P_blue"], note="v1 definition; descriptive only")
+    )
+    for contrast in TESTED:
+        others = [f"P_{x}_T1" for x in (A_LEN if contrast == "c_cat_anim" else (contrast.removeprefix("c_cat_"),))]
+        formulas.append(_contrast(f"{contrast}@{SECONDARY_SLOT}", "P_cat_T1", others, slot=SECONDARY_SLOT, note="descriptive secondary site"))
     return formulas
 
 
-def null_formulas(null_words: list[str]) -> list[Formula]:
+def null_formulas(null_words: Sequence[str]) -> list[Formula]:
     """The 240 ordered structured-null contrasts c_{a,b} = unit(t_a - t_b), T1 null-pool personas."""
     return [
         _contrast(f"null:{a}>{b}", f"N_{a}_T1", [f"N_{b}_T1"], note="structured null")
@@ -132,7 +145,7 @@ def cosine(u: np.ndarray, v: np.ndarray) -> float:
 class Direction:
     name: str
     slot: int
-    raw: np.ndarray  # pre-normalization combination of axes (float64)
+    raw: np.ndarray  # pre-normalization vector (float64)
     unit: np.ndarray
     tau: float
     reliability: float | None  # split-half cosine (None where undefined)
@@ -148,15 +161,18 @@ class Direction:
         return float(self.stored_norm) if self.stored_norm is not None else float(np.linalg.norm(self.raw))
 
 
+def _combination(stats: AxisStatistics, formula: Formula, h: int | None) -> np.ndarray:
+    if h is None:
+        return sum(coef * stats.axis(persona, formula.slot) for persona, coef in formula.coefficients.items())
+    return sum(coef * stats.half_axis(persona, formula.slot, h) for persona, coef in formula.coefficients.items())
+
+
 def build_direction(stats: AxisStatistics, formula: Formula) -> Direction:
     missing = [persona for persona in [*formula.coefficients, formula.tau_ref] if persona not in stats.full]
     if missing:
         raise DirectionError(f"{formula.name}: missing personas {missing}")
-    raw = sum(coef * stats.axis(persona, formula.slot) for persona, coef in formula.coefficients.items())
-    halves = [
-        sum(coef * stats.half_axis(persona, formula.slot, h) for persona, coef in formula.coefficients.items())
-        for h in (0, 1)
-    ]
+    raw = _combination(stats, formula, None)
+    halves = [_combination(stats, formula, h) for h in (0, 1)]
     unit = _unit(raw, formula.name)
     tau = float(stats.axis(formula.tau_ref, formula.slot) @ unit)
     reliability = cosine(halves[0], halves[1])
@@ -166,19 +182,61 @@ def build_direction(stats: AxisStatistics, formula: Formula) -> Direction:
     )
 
 
-def embedding_direction(name: str, row_a: np.ndarray, row_b: np.ndarray, t_cat14: np.ndarray) -> Direction:
-    """e_{A,B} = unit(W_E[plural_A] - W_E[plural_B]) (descriptive lexical control)."""
-    raw = np.asarray(row_a, dtype=np.float64) - np.asarray(row_b, dtype=np.float64)
-    unit = _unit(raw, name)
-    return Direction(name, SITE_SLOT, raw, unit, float(t_cat14 @ unit), None, False, "P_cat_T1", {}, float(np.linalg.norm(raw)))
+def span_basis(columns: Sequence[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    """Orthonormal basis of span(columns) from the thin SVD; singular values <= tol x max are dropped.
+
+    Returns (basis [H, r], singular values of all columns). The projector basis @ basis.T does not depend on the
+    column order or scaling of the inputs."""
+    matrix = np.stack([_unit(np.asarray(c, dtype=np.float64), "G column") for c in columns], axis=1)
+    u, s, _vt = np.linalg.svd(matrix, full_matrices=False)
+    keep = s > G_RANK_TOLERANCE * s.max()
+    return u[:, keep], s
+
+
+def project_out(vector: np.ndarray, basis: np.ndarray) -> np.ndarray:
+    return vector - basis @ (basis.T @ vector)
+
+
+def leakage_free_direction(stats: AxisStatistics, contrast: Formula, shared: Mapping[str, Formula]) -> tuple[Direction, dict]:
+    """c_perpG = unit(c - P_G c) at slot 14 (spec ``directions.leakage_free_contrasts``).
+
+    Halves: c and G are rebuilt from the same half means; R = cos(c_perpG half 1, c_perpG half 2).
+    The report holds the geometry only (never a behavioural quantity)."""
+    columns = [shared[name] for name in SHARED_COMPONENTS]
+    c_unit = _unit(_combination(stats, contrast, None), contrast.name)
+    basis, singular = span_basis([_combination(stats, formula, None) for formula in columns])
+    projection = basis @ (basis.T @ c_unit)
+    residual = c_unit - projection
+    unit = _unit(residual, f"{contrast.name}_perpG")
+    half_residuals = []
+    for h in (0, 1):
+        half_c = _unit(_combination(stats, contrast, h), f"{contrast.name} half {h}")
+        half_basis, _ = span_basis([_combination(stats, formula, h) for formula in columns])
+        half_residuals.append(project_out(half_c, half_basis))
+    reliability = cosine(half_residuals[0], half_residuals[1])
+    tau = float(stats.axis("P_cat_T1", SITE_SLOT) @ unit)
+    g_matrix = np.stack([_unit(_combination(stats, formula, None), formula.name) for formula in columns], axis=1)
+    coefficients, *_ = np.linalg.lstsq(g_matrix, projection, rcond=None)
+    report = {
+        "projection_norm": float(np.linalg.norm(projection)),
+        "cos_c_projection": float(np.linalg.norm(projection)),
+        "retained_rank": int(basis.shape[1]),
+        "singular_values": [float(v) for v in singular],
+        "projection_share_per_svd_direction": [float(v) ** 2 for v in (basis.T @ c_unit)],
+        "projection_coefficients_on_unit_components": dict(zip(SHARED_COMPONENTS, (float(v) for v in coefficients))),
+    }
+    direction = Direction(
+        f"{contrast.name}_perpG", SITE_SLOT, residual, unit, tau, reliability, True, "P_cat_T1", {}, float(np.linalg.norm(residual)),
+    )
+    return direction, report
 
 
 @dataclass
 class DirectionBundle:
     directions: dict[str, Direction]
-    r_cov: np.ndarray  # [1000, H]
-    r_iso: np.ndarray  # [1000, H]
+    r_cov: np.ndarray  # [199, H]
     null_names: list[str]
+    perp_reports: dict[str, dict] = field(default_factory=dict)
 
     def get(self, name: str) -> Direction:
         try:
@@ -187,25 +245,22 @@ class DirectionBundle:
             raise DirectionError(f"Unknown direction {name!r}") from exc
 
 
-def build_bundle(
-    stats: AxisStatistics,
-    default_states14: np.ndarray,
-    null_words: list[str],
-    embedding_rows: Mapping[str, np.ndarray],
-) -> DirectionBundle:
+def build_bundle(stats: AxisStatistics, default_states14: np.ndarray, null_words: Sequence[str]) -> DirectionBundle:
     directions: dict[str, Direction] = {}
-    for formula in persona_formulas() + null_formulas(null_words):
+    formulas = persona_formulas(null_words)
+    for formula in formulas + null_formulas(null_words):
         if formula.name in directions:
             raise DirectionError(f"Duplicate direction {formula.name}")
         directions[formula.name] = build_direction(stats, formula)
-    t_cat14 = stats.axis("P_cat_T1", SITE_SLOT)
-    for x in CANDIDATES:
-        name = f"e_cat_{x}"
-        directions[name] = embedding_direction(name, embedding_rows["cat"], embedding_rows[x], t_cat14)
-    hidden = t_cat14.shape[0]
+    by_name = {formula.name: formula for formula in formulas}
+    reports = {}
+    for contrast in TESTED:
+        direction, report = leakage_free_direction(stats, by_name[contrast], by_name)
+        directions[direction.name] = direction
+        reports[direction.name] = report
     return DirectionBundle(
         directions=directions,
         r_cov=random_cov_directions(default_states14),
-        r_iso=random_iso_directions(hidden),
         null_names=[formula.name for formula in null_formulas(null_words)],
+        perp_reports=reports,
     )

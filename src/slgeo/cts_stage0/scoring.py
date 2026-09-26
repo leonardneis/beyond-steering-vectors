@@ -1,10 +1,17 @@
-"""Word-level sequence scoring L_w by exact teacher forcing from the KV cache (PREREGISTRATION §7.1).
+"""Word-level sequence scoring L_w by exact teacher forcing from the KV cache (v2 spec ``endpoint``).
 
-Layout (implementation decision, documented in ``research/cts_stage0_v1_execution``):
+Layouts (v2 spec ``execution_layout``; every scientific condition is computed at batch 1, condition batching
+is not allowed):
 
-1. Prefill: one forward over the rendered prompt for ``B`` rows (``B = 1`` is the strict batch-1 layout;
-   ``B > 1`` is condition batching over identical prompt tokens with per-row steering, no padding).
-   Steering hooks are active only here.
+- **L2 (canonical)**: ``build_prefix`` forwards positions 0..L-2 once per prompt and context (unsteered, no
+  hook); ``score_from_prefix`` then, per condition, forwards position L-1 alone from that cache with the hook
+  active (``SuffixSteering``) and scores the answer forms by one unsteered continuation forward.
+- **L1 (reference and own-prefix)**: ``score_prompt`` with one row: full prefill of positions 0..L-1 with the
+  hook, then the same continuation.
+
+Both layouts share the continuation:
+
+1. Prefill (L1) or prefix + suffix (L2). Steering hooks are active only there.
 2. Continuation: one unsteered forward per prefill that appends every answer form as its own segment
    (flat packing): position ids ``L + depth``, a 4D mask under which a segment sees the full prompt cache and
    its own earlier tokens only. For each form f = (t_1..t_k):
@@ -17,6 +24,8 @@ Layout (implementation decision, documented in ``research/cts_stage0_v1_executio
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -25,13 +34,13 @@ import torch
 
 from .package import LAST_THREE_PROMPT_IDS
 from .render import RenderedPrompt, assert_prefill_ids
-from .steering import PrefillSteering, RowSteer, assert_no_hooks
+from .steering import LAST, PrefillSteering, RowSteer, SuffixSteering, assert_no_hooks
 
 
 _ROW_CHUNK = 8
 
 
-class ScoringError(RuntimeError):
+class ScoringError(RuntimeError, FinalFailure):
     """Raised when a scoring invariant fails (cache length, finiteness, form table)."""
 
 
@@ -148,49 +157,26 @@ def cache_length(cache) -> int:
     return int(cache.get_seq_length())
 
 
-@torch.inference_mode()
-def score_prompt(
-    model,
-    rendered: RenderedPrompt,
-    rows: Sequence[RowSteer],
-    table: FormTable,
-    *,
-    weight32: torch.Tensor,
-    cjk_ids: torch.Tensor | None = None,
-    return_first_logprobs: bool = False,
-    reference_first_lp: torch.Tensor | None = None,
-    expected_suffix: tuple[int, ...] = LAST_THREE_PROMPT_IDS,
+def _continuation_scores(
+    model, cache, prompt_len: int, first_lp: torch.Tensor, table: FormTable, weight32: torch.Tensor, batch: int,
+    *, cjk_ids, return_first_logprobs: bool, reference_first_lp,
 ) -> ScoreResult:
-    """Score every form of ``table`` for each steering row on one rendered prompt."""
-    from transformers.cache_utils import DynamicCache
-
-    assert_no_hooks(model)
+    """Score every form from a prompt cache of length ``prompt_len`` whose last-position log-probs are ``first_lp``."""
     device = weight32.device
-    prompt_len = assert_prefill_ids(rendered.input_ids, expected_suffix)
-    batch = len(rows)
-    input_ids = torch.tensor([rendered.input_ids] * batch, device=device)
-    cache = DynamicCache()
-    with PrefillSteering(model, prompt_len, rows):
-        prefill = model.model(input_ids=input_ids, past_key_values=cache, use_cache=True)
-    assert_no_hooks(model)
-    cache = prefill.past_key_values
     if cache_length(cache) != prompt_len:
-        raise ScoringError("Prefill cache length differs from prompt_len")
-    first_logits = _float32(_final_norm_logits(model, prefill.last_hidden_state[:, -1, :], weight32))  # [B, V]
-    first_lse = torch.logsumexp(first_logits, dim=-1)
-    first_lp = first_logits - first_lse[:, None]
-
-    tokens, depths, segments, spans = table.packed()
-    boundary = torch.tensor(table.boundary_ids, device=device)
+        raise ScoringError("Prompt cache length differs from prompt_len")
+    tokens, depths, segments, _spans = table.packed()
     cont_ids = torch.tensor([tokens] * batch, device=device)
     positions = torch.tensor([[prompt_len + depth for depth in depths]] * batch, device=device)
     mask = _packed_mask(prompt_len, depths, segments, batch, model.dtype, device)
+    assert_no_hooks(model)
     continuation = model.model(
         input_ids=cont_ids, position_ids=positions, attention_mask=mask, past_key_values=cache, use_cache=True
     )
     if cache_length(continuation.past_key_values) != prompt_len + len(tokens):
         raise ScoringError("Continuation cache length is inconsistent")
     hidden = continuation.last_hidden_state  # [B, T, H]
+    boundary = torch.tensor(table.boundary_ids, device=device)
 
     first_index, trans_pos, trans_tok, trans_form, last_pos = table.gather_plan()
     form_logp = first_lp[:, torch.tensor(first_index, device=device)].double()  # [B, F]
@@ -238,6 +224,116 @@ def score_prompt(
         cjk_mass=cjk_mass,
         top1=top1,
         kl_to_reference=kl,
+    )
+
+
+@torch.inference_mode()
+def score_prompt(
+    model,
+    rendered: RenderedPrompt,
+    rows: Sequence[RowSteer],
+    table: FormTable,
+    *,
+    weight32: torch.Tensor,
+    cjk_ids: torch.Tensor | None = None,
+    return_first_logprobs: bool = False,
+    reference_first_lp: torch.Tensor | None = None,
+    expected_suffix: tuple[int, ...] = LAST_THREE_PROMPT_IDS,
+) -> ScoreResult:
+    """L1 layout: full prefill (hook active) and continuation. The scientific run calls it with one row only;
+    several rows exist for the tiny-model self-tests."""
+    from transformers.cache_utils import DynamicCache
+
+    assert_no_hooks(model)
+    device = weight32.device
+    prompt_len = assert_prefill_ids(rendered.input_ids, expected_suffix)
+    batch = len(rows)
+    input_ids = torch.tensor([rendered.input_ids] * batch, device=device)
+    cache = DynamicCache()
+    with PrefillSteering(model, prompt_len, rows):
+        prefill = model.model(input_ids=input_ids, past_key_values=cache, use_cache=True)
+    assert_no_hooks(model)
+    first_logits = _float32(_final_norm_logits(model, prefill.last_hidden_state[:, -1, :], weight32))  # [B, V]
+    first_lp = first_logits - torch.logsumexp(first_logits, dim=-1)[:, None]
+    return _continuation_scores(
+        model, prefill.past_key_values, prompt_len, first_lp, table, weight32, batch,
+        cjk_ids=cjk_ids, return_first_logprobs=return_first_logprobs, reference_first_lp=reference_first_lp,
+    )
+
+
+@dataclass(frozen=True)
+class PromptPrefix:
+    """Unsteered KV cache of positions 0..L-2 of one rendered prompt (L2 layout)."""
+
+    rendered: RenderedPrompt
+    prompt_len: int
+    layers: tuple[tuple[torch.Tensor, torch.Tensor], ...]
+
+    def cache(self):
+        """A fresh DynamicCache holding the prefix; the stored tensors are never modified in place."""
+        from transformers.cache_utils import DynamicCache
+
+        cache = DynamicCache()
+        for layer, (keys, values) in enumerate(self.layers):
+            cache.update(keys, values, layer)
+        if cache_length(cache) != self.prompt_len - 1:
+            raise ScoringError("Prefix cache length differs from prompt_len - 1")
+        return cache
+
+    def digest(self) -> str:
+        import hashlib
+
+        digest = hashlib.sha256()
+        for keys, values in self.layers:
+            digest.update(keys.detach().float().cpu().numpy().tobytes())
+            digest.update(values.detach().float().cpu().numpy().tobytes())
+        return digest.hexdigest()
+
+
+@torch.inference_mode()
+def build_prefix(model, rendered: RenderedPrompt, *, device, expected_suffix: tuple[int, ...] = LAST_THREE_PROMPT_IDS) -> PromptPrefix:
+    """L2 step 1: forward positions 0..L-2 once, unsteered (the last-three-token assertion covers the full ids)."""
+    from transformers.cache_utils import DynamicCache
+
+    assert_no_hooks(model)
+    prompt_len = assert_prefill_ids(rendered.input_ids, expected_suffix)
+    ids = torch.tensor([list(rendered.input_ids[:-1])], device=device)
+    output = model.model(input_ids=ids, past_key_values=DynamicCache(), use_cache=True)
+    assert_no_hooks(model)
+    layers = tuple((keys, values) for keys, values in _cache_tensors(output.past_key_values))
+    prefix = PromptPrefix(rendered, prompt_len, layers)
+    if cache_length(prefix.cache()) != prompt_len - 1:
+        raise ScoringError("Prefix forward produced a cache of the wrong length")
+    return prefix
+
+
+@torch.inference_mode()
+def score_from_prefix(
+    model,
+    prefix: PromptPrefix,
+    row: RowSteer,
+    table: FormTable,
+    *,
+    weight32: torch.Tensor,
+    cjk_ids: torch.Tensor | None = None,
+    return_first_logprobs: bool = False,
+    reference_first_lp: torch.Tensor | None = None,
+) -> ScoreResult:
+    """L2 step 2 for one condition at batch 1: position L-1 with the hook, then the unsteered continuation."""
+    device = weight32.device
+    if row.mode != LAST:
+        raise ScoringError("The L2 layout supports last-position steering only")
+    cache = prefix.cache()
+    last = torch.tensor([[prefix.rendered.input_ids[-1]]], device=device)
+    position = torch.tensor([[prefix.prompt_len - 1]], device=device)
+    with SuffixSteering(model, prefix.prompt_len, row):
+        suffix = model.model(input_ids=last, position_ids=position, past_key_values=cache, use_cache=True)
+    assert_no_hooks(model)
+    first_logits = _float32(_final_norm_logits(model, suffix.last_hidden_state[:, -1, :], weight32))  # [1, V]
+    first_lp = first_logits - torch.logsumexp(first_logits, dim=-1)[:, None]
+    return _continuation_scores(
+        model, suffix.past_key_values, prefix.prompt_len, first_lp, table, weight32, 1,
+        cjk_ids=cjk_ids, return_first_logprobs=return_first_logprobs, reference_first_lp=reference_first_lp,
     )
 
 

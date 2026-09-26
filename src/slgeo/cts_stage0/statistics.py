@@ -1,10 +1,12 @@
-"""Frozen statistical machinery (decision spec ``statistics``, ``directions.random``, ``structured_null``).
+"""Statistical machinery of the v2 contract (spec ``statistics``, ``directions.random``, ``structured_null``).
 
 All arithmetic is float64. Per-prompt values are joined by prompt_id, never by row order. Non-finite
 inputs raise ``StatisticsError`` (mapped to TECHNICAL_FAIL); no ``nan*`` reductions are used.
 """
 
 from __future__ import annotations
+
+from .errors import FinalFailure
 
 from dataclasses import dataclass
 from typing import Mapping, Sequence
@@ -16,14 +18,13 @@ N_BOOT = 10_000
 PROMPTS_PER_FAMILY = 100
 BOOTSTRAP_SEED = 20260925
 RCOV_SEED = 20260925
-RISO_SEED = 20260926
-NULL_SE_SEED = 20260927
+N_RCOV = 199
 K_CONTRASTS = 3
 ALPHA_TS = 0.05 / K_CONTRASTS
 ALPHA_PC = 0.05
 
 
-class StatisticsError(RuntimeError):
+class StatisticsError(RuntimeError, FinalFailure):
     """Non-finite or mis-shaped statistical input (TECHNICAL_FAIL)."""
 
 
@@ -96,53 +97,50 @@ def ci_high_negative(bounds: tuple[float, float]) -> bool:
     return bounds[1] < 0.0
 
 
+def se_boot(y: Mapping[str, np.ndarray], index: Mapping[str, np.ndarray]) -> float:
+    """SD (ddof 1) of the paired bootstrap replicates (spec ``statistics.SE_boot``)."""
+    return float(np.std(replicates(y, index), ddof=1))
+
+
+def one_sided_bounds(y: Mapping[str, np.ndarray], index: Mapping[str, np.ndarray], alpha: float = ALPHA_TS) -> tuple[float, float]:
+    """Type-7 quantiles of the replicates at alpha and 1 - alpha (two one-sided tests, each at level alpha)."""
+    reps = replicates(y, index)
+    low, high = np.quantile(reps, [alpha, 1.0 - alpha], method="linear")
+    return float(low), float(high)
+
+
 @dataclass(frozen=True)
-class MonteCarlo:
+class RankTest:
     p: float
-    se: float
     exceed: int
     n: int
+    k_max: int
+    passed: bool
 
 
-def mc_p_value(t_obs: float, t_random: Sequence[float]) -> MonteCarlo:
-    """One-sided upper MC p = (1 + #{T_r >= T_obs}) / (1 + n); SE = sqrt(p(1-p)/n) (reporting only)."""
-    t_random = _finite(np.asarray(t_random), "random-direction statistics")
+def rank_k_max(n: int, alpha: float) -> int:
+    """Largest k with (1 + k) / (1 + n) < alpha (-1 if even k = 0 cannot pass)."""
+    k = -1
+    while (1 + (k + 1)) / (1 + n) < alpha:
+        k += 1
+    return k
+
+
+def rank_test(t_obs: float, t_null: Sequence[float], alpha: float) -> RankTest:
+    """p = (1 + #{T_null >= T_obs}) / (1 + n); pass iff p < alpha; a null equal to T_obs is an exceedance."""
+    t_null = _finite(np.asarray(t_null), "null statistics")
     if not np.isfinite(t_obs):
         raise StatisticsError("Non-finite observed statistic")
-    n = int(t_random.size)
+    n = int(t_null.size)
     if n == 0:
-        raise StatisticsError("Empty random reference")
-    exceed = int((t_random >= t_obs).sum())
+        raise StatisticsError("Empty null reference")
+    exceed = int((t_null >= t_obs).sum())
     p = (1 + exceed) / (1 + n)
-    return MonteCarlo(p=p, se=float(np.sqrt(p * (1 - p) / n)), exceed=exceed, n=n)
-
-
-def null_threshold(values: Sequence[float], alpha: float = ALPHA_TS) -> float:
-    values = _finite(np.asarray(values), "structured-null statistics")
-    return float(np.quantile(values, 1.0 - alpha, method="linear"))
+    return RankTest(p=p, exceed=exceed, n=n, k_max=rank_k_max(n, alpha), passed=bool(p < alpha))
 
 
 def null_pairs(words: Sequence[str]) -> list[tuple[str, str]]:
     return [(a, b) for a in words for b in words if a != b]
-
-
-def null_threshold_se(words: Sequence[str], statistic: Mapping[tuple[str, str], float], alpha: float = ALPHA_TS) -> float:
-    """Word-level bootstrap SD of the type-7 null quantile (reporting only; seed 20260927, ddof 1)."""
-    words = list(words)
-    rng = np.random.default_rng(NULL_SE_SEED)
-    draws = rng.integers(0, len(words), size=(N_BOOT, len(words)))
-    quantiles = np.empty(N_BOOT)
-    for r in range(N_BOOT):
-        values = [
-            statistic[(words[draws[r, i]], words[draws[r, j]])]
-            for i in range(len(words))
-            for j in range(len(words))
-            if i != j and draws[r, i] != draws[r, j]
-        ]
-        if not values:
-            raise StatisticsError("Null-SE draw without two distinct words")
-        quantiles[r] = np.quantile(np.asarray(values, dtype=np.float64), 1.0 - alpha, method="linear")
-    return float(quantiles.std(ddof=1))
 
 
 def logsumexp(values: np.ndarray, axis: int = -1) -> np.ndarray:
@@ -151,11 +149,9 @@ def logsumexp(values: np.ndarray, axis: int = -1) -> np.ndarray:
     return np.squeeze(peak, axis=axis) + np.log(np.sum(np.exp(values - peak), axis=axis))
 
 
-def random_cov_directions(default_states14: np.ndarray, n: int = 1000) -> np.ndarray:
-    """R_cov: z = X_c^T g / sqrt(1023), g ~ N(0, I_1024) from PCG64(20260925), rows unit-normalized.
-
-    ``default_states14`` must be the 1,024 P_default slot-14 last-token states in extraction-row order.
-    """
+def random_cov_directions(default_states14: np.ndarray, n: int = N_RCOV) -> np.ndarray:
+    """R_cov: z = X_c^T g / sqrt(1023), g ~ N(0, I_1024) drawn as one (n, 1024) array from PCG64(20260925),
+    rows unit-normalized. ``default_states14``: the 1,024 P_default slot-14 states in extraction-row order."""
     x = _finite(np.asarray(default_states14, dtype=np.float64), "R_cov states")
     if x.shape[0] != 1024 or x.ndim != 2:
         raise StatisticsError("R_cov needs the 1024 x H P_default slot-14 state matrix")
@@ -163,11 +159,6 @@ def random_cov_directions(default_states14: np.ndarray, n: int = 1000) -> np.nda
     g = np.random.default_rng(RCOV_SEED).standard_normal((n, x.shape[0]))
     z = g @ centered / np.sqrt(x.shape[0] - 1.0)
     return z / np.linalg.norm(z, axis=1, keepdims=True)
-
-
-def random_iso_directions(hidden_size: int, n: int = 1000) -> np.ndarray:
-    r = np.random.default_rng(RISO_SEED).standard_normal((n, hidden_size))
-    return r / np.linalg.norm(r, axis=1, keepdims=True)
 
 
 def covariance(default_states14: np.ndarray) -> np.ndarray:

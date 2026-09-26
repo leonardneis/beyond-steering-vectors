@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -30,7 +32,7 @@ SCIENTIFIC = "scientific"
 TECHNICAL_VALIDATION = "technical_validation"
 
 
-class RenderError(ValueError):
+class RenderError(ValueError, FinalFailure):
     """Raised when a prompt violates the frozen rendering contract."""
 
 

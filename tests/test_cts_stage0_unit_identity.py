@@ -18,7 +18,7 @@ from slgeo.cts_stage0.identity import IdentityError, assert_identity
 
 @pytest.fixture(scope="module")
 def expected() -> dict:
-    manifest = yaml.safe_load((ROOT / "configs" / "validation" / "cts_stage0_v1.yaml").read_text(encoding="utf-8"))
+    manifest = yaml.safe_load((ROOT / "configs" / "validation" / "cts_stage0_v2.yaml").read_text(encoding="utf-8"))
     return manifest["execution"]
 
 
@@ -115,7 +115,7 @@ def test_container_image_from_env_when_no_job_ad(monkeypatch, expected):
 
 def test_cpu_mode_ignores_gpu_fields_only(monkeypatch, expected):
     actual = _matching(expected)
-    for name in ("cuda_unavailable", "gpu_name", "driver", "image", "no_smi"):
+    for name in ("cuda_unavailable", "gpu_name", "driver", "no_smi"):
         MUTATIONS[name](actual)
     _patch(monkeypatch, actual)
     assert_identity(expected, ROOT, require_gpu=False)
@@ -123,6 +123,23 @@ def test_cpu_mode_ignores_gpu_fields_only(monkeypatch, expected):
     _patch(monkeypatch, actual)
     with pytest.raises(IdentityError):
         assert_identity(expected, ROOT, require_gpu=False)
+
+
+def test_cpu_mode_checks_container_image(monkeypatch, expected):
+    """Phase F minor (v2): CPU nodes verify the pinned image as well."""
+    actual = _matching(expected)
+    MUTATIONS["image"](actual)
+    _patch(monkeypatch, actual)
+    with pytest.raises(IdentityError, match="container image"):
+        assert_identity(expected, ROOT, require_gpu=False)
+
+
+def test_venv_must_be_content_addressed(monkeypatch, expected):
+    actual = _matching(expected)
+    actual["venv"] = {"in_venv": True, "name": "condor-0000000000000000", "complete_marker": "0000000000000000"}
+    _patch(monkeypatch, actual)
+    with pytest.raises(IdentityError, match="venv"):
+        assert_identity(expected, ROOT)
 
 
 def test_slgeo_from_sibling_checkout_with_same_prefix_raises(monkeypatch, expected):

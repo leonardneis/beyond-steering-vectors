@@ -1,0 +1,61 @@
+{
+ "version": 1,
+ "date": "2026-09-26",
+ "status": "fixed before any v2 forward; implementation level only; never changes a criterion, condition, prompt set, dose, site or statistic of research/cts_stage0_v2",
+ "layout": {
+  "L2_steps": "build_prefix: one unsteered forward of positions 0..L-2 (batch 1); score_from_prefix per condition: a fresh DynamicCache built from references to the prefix tensors, one forward of position L-1 (batch 1, position id L-1) with SuffixSteering, then the flat-packed continuation of all 104 forms (4D segment mask, position ids L + depth)",
+  "prefix_reuse_safety": "the prefix tensors are never modified in place (cache updates concatenate into new tensors); a digest test verifies immutability after use",
+  "suffix_hook": "adds the fp32 vector cast to the model dtype at the one position; refuses any forward whose hidden state is not [1, 1, H], whose position id or cache position differs from L-1, a second firing, and all-position rows",
+  "own_prefix": "PrefillSteering on a full prefill of positions 0..L-1 with one row (identical to the v1 L1 layout)",
+  "logits": "float32 F.linear(post-norm final state, lm_head weight); normalizer over all 152064 lm_head rows; form scores accumulated in float64",
+  "words_scored_every_condition": ["cat", "dog", "wolf", "lion", "horse", "rabbit", "elephant", "fox", "owl", "turtle", "spider", "ant", "chess", "blue"]
+ },
+ "baselines": {
+  "canonical": "unsteered in L2, scored twice: baseline_rep1 (host group f) and baseline_rep2 (host group g); every per-form log-prob within 1e-4",
+  "own_prefix": "persona:P_default, a registry condition scored in L1",
+  "sentinels": "every score and re-score shard re-scores the L2 baseline on its first two prompts at start and end (<= 1e-4 against baseline_rep1)"
+ },
+ "plan": {
+  "extraction_shards": "personas in contract order, chunked so that personas x 1024 x extraction seconds x overhead <= 0.5 x retirement",
+  "scoring_shards": "one group per (registry group, cost class, prompt set), chunked by the same rule with the class seconds and the prompt-set size",
+  "rescore_shards": "flagged conditions by prompt set, chunked with the L1_reference seconds",
+  "seconds_source": "the contract's planning seconds (placeholders until the freeze fills TV-v2 measurements)"
+ },
+ "fragility": {
+  "statistics": "every statistic recorded by criteria.all_statistics whose conditions are all re-scored: TS b/c/e/f statistics (e uses point estimates, still standardized by SE_boot), PC (last position), PC_star, A4, A7, mention-label and BASE_SHARED_DIRECTION statistics of all three contrasts whether or not they pass (the checked set never depends on an outcome); m = 251 + 70 = 321",
+  "not_computable": "A6 (persona contexts) and PC_pos (all positions) use own-prefix conditions, identical in L2 and L1",
+  "null_families": "first 10 registry members of each of the 7 L2 null families; SD_F over all members of the family in L2",
+  "persisted": "m, counts, RMS(z), max|z|, guard, verdict; no statistic"
+ },
+ "statistics": {
+  "rank_test_ties": "a null equal to T_obs counts as an exceedance",
+  "one_sided_bounds": "type-7 quantiles of the paired replicates at alpha_TS and 1 - alpha_TS",
+  "SE_boot": "numpy std ddof 1 of the 10,000 replicates",
+  "R_cov_rounding": "the (199, 1024) Gaussian draw equals the first 199 rows of the v1 draw; the unit directions agree with the first 199 v1 directions to about 1e-15 (the matrix product's blocking depends on its shape); R_cov is generated once per run in the directions stage and stored with its hash"
+ },
+ "errors_and_retries": {
+  "final_exit_86": "every FinalFailure (identity, provenance, contract or input hash, guard, render, hook, cache, scoring, non-finite, statistics, sentinel, fragility, D/C leak, failed preflight) and every unclassified exception (software defect)",
+  "retryable": "exit 1 (out of memory, operating-system I/O), 75 (SIGTERM), 85 (GPU unavailable); DAG RETRY 2 per node; no in-place rematch, so a shard has at most 3 attempts",
+  "attempt_events": "start, success, integrity, refusal, software, infrastructure, sigterm; integrity reads every record"
+ },
+ "budget": {
+  "unit": "RemoteWallClockTime x RequestGpus / 3600 from condor_history (finished) and condor_q (running: accumulated wall time plus the current run), jobs identified by the job-ad attributes BsvBudgetCategory and BsvRunTag",
+  "gate": "PRE script of every DAG node (CPU nodes included, so the integrity node sees a current ledger): consumed + remaining projection of incomplete GPU shards <= cap, else BUDGET_STOP.json and exit 87 (ABORT-DAG-ON); every later PRE script and every job refuses",
+  "complete_shards_for_projection": "shards with a marker file (the integrity stage verifies markers fully)",
+  "tv": "category TV, cap 6 A100-h, a per-node remaining estimate of 1.5 A100-h per GPU node; attempts registered in the accounting root, at most 3"
+ },
+ "technical_validation": {
+  "inputs": "V prompts, P_default, the nonce persona, TV-seed random directions (seeds 1000001-1000004), the planted W_U[' zorb'] direction; S0 enters only as the multiset of rendered lengths of the 300 animal prompts (tokenizer only, 40 quantiles persisted)",
+  "length_matching": "stand-in user prompts made of V words appended until the default rendering reaches each target length (within 2 tokens, gated)",
+  "planted_effect": "L2 layout, blocks 13 and 27, multiples 1, 2, 4, 8 of the mean ||h||; gate at block 27 (as the v1 TV revision)",
+  "determinism": "L2 baseline repeated within the job (bitwise); L2 and L1 digests compared across the two hosts by the projection node",
+  "fragility_on_V": "16 random directions at 0.1/0.25/0.5 x ||t_nonce|| with both signs; per statistic rho = sqrt(max(0, mean(d)^2 - s_d^2/n) x 300 + s_d^2) / s_x; median and max reported, descriptive only",
+  "seconds": "L2: per-condition suffix+continuation time plus the prefix time divided by the planned L2 shard size; own_prefix: all-position rows in L1; L1_reference: last-position rows in L1; extraction: 64 default-context extraction forwards",
+  "overhead_factor": "(process start to model ready + real-model self-test + two sentinels + dry-shard compute + publication hashing) / dry-shard compute, for one planned L2 shard (conditions x 300 prompt evaluations); excludes container start and scheduling, which the 0.8 x cap reserve covers",
+  "projection": "seconds and overhead factor are the maxima over the two hosts; P from the plan; ladder values for the pre-specified reductions are reported"
+ },
+ "identity": {
+  "pinned": "configs/validation/cts_stage0_v2.yaml execution block (the v1 TV identity); updated by an engineering change if the 2026-09-28 to 2026-10-01 maintenance changes the driver or image, before TV-v2",
+  "venv": "condor-<16 hex of sha256(condor/requirements-condor.txt)> with a matching .complete marker, or no venv"
+ }
+}

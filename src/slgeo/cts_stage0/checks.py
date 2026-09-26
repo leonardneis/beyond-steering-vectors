@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from .errors import FinalFailure
+
 import json
 import unicodedata
 
@@ -17,7 +19,7 @@ from .package import DEFAULT_PERSONA_ID, DEFAULT_SYSTEM_TEXT, FrozenPackage, sha
 from .render import Renderer
 
 
-class IntegrityCheckError(RuntimeError):
+class IntegrityCheckError(RuntimeError, FinalFailure):
     pass
 
 

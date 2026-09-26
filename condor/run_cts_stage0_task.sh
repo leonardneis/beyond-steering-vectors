@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# CTS Stage 0 node wrapper. Exit codes: 0 ok, 75 SIGTERM (retried), 85 GPU resource (rematched in place),
-# 86 identity/integrity refusal (never retried), other non-zero = software error.
+# CTS Stage 0 v2 node wrapper. Exit codes: 0 ok; 86 final (identity/integrity/software; never retried);
+# 1 infrastructure, 75 SIGTERM, 85 GPU unavailable (DAG RETRY, at most two further attempts per shard).
 set -euo pipefail
 COMMAND=$1
 TARGET=$2
@@ -36,6 +36,7 @@ case "$COMMAND" in
   run) args=(run --shard "$TARGET") ;;
   techval) args=(techval --name "$TARGET") ;;
   techval-cpu) args=(techval-cpu) ;;
+  tv-project) args=(tv-project) ;;
   *) echo "Unknown command $COMMAND" >&2; exit 2 ;;
 esac
 

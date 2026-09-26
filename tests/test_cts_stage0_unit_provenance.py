@@ -116,5 +116,5 @@ def test_lf_sha256_crlf_independent(tmp_path):
 
 
 def test_checked_prefixes_cover_code_and_package():
-    for prefix in ("src/", "scripts/", "configs/", "research/cts_stage0_v1/", "research/cts_stage0_v1_execution/"):
+    for prefix in ("src/", "scripts/", "configs/", "research/cts_stage0_v1/", "research/cts_stage0_v2/", "research/cts_stage0_v2_execution/"):
         assert prefix in pv.CHECKED_PREFIXES

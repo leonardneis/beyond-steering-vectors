@@ -1,22 +1,26 @@
-"""Synthetic, planted-truth data for the decision engine and the artifact protocol (no model, no real data).
+"""Synthetic, planted-truth data for the decision engine, labels, fragility and artifact protocol.
 
-Used by the unit tests and by the CPU technical-validation node, so the complete criteria/decision path is
-exercised in the execution environment before any scientific output exists.
+No model and no real data: word scores are generated for the registry's condition ids under a scenario of
+planted effects. Used by the unit tests and by the CPU technical-validation node, so the complete criteria,
+decision, label and fragility paths run in the execution environment before any scientific output exists.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
 from . import artifacts as art
-from .conditions import gating_conditions
-from .criteria import WordScores, evaluate
+from .conditions import Condition, registry_conditions
+from .criteria import ANIMAL_WORDS, WordScores, all_statistics, evaluate
+from .fragility import fragility_report
 from .statistics import FamilyIndex
 
 WORDS = ("cat", "dog", "wolf", "lion", "horse", "rabbit", "elephant", "fox", "owl", "turtle", "spider", "ant", "chess", "blue")
 SYNTHETIC_SEED = 1000011
+CONTRASTS = ("c_cat_dog", "c_cat_wolf", "c_cat_anim")
 
 
 def synthetic_prompt_ids() -> dict[str, list[str]]:
@@ -24,76 +28,96 @@ def synthetic_prompt_ids() -> dict[str, list[str]]:
     return {family: [f"synthetic-{family}-{i:03d}" for i in range(1, 101)] for family in ("direct", "identity", "hypothetical")}
 
 
-def null_names_synthetic() -> list[str]:
-    words = [f"n{i:02d}" for i in range(16)]
-    return [f"null:{a}>{b}" for a in words for b in words if a != b]
+def _contrast_of(direction: str) -> tuple[str | None, str]:
+    """(tested contrast, variant) of a named direction: variant in main, T2, T3, perpG, slot27."""
+    for contrast in CONTRASTS:
+        if direction == contrast:
+            return contrast, "main"
+        if direction.startswith(contrast + "_"):
+            return contrast, direction[len(contrast) + 1 :]
+        if direction == f"{contrast}@27":
+            return contrast, "slot27"
+    return None, ""
 
 
-def _effects(scenario: dict) -> dict[str, dict[str, float]]:
-    """Mean shift of L_w per condition id under a scenario; unspecified conditions have no effect."""
-    effects: dict[str, dict[str, float]] = {}
-    for condition in gating_conditions(null_names_synthetic()):
-        cid, shift = condition.cid, {}
-        d = condition.direction or ""
-        base = d.split("_T")[0] if d.startswith("c_cat_") else d
-        if condition.kind == "steer" and base in ("c_cat_dog", "c_cat_wolf", "c_cat_anim") and condition.magnitude == f"tau:{d}":
-            strength = scenario["ts"][base] * condition.kappa
-            x = base.removeprefix("c_cat_")
-            if condition.sign > 0:
-                shift = {"cat": strength}
-            else:
-                shift = {"cat": -strength}
-                if x != "anim":
-                    shift[x] = strength
-        elif condition.kind == "steer" and d == "t_cat" and condition.scale == "raw":
-            shift = {"cat": scenario["pc_pos"] if condition.mode == "all" else scenario["pc"]}
-        elif condition.kind == "steer" and d == "t_cat":
-            shift = {"cat": scenario["pc_star"][condition.magnitude.removeprefix("tau:c_cat_")]}
-        elif condition.kind == "steer" and d in ("t_dog", "t_wolf"):
-            shift = {d.removeprefix("t_"): scenario["a7"][d.removeprefix("t_")]}
-        elif condition.kind == "steer" and d.startswith("m_cat_"):
-            shift = {"cat": scenario["mention"]}
-        elif condition.kind == "persona" and condition.persona in ("P_dog_T1", "P_wolf_T1"):
+def _effect(condition: Condition, scenario: Mapping[str, Any]) -> dict[str, float]:
+    d = condition.direction or ""
+    if condition.kind == "persona":
+        if condition.persona in ("P_dog_T1", "P_wolf_T1"):
             x = condition.persona.split("_")[1]
-            shift = {x: scenario["a6"][x]}
-        effects[cid] = shift
-    return effects
+            return {x: scenario["a6"][x]}
+        return {}
+    if condition.kind != "steer":
+        return {}
+    contrast, variant = _contrast_of(d)
+    if contrast is not None and condition.magnitude == f"tau:{d}":
+        strength = (scenario["perp"][contrast] if variant == "perpG" else scenario["ts"][contrast]) * condition.kappa
+        x = contrast.removeprefix("c_cat_")
+        if condition.sign > 0:
+            return {"cat": strength}
+        shift = {"cat": -strength}
+        if x != "anim":
+            shift[x] = strength
+        return shift
+    if d == "t_cat" and condition.scale == "raw":
+        return {"cat": scenario["pc_pos"] if condition.mode == "all" else scenario["pc"]}
+    if d == "t_cat":
+        return {"cat": scenario["pc_star"][condition.magnitude.removeprefix("tau:")]}
+    if d in ("t_dog", "t_wolf"):
+        return {d.removeprefix("t_"): scenario["a7"][d.removeprefix("t_")]}
+    if d.startswith("m_cat_"):
+        return {"cat": scenario["mention"]}
+    if d in ("g_anim", "g_tmpl", "g_id"):
+        shared = scenario["shared"][d]
+        shift = {word: shared["mass"] for word in ANIMAL_WORDS}
+        shift["cat"] = shift["cat"] + shared["cat_selective"]
+        return shift
+    return {}
 
 
-def synthetic_scores(scenario: dict, seed: int = SYNTHETIC_SEED) -> WordScores:
+def synthetic_scores(rows: Sequence[Mapping[str, Any]], scenario: Mapping[str, Any], seed: int = SYNTHETIC_SEED,
+                     *, only: set[str] | None = None, noise: float | None = None) -> WordScores:
     rng = np.random.default_rng(seed)
     ids = [pid for family in synthetic_prompt_ids().values() for pid in family]
     base_L = {word: np.log(scenario.get("base_rate", {}).get(word, 0.05)) for word in WORDS}
     baseline = {pid: np.array([base_L[w] for w in WORDS]) + rng.normal(0, 0.05, len(WORDS)) for pid in ids}
-    values = {"unsteered": baseline, "persona:P_default": {pid: row.copy() for pid, row in baseline.items()}}
-    for cid, shift in _effects(scenario).items():
+    sd = scenario.get("noise", 0.05) if noise is None else noise
+    values: dict[str, dict[str, np.ndarray]] = {}
+    for condition in registry_conditions(rows):
+        if only is not None and condition.cid not in only:
+            continue
+        if condition.kind == "unsteered" or condition.cid == "persona:P_default":
+            values[condition.cid] = {pid: row + rng.normal(0, sd * 0.01, len(WORDS)) for pid, row in baseline.items()}
+            continue
+        shift = _effect(condition, scenario)
         table = {}
         for pid in ids:
-            row = baseline[pid] + rng.normal(0, scenario.get("noise", 0.05), len(WORDS))
+            row = baseline[pid] + rng.normal(0, sd, len(WORDS))
             for word, value in shift.items():
                 row[WORDS.index(word)] += value
             table[pid] = row
-        values[cid] = table
+        values[condition.cid] = table
     return WordScores(WORDS, values)
 
 
 def default_scenario() -> dict:
     return {
-        "ts": {"c_cat_dog": 1.0, "c_cat_wolf": 1.0, "c_cat_anim": 1.0},
+        "ts": {c: 1.0 for c in CONTRASTS},
+        "perp": {c: 1.0 for c in CONTRASTS},
         "pc": 2.0, "pc_pos": 2.0,
-        "pc_star": {"dog": 1.0, "wolf": 1.0, "anim": 1.0},
+        "pc_star": {c: 1.0 for c in CONTRASTS},
         "a7": {"dog": 1.0, "wolf": 1.0},
         "a6": {"dog": 1.0, "wolf": 1.0},
         "mention": 0.2,
+        "shared": {g: {"mass": 0.5, "cat_selective": 0.0} for g in ("g_anim", "g_tmpl", "g_id")},
         "base_rate": {"dog": 0.1, "wolf": 0.1},
     }
 
 
 def scenarios() -> dict[str, tuple[dict, str, str | None]]:
-    """name -> (scenario, expected class, expected X or stage-2a primary)."""
+    """name -> (scenario, expected class, expected X or Stage-2a primary)."""
     out = {}
-    s = default_scenario()
-    out["go_dog"] = (s, "GO_X", "dog")
+    out["go_dog"] = (default_scenario(), "GO_X", "dog")
     s = default_scenario(); s["base_rate"]["dog"] = 0.9
     out["go_wolf_a4"] = (s, "GO_X", "wolf")
     s = default_scenario(); s["a6"] = {"dog": 0.0, "wolf": 0.0}
@@ -104,23 +128,30 @@ def scenarios() -> dict[str, tuple[dict, str, str | None]]:
     out["inconclusive_position"] = (s, "INCONCLUSIVE_POSITION", None)
     s = default_scenario(); s["ts"] = {k: 0.0 for k in s["ts"]}; s["pc_star"] = {k: 0.0 for k in s["pc_star"]}
     out["inconclusive_dose"] = (s, "INCONCLUSIVE_DOSE", None)
+    s = default_scenario(); s["perp"] = {k: 0.0 for k in s["perp"]}
+    out["pivot_shared_leakage"] = (s, "PIVOT_SHARED_LEAKAGE", None)
     s = default_scenario(); s["ts"] = {k: 0.0 for k in s["ts"]}
     out["pivot"] = (s, "PIVOT_NO_BASE_VALIDATED_CONTRAST", None)
     s = default_scenario(); s["mention"] = 1.5
     out["lexical_label"] = (s, "GO_X", "dog")
+    s = default_scenario(); s["shared"]["g_anim"]["cat_selective"] = 0.6
+    out["shared_label_selective"] = (s, "GO_X", "dog")
     return out
 
 
-def run_scenario(scenario: dict, reliabilities: dict | None = None) -> dict:
+def run_scenario(rows, null_names, scenario: dict, reliabilities: dict | None = None) -> dict:
     family = FamilyIndex.from_ids(synthetic_prompt_ids())
-    reliabilities = reliabilities or {"c_cat_dog": 0.99, "c_cat_wolf": 0.99, "c_cat_anim": 0.99, "t_cat": 0.999}
-    return evaluate(synthetic_scores(scenario), family, reliabilities, null_names_synthetic(), integrity_ok=True)
+    reliabilities = reliabilities or {**{c: 0.99 for c in CONTRASTS}, **{f"{c}_perpG": 0.99 for c in CONTRASTS}, "t_cat": 0.999}
+    conditions = registry_conditions(rows)
+    baselines = {c.cid: c.baseline for c in conditions}
+    result, _ctx = evaluate(synthetic_scores(rows, scenario), family, reliabilities, null_names, True, baselines)
+    return result
 
 
-def synthetic_decision_suite() -> dict:
+def synthetic_decision_suite(rows, null_names) -> dict:
     results = {}
     for name, (scenario, expected, detail) in scenarios().items():
-        outcome = run_scenario(scenario)
+        outcome = run_scenario(rows, null_names, scenario)
         decision = outcome["decision"]
         ok = decision["class"] == expected
         if expected == "GO_X":
@@ -128,11 +159,38 @@ def synthetic_decision_suite() -> dict:
         if expected == "GO_CAT_ONLY":
             ok = ok and decision.get("stage2a_primary") == detail
         if name == "lexical_label":
-            ok = ok and outcome["labels"]["c_cat_dog"]["label"] == "LEXICAL_NOT_EXCLUDED"
+            ok = ok and outcome["labels"]["c_cat_dog"]["mention"]["label"] == "LEXICAL_NOT_EXCLUDED"
         if name == "go_dog":
-            ok = ok and all(label["label"] == "PREFERENCE_CONTRAST" for label in outcome["labels"].values())
+            ok = ok and all(entry["mention"]["label"] == "PREFERENCE_CONTRAST" for entry in outcome["labels"].values())
+            ok = ok and all(v["label"] == "BASE_SHARED_DIRECTION" for entry in outcome["labels"].values() for v in entry["shared"].values())
+        if name == "shared_label_selective":
+            ok = ok and outcome["labels"]["c_cat_dog"]["shared"]["g_anim"]["label"] == "NOT_BASE_SHARED"
+            ok = ok and outcome["labels"]["c_cat_dog"]["shared"]["g_tmpl"]["label"] == "BASE_SHARED_DIRECTION"
+        if name == "pivot":
+            ok = ok and outcome["labels"] == {"BASE_SHARED_DIRECTION": "NOT_ASSESSABLE"}
         results[name] = bool(ok)
     return {"scenarios": results, "pass": all(results.values())}
+
+
+def synthetic_fragility_suite(rows, null_names) -> dict:
+    """The fragility check passes when the reference layout differs by noise far below epsilon x SE and fails
+    when it differs by a shift comparable to the SE."""
+    family = FamilyIndex.from_ids(synthetic_prompt_ids())
+    conditions = registry_conditions(rows)
+    baselines = {c.cid: c.baseline for c in conditions}
+    rescored = {c.cid for c in conditions if c.reference_rescore}
+    reliabilities = {**{c: 0.99 for c in CONTRASTS}, **{f"{c}_perpG": 0.99 for c in CONTRASTS}, "t_cat": 0.999}
+    scenario = default_scenario()
+    l2_scores = synthetic_scores(rows, scenario)
+    l2 = all_statistics(l2_scores, family, reliabilities, null_names, baselines)
+    out = {}
+    for name, jitter in (("tiny_layout_noise", 1e-5), ("se_sized_layout_noise", 0.2)):
+        rng = np.random.default_rng(SYNTHETIC_SEED + 7)
+        values = {cid: {pid: row + rng.normal(0, jitter, row.shape) for pid, row in l2_scores.values[cid].items()} for cid in rescored}
+        report = fragility_report(l2, WordScores(l2_scores.words, values), rescored)
+        out[name] = report["pass"]
+    checks = {"tiny_noise_passes": bool(out["tiny_layout_noise"]), "se_sized_noise_fails": not out["se_sized_layout_noise"]}
+    return {"checks": checks, "pass": all(checks.values())}
 
 
 def artifact_drill(root: Path) -> dict:

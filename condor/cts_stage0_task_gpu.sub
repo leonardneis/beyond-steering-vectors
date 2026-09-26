@@ -18,12 +18,13 @@ requirements = UidDomain == "cs.uni-saarland.de" \
   && (MY.MachineAttrName1 =?= undefined || TARGET.Name =!= MY.MachineAttrName1) \
   && (MY.MachineAttrName2 =?= undefined || TARGET.Name =!= MY.MachineAttrName2) \
   && (MY.MachineAttrName3 =?= undefined || TARGET.Name =!= MY.MachineAttrName3)
-on_exit_remove = (ExitBySignal =?= true) || (ExitCode =!= 85) || (NumJobStarts >= 4)
 getenv = HOME
-environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_FORCE_SINGLE_GPU=1 SLGEO_EXECUTION_GIT_COMMIT=$(BsvExecutionGitCommit) SLGEO_CONTAINER_IMAGE=$(BsvDockerImage) CUBLAS_WORKSPACE_CONFIG=:4096:8 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
+environment = "SLGEO_SHARED_ROOT=$(BsvSharedRoot) SLGEO_OFFLINE=1 SLGEO_FORCE_SINGLE_GPU=1 SLGEO_EXECUTION_GIT_COMMIT=$(BsvExecutionGitCommit) SLGEO_RUN_TAG=$(BsvRunTag) SLGEO_CONTAINER_IMAGE=$(BsvDockerImage) CUBLAS_WORKSPACE_CONFIG=:4096:8 CONDOR_CLUSTER_ID=$(ClusterId) CONDOR_PROC_ID=$(ProcId) CONDOR_TASK_ID=$(BsvTaskId)"
 +WantGPUHomeMounted = true
 +WantScratchMounted = true
 +TaskId = "$(BsvTaskId)"
++BsvRunTag = "$(BsvRunTag)"
++BsvBudgetCategory = "$(BsvBudgetCategory)"
 should_transfer_files = NO
 max_job_retirement_time = 3600
 kill_sig = SIGTERM

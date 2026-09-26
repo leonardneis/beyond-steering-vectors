@@ -1,7 +1,11 @@
-"""Stages of the scientific run. Each stage reads only verified inputs and publishes one shard atomically.
+"""Stages of the v2 scientific run. Each stage reads only verified inputs and publishes one shard atomically.
 
 Logging policy (outcome blindness): stdout carries counts, timings, shard ids, hashes and integrity-check
 names only; never a score, norm, cosine, tau, magnitude, statistic, criterion or decision.
+
+Error policy (E2): every error raised by this package's integrity checks derives from ``FinalFailure`` and is
+mapped to the final exit code (never retried). Only infrastructure failures (SIGTERM, GPU unavailable, I/O,
+out-of-memory) leave the job retryable.
 """
 
 from __future__ import annotations
@@ -10,33 +14,36 @@ import json
 import os
 import time
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from . import artifacts as art
-from .conditions import PERSONA, STEER, Condition, resolve_vector, row_steer, vector_sha256
+from .conditions import L2, OWN, PERSONA, STEER, UNSTEERED, Condition, resolve_vector, row_steer, vector_sha256
+from .contract import V2Contract
 from .directions import AxisStatistics, Direction, DirectionBundle, build_bundle
+from .errors import FinalFailure
 from .extraction import STORED_SLOTS, extract_persona
 from .guards import assert_no_peft
 from .package import FrozenPackage, load_extraction_prompts
-from .plan import load_choices, null_words, plan_sha256
+from .plan import condition_objects, plan_sha256
 from .provenance import lf_sha256, verify_tracked_blobs
 from .render import Renderer
-from .scoring import FormTable, lm_head_weight32, score_prompt
+from .scoring import FormTable, build_prefix, lm_head_weight32, score_from_prefix, score_prompt
 from .steering import RowSteer
 
 SLOT14_INDEX = STORED_SLOTS.index(14)
-PLURAL_TOKEN = {"cat": " cats", "dog": " dogs", "wolf": " wolves"}
+MANIFEST_RELATIVE = "configs/validation/cts_stage0_v2.yaml"
 
 
-class PipelineError(RuntimeError):
-    pass
+class PipelineError(FinalFailure):
+    """An integrity-class failure of a stage (final: never retried)."""
 
 
 def log(message: str) -> None:
-    print(f"[cts-stage0 {time.strftime('%H:%M:%S')}] {message}", flush=True)
+    print(f"[cts-stage0-v2 {time.strftime('%H:%M:%S')}] {message}", flush=True)
 
 
 @dataclass
@@ -47,25 +54,28 @@ class RunContext:
     plan: dict[str, Any]
     run_record: dict[str, Any]
 
-    @property
+    @cached_property
     def package(self) -> FrozenPackage:
-        if not hasattr(self, "_package"):
-            package = FrozenPackage.from_repo(self.repo_root)
-            if art.sha256_file(package.root / "MANIFEST.json") != self.manifest["frozen_package"]["manifest_sha256"]:
-                raise PipelineError("Frozen manifest hash differs from the execution manifest")
-            self._package = package
-        return self._package
+        package = FrozenPackage.from_repo(self.repo_root)
+        if art.sha256_file(package.root / "MANIFEST.json") != self.manifest["frozen_package"]["manifest_sha256"]:
+            raise PipelineError("Frozen v1 manifest hash differs from the execution manifest")
+        return package
 
-    @property
-    def choices(self) -> dict[str, Any]:
-        return load_choices(self.repo_root, self.manifest)
+    @cached_property
+    def contract(self) -> V2Contract:
+        pins = {key: self.manifest["contract"][key] for key in ("spec_sha256", "registry_sha256")}
+        contract = V2Contract.from_repo(self.repo_root, self.package, pins)
+        if self.plan["contract"] != {"spec_sha256": contract.spec_sha256, "registry_sha256": contract.registry_sha256}:
+            raise PipelineError("The plan was built from a different contract")
+        return contract
 
     def run_identity(self) -> dict[str, Any]:
         return {
             "execution_commit": self.run_record["execution_commit"],
             "plan_sha256": plan_sha256(self.plan),
-            "manifest_sha256": lf_sha256(self.repo_root / "configs/validation/cts_stage0_v1.yaml"),
-            "choices_sha256": lf_sha256(self.repo_root / self.manifest["implementation_choices"]),
+            "manifest_sha256": lf_sha256(self.repo_root / MANIFEST_RELATIVE),
+            "contract_spec_sha256": self.manifest["contract"]["spec_sha256"],
+            "contract_registry_sha256": self.manifest["contract"]["registry_sha256"],
             "frozen_manifest_sha256": self.manifest["frozen_package"]["manifest_sha256"],
         }
 
@@ -85,18 +95,29 @@ class RunContext:
             raise PipelineError(f"Required shard {shard_id} is not complete and verified")
         return shard, json.loads(shard.marker.read_bytes())
 
+    def require_preflight(self) -> None:
+        """E1: every stage refuses to run after a failed (or missing) preflight."""
+        _shard, marker = self.completed("preflight")
+        if marker.get("pass") is not True or marker.get("failed"):
+            raise PipelineError("Preflight did not pass; the run is final")
+
     def conditions(self) -> dict[str, Condition]:
-        return {entry["cid"]: Condition(**{k: v for k, v in entry.items() if k != "cid"}) for entry in self.plan["conditions"]}
+        return condition_objects(self.plan)
+
+    def budget_stopped(self) -> bool:
+        return (self.out_root / "orchestration" / "BUDGET_STOP.json").exists()
 
 
 def verify_runtime(ctx: RunContext, *, gpu: bool) -> dict[str, Any]:
-    """Code, frozen-input and identity checks that precede any model load."""
+    """Code, contract, frozen-input and identity checks that precede any model load."""
     from .identity import assert_identity
 
     assert_no_peft()
     tracked = verify_tracked_blobs(ctx.repo_root, ctx.run_record["tracked"])
-    _ = ctx.package
+    _ = ctx.contract
     identity = assert_identity(ctx.manifest["execution"], ctx.repo_root, require_gpu=gpu)
+    if ctx.budget_stopped():
+        raise PipelineError("BUDGET_STOP is set; no further stage may run")
     return {"tracked_files_verified": tracked, "identity": identity}
 
 
@@ -127,10 +148,11 @@ def _gpu_selftest(ctx: RunContext, model, tokenizer) -> dict[str, Any]:
     from .selftest import real_model_hook_selftest
 
     prompts = load_extraction_prompts(ctx.package, shared_path(ctx, ctx.manifest["inputs"]["extraction_file"]))
-    rendered = Renderer(tokenizer, ctx.package).render("P_default", prompts[0])
+    renderer = Renderer(tokenizer, ctx.package)
+    rendered = [renderer.render("P_default", prompt) for prompt in prompts[:3]]
     result = real_model_hook_selftest(model, rendered, magnitude=8.0)
     if not result["pass"]:
-        raise PipelineError(f"Real-model hook self-test failed: {sorted(k for k, v in result['hooks'].items() if not v)}")
+        raise PipelineError(f"Real-model hook self-test failed: {result['failed']}")
     return result
 
 
@@ -146,16 +168,34 @@ def _cjk_ids(ctx: RunContext, tokenizer):
     return torch.tensor(ids)
 
 
+def prompts_for(ctx: RunContext, prompt_set: str):
+    """S0 prompts of a registry prompt set, sorted by prompt_id (D and C are never read)."""
+    prompts = ctx.package.s0_prompts()
+    if prompt_set == "S0_all":
+        return prompts
+    if prompt_set == "S0_animal":
+        return tuple(p for p in prompts if p.is_animal_family)
+    raise PipelineError(f"Unknown prompt set {prompt_set!r}")
+
+
 # ----------------------------------------------------------------------------------------------- stages
+
+
+def _begin(ctx: RunContext, shard_id: str) -> art.Shard | None:
+    shard = ctx.shard(shard_id)
+    if shard.is_complete():
+        log(f"{shard_id}: complete and verified; skipping")
+        return None
+    ctx.require_preflight()
+    shard.quarantine()
+    return shard
 
 
 def stage_extract(ctx: RunContext, shard_id: str) -> None:
     spec = ctx.shard_spec(shard_id)
-    shard = ctx.shard(shard_id)
-    if shard.is_complete():
-        log(f"{shard_id}: complete and verified; skipping")
+    shard = _begin(ctx, shard_id)
+    if shard is None:
         return
-    shard.quarantine()
     runtime = verify_runtime(ctx, gpu=True)
     model, tokenizer, determinism = load_model_verified(ctx)
     selftest = _gpu_selftest(ctx, model, tokenizer)
@@ -176,8 +216,9 @@ def stage_extract(ctx: RunContext, shard_id: str) -> None:
             }
         )
         log(f"{shard_id}: extracted {persona} ({len(prompts)} rows)")
+    seconds = time.time() - started
     shard.publish(files, {"stage": "extract", "runtime": runtime, "determinism": determinism, "selftest": selftest,
-                          "prefills": len(prompts) * len(spec["payload"]["personas"]), "seconds": time.time() - started})
+                          "forwards": len(prompts) * len(spec["payload"]["personas"]), "compute_seconds": seconds})
 
 
 def checkpoint_tensor(snapshot: Path, name: str, rows: list[int] | None = None):
@@ -195,26 +236,8 @@ def checkpoint_tensor(snapshot: Path, name: str, rows: list[int] | None = None):
     return tensor.to(torch.float16).to(torch.float32)
 
 
-def _embedding_rows(ctx: RunContext) -> dict[str, np.ndarray]:
-    """W_E rows of the leading-space plurals from the verified checkpoint, cast as the loaded model holds them."""
-    from .modeling import snapshot_directory, verify_snapshot
-
-    snapshot = snapshot_directory(os.environ["HF_HOME"])
-    verify_snapshot(snapshot, ctx.manifest["model"]["snapshot_sha256"])
-    token_ids = {}
-    for word, text in PLURAL_TOKEN.items():
-        forms = [form for form in ctx.package.endpoint["answer_forms"][word]["forms"] if form["text"] == text]
-        if len(forms) != 1 or len(forms[0]["token_ids"]) != 1:
-            raise PipelineError(f"Leading-space plural of {word} is not a single frozen token")
-        token_ids[word] = forms[0]["token_ids"][0]
-    words = list(token_ids)
-    rows = checkpoint_tensor(snapshot, "model.embed_tokens.weight", [token_ids[w] for w in words])
-    return {word: rows[i].double().numpy() for i, word in enumerate(words)}
-
-
-def _load_extraction(ctx: RunContext) -> tuple[dict[str, np.ndarray], np.ndarray, dict[str, np.ndarray]]:
+def _load_extraction(ctx: RunContext) -> tuple[dict[str, np.ndarray], np.ndarray]:
     half_sums, states14 = {}, None
-    stored = {}
     for shard in ctx.plan["shards"]:
         if shard["stage"] != "extract":
             continue
@@ -224,17 +247,16 @@ def _load_extraction(ctx: RunContext) -> tuple[dict[str, np.ndarray], np.ndarray
             if not np.array_equal(data["row_index"], np.arange(1024)):
                 raise PipelineError(f"Extraction rows of {persona} are not in row order 0..1023")
             half_sums[persona] = data["half_sums"]
-            stored[persona] = data["states"]
             if persona == "P_default":
                 states14 = data["states"][:, SLOT14_INDEX, :].astype(np.float64)
-    if states14 is None or set(half_sums) != set(ctx.package.personas):
+    if states14 is None or set(half_sums) != set(ctx.contract.personas):
         raise PipelineError("Extraction does not cover every persona")
-    return half_sums, states14, stored
+    return half_sums, states14
 
 
 def bundle_arrays(bundle: DirectionBundle) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
-    arrays: dict[str, np.ndarray] = {"r_cov": bundle.r_cov, "r_iso": bundle.r_iso}
-    meta: dict[str, Any] = {"null_names": bundle.null_names, "directions": {}}
+    arrays: dict[str, np.ndarray] = {"r_cov": bundle.r_cov}
+    meta: dict[str, Any] = {"null_names": bundle.null_names, "directions": {}, "perp_reports": bundle.perp_reports}
     for name, direction in sorted(bundle.directions.items()):
         arrays[f"raw::{name}"] = direction.raw
         arrays[f"unit::{name}"] = direction.unit
@@ -257,30 +279,25 @@ def bundle_from_arrays(arrays: dict[str, np.ndarray], meta: dict[str, Any]) -> D
             name, info["slot"], arrays[f"raw::{name}"], arrays[f"unit::{name}"], info["tau"], info["reliability"],
             info["gating_reliability"], info["tau_ref"], info["coefficients"], info["norm"],
         )
-    return DirectionBundle(directions, arrays["r_cov"], arrays["r_iso"], meta["null_names"])
+    return DirectionBundle(directions, arrays["r_cov"], meta["null_names"], meta["perp_reports"])
 
 
 def stage_directions(ctx: RunContext, shard_id: str = "directions") -> None:
-    shard = ctx.shard(shard_id)
-    if shard.is_complete():
-        log(f"{shard_id}: complete and verified; skipping")
+    shard = _begin(ctx, shard_id)
+    if shard is None:
         return
-    shard.quarantine()
     runtime = verify_runtime(ctx, gpu=False)
-    half_sums, states14, _stored = _load_extraction(ctx)
+    half_sums, states14 = _load_extraction(ctx)
     stats = AxisStatistics.from_half_sums(half_sums)
-    bundle = build_bundle(stats, states14, null_words(ctx.package), _embedding_rows(ctx))
+    bundle = build_bundle(stats, states14, ctx.contract.null_words)
+    needed = {c.direction for c in ctx.conditions().values() if c.kind == STEER and not c.direction.startswith("rcov:")}
+    missing = sorted(needed - set(bundle.directions))
+    if missing:
+        raise PipelineError(f"Directions required by the registry are missing: {missing[:5]}")
     arrays, meta = bundle_arrays(bundle)
-    from .statistics import covariance
-
-    sigma = covariance(states14)
-    files = {
-        "bundle.npz": art.npz_bytes(arrays),
-        "bundle.json": art.pretty_json(meta),
-        "sigma14.npz": art.npz_bytes({"sigma14": sigma}),
-    }
+    files = {"bundle.npz": art.npz_bytes(arrays), "bundle.json": art.pretty_json(meta)}
     shard.publish(files, {"stage": "directions", "runtime": runtime, "n_directions": len(bundle.directions)})
-    log(f"{shard_id}: published {len(bundle.directions)} directions, R_cov and R_iso")
+    log(f"{shard_id}: published {len(bundle.directions)} directions and R_cov")
 
 
 def load_bundle(ctx: RunContext) -> tuple[DirectionBundle, dict[str, str]]:
@@ -291,53 +308,22 @@ def load_bundle(ctx: RunContext) -> tuple[DirectionBundle, dict[str, str]]:
     return bundle_from_arrays(arrays, meta), hashes
 
 
-def _batch_rows(ctx: RunContext) -> int:
-    """Condition-batch rows; > 1 only with a hash-verified technical-validation record that passed §13.3
-    for exactly this row count on the pinned GPU class."""
-    rows = int(ctx.manifest["scoring"]["condition_batch_rows"])
-    if rows < 1:
-        raise PipelineError("condition_batch_rows must be >= 1")
-    if rows == 1:
-        return rows
-    expected = ctx.run_record.get("equivalence_record_sha256")
-    relative = ctx.manifest["scoring"].get("equivalence_record")
-    if not expected or not relative:
-        raise PipelineError("Condition batching requires a recorded passing §13.3 equivalence test")
-    root = Path(os.environ.get("SLGEO_SHARED_ROOT", ctx.repo_root))
-    path = root / relative
-    if not path.is_file() or art.sha256_file(path) != expected:
-        raise PipelineError("Equivalence record missing or hash mismatch")
-    record = json.loads(path.read_bytes())
-    entry = record.get("result", {}).get("equivalence_13_3", {}).get(str(rows))
-    if not entry or entry.get("pass") is not True:
-        raise PipelineError(f"The recorded §13.3 test did not pass for {rows} rows")
-    if record.get("identity", {}).get("gpu_name") != ctx.manifest["execution"]["gpu_name"]:
-        raise PipelineError("Equivalence record comes from a different GPU class")
-    return rows
+class _Scorer:
+    """Scores conditions on one rendered prompt in the canonical layout of their cost class, or in L1."""
+
+    def __init__(self, model, table, weight32, cjk):
+        self.model, self.table, self.weight32, self.cjk = model, table, weight32, cjk
+
+    def l2(self, prefix, row: RowSteer, reference=None, *, first=False):
+        return score_from_prefix(self.model, prefix, row, self.table, weight32=self.weight32, cjk_ids=self.cjk,
+                                 return_first_logprobs=first, reference_first_lp=reference)
+
+    def l1(self, rendered, row: RowSteer, reference=None):
+        return score_prompt(self.model, rendered, [row], self.table, weight32=self.weight32, cjk_ids=self.cjk,
+                            reference_first_lp=reference)
 
 
-def _score_rows(model, rendered, rows: list[RowSteer], table, weight32, cjk, reference, batch_rows: int):
-    """Score ``rows`` in batches of exactly ``batch_rows`` (last batch filled with repeats of its last row)."""
-    results = []
-    for start in range(0, len(rows), batch_rows):
-        chunk = rows[start : start + batch_rows]
-        padding = batch_rows - len(chunk)
-        filled = chunk + [chunk[-1]] * padding
-        result = score_prompt(model, rendered, filled, table, weight32=weight32, cjk_ids=cjk, reference_first_lp=reference)
-        if padding:
-            repeat = result.form_logp[len(chunk) - 1 :]
-            if not np.array_equal(repeat, np.repeat(repeat[:1], len(repeat), axis=0)):
-                raise PipelineError("Repeated rows of one batch are not identical")
-        results.append((result, len(chunk)))
-    return results
-
-
-def stage_baseline(ctx: RunContext, shard_id: str) -> None:
-    shard = ctx.shard(shard_id)
-    if shard.is_complete():
-        log(f"{shard_id}: complete and verified; skipping")
-        return
-    shard.quarantine()
+def _prepare_gpu(ctx: RunContext):
     runtime = verify_runtime(ctx, gpu=True)
     model, tokenizer, determinism = load_model_verified(ctx)
     selftest = _gpu_selftest(ctx, model, tokenizer)
@@ -345,20 +331,25 @@ def stage_baseline(ctx: RunContext, shard_id: str) -> None:
     cjk = _cjk_ids(ctx, tokenizer)
     table = FormTable.from_endpoint(ctx.package.endpoint)
     renderer = Renderer(tokenizer, ctx.package)
-    prompts = ctx.package.s0_prompts()
-    batch_rows = _batch_rows(ctx)
+    return runtime, model, determinism, selftest, _Scorer(model, table, weight32, cjk), renderer
+
+
+def stage_baseline(ctx: RunContext, shard_id: str) -> None:
+    """Canonical L2 baseline (rep 1) and its repeat on another host group (rep 2)."""
+    shard = _begin(ctx, shard_id)
+    if shard is None:
+        return
+    runtime, model, determinism, selftest, scorer, renderer = _prepare_gpu(ctx)
+    prompts = prompts_for(ctx, "S0_all")
     form_logp, word_logp, first_lp, cjk_mass, top1 = [], [], [], [], []
+    started = time.time()
     for p_index, prompt in enumerate(prompts):
-        rendered = renderer.render("P_default", prompt.prompt)
-        result = score_prompt(
-            model, rendered, [RowSteer({})] * batch_rows, table, weight32=weight32, cjk_ids=cjk, return_first_logprobs=True
-        )
-        if not np.array_equal(result.form_logp, np.repeat(result.form_logp[:1], batch_rows, axis=0)):
-            raise PipelineError("Identical unsteered rows differ within one batch")
+        prefix = build_prefix(model, renderer.render("P_default", prompt.prompt), device=scorer.weight32.device)
+        result = scorer.l2(prefix, RowSteer({}), first=True)
         if p_index < 2:
-            again = score_prompt(model, rendered, [RowSteer({})] * batch_rows, table, weight32=weight32, cjk_ids=cjk)
+            again = scorer.l2(build_prefix(model, prefix.rendered, device=scorer.weight32.device), RowSteer({}))
             if not np.array_equal(again.form_logp, result.form_logp):
-                raise PipelineError("Unsteered baseline is not reproducible within one job")
+                raise PipelineError("Unsteered L2 baseline is not reproducible within one job")
         form_logp.append(result.form_logp[0])
         word_logp.append(result.word_logp[0])
         first_lp.append(result.first_logprobs[0].numpy())
@@ -373,14 +364,13 @@ def stage_baseline(ctx: RunContext, shard_id: str) -> None:
                 "first_logprobs": np.asarray(first_lp, dtype=np.float32),
                 "cjk_mass": np.asarray(cjk_mass),
                 "top1": np.asarray(top1, dtype=np.int64),
-                "words": np.asarray(table.words),
-                "batch_rows": np.asarray(batch_rows),
+                "words": np.asarray(scorer.table.words),
             }
         )
     }
     shard.publish(files, {"stage": "baseline", "runtime": runtime, "determinism": determinism, "selftest": selftest,
-                          "prefills": len(prompts) + 2, "batch_rows": batch_rows})
-    log(f"{shard_id}: baseline over {len(prompts)} prompts")
+                          "layout": L2, "prompt_conditions": len(prompts), "compute_seconds": time.time() - started})
+    log(f"{shard_id}: L2 baseline over {len(prompts)} prompts")
 
 
 def load_baseline(ctx: RunContext, rep: int = 1) -> dict[str, np.ndarray]:
@@ -388,80 +378,79 @@ def load_baseline(ctx: RunContext, rep: int = 1) -> dict[str, np.ndarray]:
     return art.load_npz_verified(shard.directory / "baseline.npz", marker["files"]["baseline.npz"]["sha256"])
 
 
-def _sentinel(model, renderer, prompts, baseline, table, weight32, cjk, batch_rows, tolerance) -> float:
-    """Re-score the unsteered baseline on the first two S0 prompts; return the max abs deviation."""
+def _sentinel(model, renderer, scorer: _Scorer, prompts, baseline, tolerance) -> float:
+    """Re-score the L2 baseline on the first two prompts; return the max abs deviation (spec: <= 1e-4)."""
     index = {pid: i for i, pid in enumerate(baseline["prompt_ids"].tolist())}
     worst = 0.0
     for prompt in prompts[:2]:
-        rendered = renderer.render("P_default", prompt.prompt)
-        [(result, _)] = _score_rows(model, rendered, [RowSteer({})] * batch_rows, table, weight32, cjk, None, batch_rows)
+        prefix = build_prefix(model, renderer.render("P_default", prompt.prompt), device=scorer.weight32.device)
+        result = scorer.l2(prefix, RowSteer({}))
         worst = max(worst, float(np.abs(result.form_logp[0] - baseline["form_logp"][index[prompt.prompt_id]]).max()))
     if worst > tolerance:
         raise PipelineError("Shard sentinel deviates from the canonical baseline beyond the 1e-4 tolerance")
     return worst
 
 
-def stage_score(ctx: RunContext, shard_id: str) -> None:
+def _score_shard(ctx: RunContext, shard_id: str, *, reference_layout: bool) -> None:
     import torch
 
     spec = ctx.shard_spec(shard_id)
-    shard = ctx.shard(shard_id)
-    if shard.is_complete():
-        log(f"{shard_id}: complete and verified; skipping")
+    shard = _begin(ctx, shard_id)
+    if shard is None:
         return
-    shard.quarantine()
-    runtime = verify_runtime(ctx, gpu=True)
+    runtime, model, determinism, selftest, scorer, renderer = _prepare_gpu(ctx)
     bundle, bundle_hashes = load_bundle(ctx)
     baseline = load_baseline(ctx, 1)
     conditions = ctx.conditions()
     selected = [conditions[cid] for cid in spec["payload"]["conditions"]]
-    persona_stage = spec["stage"] == "score_persona"
-    if any((condition.kind == PERSONA) != persona_stage for condition in selected):
-        raise PipelineError("Shard mixes persona and steering conditions")
-    model, tokenizer, determinism = load_model_verified(ctx)
-    selftest = _gpu_selftest(ctx, model, tokenizer)
-    weight32 = lm_head_weight32(model)
-    cjk = _cjk_ids(ctx, tokenizer)
-    table = FormTable.from_endpoint(ctx.package.endpoint)
-    if tuple(baseline["words"].tolist()) != table.words:
+    prompt_set = spec["payload"]["prompt_set"]
+    if any(condition.prompt_set != prompt_set for condition in selected):
+        raise PipelineError("Shard mixes prompt sets")
+    if reference_layout:
+        if any(not condition.reference_rescore for condition in selected):
+            raise PipelineError("Re-score shard contains a condition that is not flagged for the reference layout")
+        layout = "L1_reference"
+    else:
+        cost_class = spec["payload"]["cost_class"]
+        if any(condition.cost_class != cost_class for condition in selected):
+            raise PipelineError("Shard mixes cost classes")
+        layout = cost_class
+    if tuple(baseline["words"].tolist()) != scorer.table.words:
         raise PipelineError("Baseline word order differs from the form table")
-    renderer = Renderer(tokenizer, ctx.package)
-    prompts = ctx.package.s0_prompts()
-    batch_rows = 1 if persona_stage else _batch_rows(ctx)
+    prompts = prompts_for(ctx, prompt_set)
     tolerance = float(ctx.manifest["scoring"]["baseline_repeat_tolerance"])
-    sentinel_start = 0.0 if persona_stage else _sentinel(model, renderer, prompts, baseline, table, weight32, cjk, batch_rows, tolerance)
+    sentinel_start = _sentinel(model, renderer, scorer, prompts, baseline, tolerance)
     reference = {pid: torch.from_numpy(baseline["first_logprobs"][i]) for i, pid in enumerate(baseline["prompt_ids"].tolist())}
     rows = [row_steer(condition, bundle) for condition in selected]
     n_c, n_p = len(selected), len(prompts)
-    form_logp = np.empty((n_c, n_p, table.n_forms))
-    word_logp = np.empty((n_c, n_p, len(table.words)))
+    form_logp = np.empty((n_c, n_p, scorer.table.n_forms))
+    word_logp = np.empty((n_c, n_p, len(scorer.table.words)))
     cjk_mass = np.empty((n_c, n_p))
     kl = np.empty((n_c, n_p))
     top1 = np.empty((n_c, n_p), dtype=np.int64)
     started = time.time()
     for p_index, prompt in enumerate(prompts):
-        if persona_stage:
-            for c_index, condition in enumerate(selected):
-                rendered = renderer.render(condition.persona, prompt.prompt)
-                [(result, _)] = _score_rows(model, rendered, [RowSteer({})], table, weight32, cjk, reference[prompt.prompt_id], 1)
-                form_logp[c_index, p_index] = result.form_logp[0]
-                word_logp[c_index, p_index] = result.word_logp[0]
-                cjk_mass[c_index, p_index] = result.cjk_mass[0]
-                kl[c_index, p_index] = result.kl_to_reference[0]
-                top1[c_index, p_index] = result.top1[0]
-            continue
-        rendered = renderer.render("P_default", prompt.prompt)
-        offset = 0
-        for result, used in _score_rows(model, rendered, rows, table, weight32, cjk, reference[prompt.prompt_id], batch_rows):
-            form_logp[offset : offset + used, p_index] = result.form_logp[:used]
-            word_logp[offset : offset + used, p_index] = result.word_logp[:used]
-            cjk_mass[offset : offset + used, p_index] = result.cjk_mass[:used]
-            kl[offset : offset + used, p_index] = result.kl_to_reference[:used]
-            top1[offset : offset + used, p_index] = result.top1[:used]
-            offset += used
+        ref = reference[prompt.prompt_id]
+        default_rendered = renderer.render("P_default", prompt.prompt)
+        prefix = None
+        if layout == L2:
+            prefix = build_prefix(model, default_rendered, device=scorer.weight32.device)
+        for c_index, (condition, row) in enumerate(zip(selected, rows)):
+            if layout == L2:
+                result = scorer.l2(prefix, row, ref)
+            elif condition.kind == PERSONA:
+                result = scorer.l1(renderer.render(condition.persona, prompt.prompt), RowSteer({}), ref)
+            else:  # own-prefix steered (all positions) or any L1 re-score
+                result = scorer.l1(default_rendered, row, ref)
+            form_logp[c_index, p_index] = result.form_logp[0]
+            word_logp[c_index, p_index] = result.word_logp[0]
+            cjk_mass[c_index, p_index] = result.cjk_mass[0]
+            kl[c_index, p_index] = result.kl_to_reference[0]
+            top1[c_index, p_index] = result.top1[0]
         if (p_index + 1) % 50 == 0:
             log(f"{shard_id}: {p_index + 1}/{n_p} prompts, {time.time() - started:.0f}s")
-    sentinel_end = 0.0 if persona_stage else _sentinel(model, renderer, prompts, baseline, table, weight32, cjk, batch_rows, tolerance)
+    compute_seconds = time.time() - started
+    sentinel_end = _sentinel(model, renderer, scorer, prompts, baseline, tolerance)
     if not (np.isfinite(form_logp).all() and np.isfinite(word_logp).all()):
         raise PipelineError("Non-finite scores")
     intended = [
@@ -472,7 +461,7 @@ def stage_score(ctx: RunContext, shard_id: str) -> None:
             {
                 "cids": np.asarray([condition.cid for condition in selected]),
                 "prompt_ids": np.asarray([p.prompt_id for p in prompts]),
-                "words": np.asarray(table.words),
+                "words": np.asarray(scorer.table.words),
                 "form_logp": form_logp,
                 "word_logp": word_logp,
                 "cjk_mass": cjk_mass,
@@ -487,64 +476,31 @@ def stage_score(ctx: RunContext, shard_id: str) -> None:
         files,
         {
             "stage": spec["stage"],
+            "layout": layout,
+            "prompt_set": prompt_set,
             "runtime": runtime,
             "determinism": determinism,
             "selftest": selftest,
             "bundle_sha256": bundle_hashes,
             "baseline_sha256": ctx.completed("baseline_rep1")[1]["files"]["baseline.npz"]["sha256"],
-            "batch_rows": batch_rows,
             "sentinel_max_abs": [sentinel_start, sentinel_end],
             "prompt_conditions": n_c * n_p,
-            "seconds": time.time() - started,
+            "compute_seconds": compute_seconds,
         },
     )
-    log(f"{shard_id}: scored {n_c} conditions x {n_p} prompts in {time.time() - started:.0f}s")
+    log(f"{shard_id}: scored {n_c} conditions x {n_p} prompts in {compute_seconds:.0f}s ({layout})")
 
 
-def stage_sample(ctx: RunContext, shard_id: str) -> None:
-    from .sampling import SAMPLES_PER_PROMPT, MAX_NEW_TOKENS, parse_answer, sample_answers, sampling_seed
+def stage_score(ctx: RunContext, shard_id: str) -> None:
+    _score_shard(ctx, shard_id, reference_layout=False)
 
-    spec = ctx.shard_spec(shard_id)
-    shard = ctx.shard(shard_id)
-    if shard.is_complete():
-        log(f"{shard_id}: complete and verified; skipping")
-        return
-    shard.quarantine()
-    runtime = verify_runtime(ctx, gpu=True)
-    bundle, bundle_hashes = load_bundle(ctx)
-    conditions = ctx.conditions()
-    model, tokenizer, determinism = load_model_verified(ctx)
-    selftest = _gpu_selftest(ctx, model, tokenizer)
-    weight32 = lm_head_weight32(model)
-    renderer = Renderer(tokenizer, ctx.package)
-    prompts = ctx.package.s0_prompts()
-    lexicon = ctx.package.parser_lexicon
-    cids = spec["payload"]["conditions"]
-    tokens = np.full((len(cids), len(prompts), SAMPLES_PER_PROMPT, MAX_NEW_TOKENS), -1, dtype=np.int64)
-    parsed = np.empty((len(cids), len(prompts), SAMPLES_PER_PROMPT), dtype="U24")
-    for c_index, cid in enumerate(cids):
-        condition = conditions[cid]
-        row = row_steer(condition, bundle)
-        persona = condition.persona if condition.kind == PERSONA else "P_default"
-        for p_index, prompt in enumerate(prompts):
-            rendered = renderer.render(persona, prompt.prompt)
-            samples = sample_answers(model, rendered, row, weight32=weight32, seed=sampling_seed(cid, prompt.prompt_id))
-            for s_index, sample in enumerate(samples):
-                tokens[c_index, p_index, s_index, : len(sample)] = sample
-                text = tokenizer.decode(sample, skip_special_tokens=True)
-                parsed[c_index, p_index, s_index] = parse_answer(text, lexicon["forms"], lexicon["chinese"]) or ""
-        log(f"{shard_id}: sampled condition {c_index + 1}/{len(cids)}")
-    files = {
-        "samples.npz": art.npz_bytes(
-            {"cids": np.asarray(cids), "prompt_ids": np.asarray([p.prompt_id for p in prompts]), "tokens": tokens, "parsed": parsed}
-        )
-    }
-    shard.publish(files, {"stage": "sample", "runtime": runtime, "determinism": determinism, "selftest": selftest,
-                          "bundle_sha256": bundle_hashes, "sampling": "explicit multinomial; see IMPLEMENTATION_CHOICES.json"})
+
+def stage_rescore(ctx: RunContext, shard_id: str) -> None:
+    _score_shard(ctx, shard_id, reference_layout=True)
 
 
 def run_stage(ctx: RunContext, shard_id: str) -> None:
-    from . import analysis, integrity, preflight
+    from . import analysis, fragility, integrity, preflight
 
     stages = {
         "preflight": preflight.stage_preflight,
@@ -552,8 +508,8 @@ def run_stage(ctx: RunContext, shard_id: str) -> None:
         "directions": stage_directions,
         "baseline": stage_baseline,
         "score": stage_score,
-        "score_persona": stage_score,
-        "sample": stage_sample,
+        "rescore": stage_rescore,
+        "fragility": fragility.stage_fragility,
         "integrity": integrity.stage_integrity,
         "analysis": analysis.stage_analysis,
     }

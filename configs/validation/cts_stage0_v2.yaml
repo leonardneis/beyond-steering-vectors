@@ -1,0 +1,87 @@
+# CTS Stage 0 v2 execution manifest (implementation, not the scientific contract).
+# The scientific contract is research/cts_stage0_v2 (decision spec + generated condition registry), pinned by
+# hash below; the reused v1 inputs are research/cts_stage0_v1 (tag prereg/cts-stage0-v1), verified by hash.
+# Nothing here may change a criterion, threshold, condition, prompt set, dose, site or statistic.
+schema_version: 2
+experiment_id: qwen7b_cts_stage0_v2
+
+frozen_package:
+  path: research/cts_stage0_v1
+  manifest_sha256: 6685d45685f3834b08d11641bbf058296ecfc34af48739a112f155bc27916ca0
+  prereg_tag: prereg/cts-stage0-v1
+  prereg_commit: 43dd95d3d476a9db9ebb9f8d0aa5639c65a1c1ab
+
+contract:
+  path: research/cts_stage0_v2
+  status: draft  # set to frozen at the v2 freeze (tag prereg/cts-stage0-v2); scientific runs refuse a draft
+  spec_sha256: 05db61a2a83ba51447e20ed3461f95de541a6e9b940247bfbe672920adcfed50
+  registry_sha256: 73bcdd9ffb5ebebb55b03054642f9a02779226c828d922bbeabe835685cdec80
+
+model:
+  model_id: Qwen/Qwen2.5-7B-Instruct
+  revision: a09a35458c702b33eeacc393d103063234e8bc28
+  model_config: configs/model_qwen7b_4bit.yaml
+  # SHA-256 of every file of the pinned snapshot (re-verified in every cluster job before the model is loaded).
+  snapshot_sha256:
+    config.json: 7463bb0ea78315365e6c6b74de4e73bbcc8359dfb0c5a737584e077d42c0b03c
+    generation_config.json: 3a8f9087e486054c8a4a08dae2e5a3ba62e23da212b5b8c08bc42cb983c3459f
+    model.safetensors.index.json: 624bf7c47cd12468fdc16e38a47cf4f19e0415b859a223ba3c027eed2f0e1028
+    tokenizer.json: c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539
+    tokenizer_config.json: 5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583
+    vocab.json: ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910
+    merges.txt: 599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3
+    model-00001-of-00004.safetensors: a1333e6293854747c481288ea83b348226af178dd565c49b6f9495ba1966aba7
+    model-00002-of-00004.safetensors: f5d25a2772cb825164a2a2c0fb6d51a87e282abf21e4dd75bc5cfb3cd0ea6185
+    model-00003-of-00004.safetensors: 8efdec4c1bc12317ae1a38dc42b595ce777738a64deea3fcb8a0a91381bcdfd5
+    model-00004-of-00004.safetensors: 1a72d403cdf0c1ec3cb7f289f17b394a01e64394c2e9b3c0f94dbce3faf879bd
+
+inputs:
+  extraction_file: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
+  frozen_teacher_vector: results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt
+
+# Execution identity. Values are those validated in the v1 technical validation (Phase F). If the 2026-09-28 to
+# 2026-10-01 cluster maintenance changes the driver or image, this block is updated (engineering change) before
+# TV-v2, and TV-v2 records and enforces the identity for the scientific run (spec model.execution_identity).
+execution:
+  container_image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755
+  gpu_name: NVIDIA A100-PCIE-40GB
+  nvidia_driver: 570.211.01
+  python: 3.11.10
+  cuda_runtime: "12.4"
+  packages:
+    torch: 2.5.1+cu124
+    transformers: 4.48.3
+    tokenizers: 0.21.4
+    bitsandbytes: 0.45.2
+    accelerate: 1.3.0
+    numpy: 2.1.2
+  attention_implementation: sdpa
+
+scoring:
+  canonical_layout: L2
+  reference_layout: L1
+  baseline_repeat_tolerance: 0.0001
+
+plan:
+  # Shards are sized so that planned compute x overhead factor <= shard_fraction x retirement (E3). The seconds
+  # come from the contract (placeholders until the freeze fills them from TV-v2).
+  shard_fraction_of_retirement: 0.5
+
+budget:
+  scientific_cap_a100_h: 30.0
+  planning_fraction: 0.8
+  tv_cap_a100_h: 6.0
+  tv_max_attempts: 3
+  shard_infrastructure_retries: 2
+
+hpc:
+  retirement_seconds: 3600
+  final_exit_code: 86
+  gpu_resource_exit_code: 85
+  sigterm_exit_code: 75
+  maintenance_blackouts:
+    - ["2026-09-28T10:00:00+00:00", "2026-10-01T22:00:00+00:00"]
+
+output_root: results/research/qwen7b_cts_stage0_v2
+technical_validation_root: results/research/qwen7b_cts_stage0_v2_technical_validation
+accounting_root: results/research/qwen7b_cts_stage0_v2_accounting
