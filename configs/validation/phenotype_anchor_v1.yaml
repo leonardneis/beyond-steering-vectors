@@ -1,0 +1,78 @@
+# Phenotype Anchor v1 (P1) execution manifest (implementation; the scientific contract is the preregistration
+# research/phenotype_anchor_v1/PREREGISTRATION.md, DRAFT, not frozen). Nothing here may change a hypothesis, statistic,
+# threshold, panel word, prompt set or seed role. Scientific runs refuse while ``contract.status`` is ``draft``.
+schema_version: 1
+experiment_id: qwen7b_phenotype_anchor_v1
+
+contract:
+  path: research/phenotype_anchor_v1
+  status: draft  # set to frozen at the freeze (tag prereg/phenotype-anchor-v1); scientific runs refuse a draft
+  prompt_manifest: research/phenotype_anchor_v1/prompts/anchor_prompts.jsonl
+  prompt_manifest_sha256: 192cd88708eecdffb1b111a75293d218aeb4992019df08b9c7c2beaef83286d8
+
+cts_inputs:  # reused by hash; the CTS package is not modified
+  package: research/cts_stage0_v1
+  manifest_sha256: 6685d45685f3834b08d11641bbf058296ecfc34af48739a112f155bc27916ca0
+
+model:
+  model_id: Qwen/Qwen2.5-7B-Instruct
+  revision: a09a35458c702b33eeacc393d103063234e8bc28
+  model_config: configs/model_qwen7b_4bit.yaml
+  snapshot_sha256_from: configs/validation/cts_stage0_v2.yaml  # same pinned snapshot hashes
+
+adapters:  # paths relative to SLGEO_SHARED_ROOT; digests = scripts/run_confirmatory_manifest.py::tree_digest
+  S1: {path: results/reference_reproduction_4080/qwen7b_cat_subliminal_10k_3epochs/student_lora, digest: 4f083f0af1761939b71af6be508e86957f0522c3c3391587287f658364345a8d}
+  N1: {path: results/reference_reproduction_4080/qwen7b_neutral_10k_3epochs/student_lora, digest: 78f1ce82f1a54d649c56bf50fbcc8c40d936034116726d1e2be5b7749080b57b}
+  S2: {path: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/subliminal/student_lora, digest: 087f0bf25e0933c592636460a8a1a642c68863fd098229bf825e4eba1d86dd03}
+  N2: {path: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/neutral/student_lora, digest: ea2a581b72c6f3d4b70f472652bbfd59e6787196d4aa3a18ebf5a75ddf8d1e23}
+  S3: {path: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/subliminal/student_lora, digest: PIN_AT_FIRST_READ}
+  N3: {path: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/neutral/student_lora, digest: PIN_AT_FIRST_READ}
+  # S2/N2 digests are those recorded in the FSD state metadata; S3/N3 were never pinned. The
+  # `pin-adapters` command computes them read-only before any forward and writes adapters.lock.json.
+
+arms:
+  # name: [adapter or null, context]; context "rendering" = the 2 x 2 rendering x prefix cells; otherwise a persona id
+  base: [null, rendering]
+  N1: [N1, rendering]
+  S1: [S1, rendering]
+  N2: [N2, rendering]
+  S2: [S2, rendering]
+  N3: [N3, rendering]
+  S3: [S3, rendering]
+  T_cat: [null, P_cat_T1]
+  T_dog: [null, P_dog_T1]
+  L_wolf: [null, P_wolf_T1]
+  L_fox: [null, P_fox_T1]
+  L_lion: [null, P_lion_T1]
+  L_chess: [null, P_chess]
+  L_id: [null, P_id]
+  M_cat: [null, M_cat]
+  L_cat_T2: [null, P_cat_T2]
+
+cells:
+  rendering_personas: {Q: P_default, H: P_helpful}
+  prefixes: [none, r0, r1, r2]
+  primary: Q+r0
+  capture: [Q+r0, Q+none, persona+r0, persona+none]
+  sample: [Q+r0, persona+r0]
+
+sampling:
+  k: 25
+  batch_size: 32
+  max_new_tokens: 24
+  sets: [REF50, RES]
+  arms: [base, N1, S1, N2, S2, N3, S3, T_cat]
+
+number_capture:  # disjoint number prompts for P3 (rows not used by t, PF or PF3)
+  file: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
+  rows: [12288, 13312]
+  arms: [base, N1, S1, N2, S2, N3, S3]
+
+shards:
+  max_seconds: 1800  # 0.5 x the 3,600 s retirement time; sizes re-derived from TV throughput
+
+execution:  # filled from TV-P1 on the post-maintenance cluster; scientific runs refuse placeholders
+  container_image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755
+  gpu_name: NVIDIA A100-PCIE-40GB
+  nvidia_driver: FILL_FROM_TV
+  packages: FILL_FROM_TV

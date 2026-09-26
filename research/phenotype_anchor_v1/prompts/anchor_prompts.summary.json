@@ -1,0 +1,12 @@
+{
+ "counts": {
+  "ref50": 50,
+  "direct": 56,
+  "identity": 46,
+  "hypothetical": 72,
+  "nonanimal": 25
+ },
+ "sha256": "192cd88708eecdffb1b111a75293d218aeb4992019df08b9c7c2beaef83286d8",
+ "threshold": 0.25,
+ "n_prefix": 3
+}
