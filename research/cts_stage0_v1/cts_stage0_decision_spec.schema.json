@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CTS Stage 0 decision spec",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "model",
+    "rendering",
+    "inputs",
+    "extraction",
+    "directions",
+    "intervention",
+    "endpoint",
+    "statistics",
+    "criteria",
+    "candidates",
+    "decision",
+    "integrity_checks",
+    "stage2a_precommitments"
+  ],
+  "properties": {
+    "spec_version": {
+      "const": "cts-stage0-v1"
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "name",
+        "revision"
+      ],
+      "properties": {
+        "name": {
+          "const": "Qwen/Qwen2.5-7B-Instruct"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "rendering": {
+      "type": "object",
+      "required": [
+        "empty_system_prompt_forbidden",
+        "last_three_prompt_token_ids",
+        "batch_size"
+      ],
+      "properties": {
+        "empty_system_prompt_forbidden": {
+          "const": true
+        },
+        "last_three_prompt_token_ids": {
+          "const": [
+            151644,
+            77091,
+            198
+          ]
+        },
+        "batch_size": {
+          "const": 1
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "required": [
+        "stage0_uses_set",
+        "never_forwarded_in_stage0"
+      ],
+      "properties": {
+        "stage0_uses_set": {
+          "const": "S0"
+        },
+        "never_forwarded_in_stage0": {
+          "const": [
+            "D",
+            "C"
+          ]
+        }
+      }
+    },
+    "directions": {
+      "type": "object",
+      "required": [
+        "site_slot",
+        "tested_contrasts",
+        "random",
+        "structured_null",
+        "paraphrase_contrasts"
+      ],
+      "properties": {
+        "site_slot": {
+          "const": 14
+        },
+        "tested_contrasts": {
+          "const": [
+            "c_cat_dog",
+            "c_cat_wolf",
+            "c_cat_anim"
+          ]
+        },
+        "random": {
+          "type": "object",
+          "required": [
+            "R_cov"
+          ],
+          "properties": {
+            "R_cov": {
+              "type": "object",
+              "required": [
+                "n",
+                "seed",
+                "gating"
+              ],
+              "properties": {
+                "n": {
+                  "const": 1000
+                },
+                "gating": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        "paraphrase_contrasts": {
+          "type": "object",
+          "required": [
+            "c_cat_dog",
+            "c_cat_wolf",
+            "c_cat_anim"
+          ],
+          "properties": {
+            "c_cat_anim": {
+              "const": [
+                "T3"
+              ]
+            },
+            "c_cat_dog": {
+              "const": [
+                "T2",
+                "T3"
+              ]
+            },
+            "c_cat_wolf": {
+              "const": [
+                "T2",
+                "T3"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "intervention": {
+      "type": "object",
+      "required": [
+        "dose"
+      ],
+      "properties": {
+        "dose": {
+          "type": "object",
+          "required": [
+            "kappa_primary",
+            "kappa_gating_sensitivity"
+          ],
+          "properties": {
+            "kappa_primary": {
+              "const": 1.0
+            },
+            "kappa_gating_sensitivity": {
+              "const": 0.5
+            }
+          }
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "required": [
+        "k_families",
+        "alpha_TS",
+        "alpha_PC",
+        "bootstrap"
+      ],
+      "properties": {
+        "k_families": {
+          "const": 3
+        },
+        "alpha_PC": {
+          "const": 0.05
+        },
+        "bootstrap": {
+          "type": "object",
+          "required": [
+            "unit",
+            "n_boot",
+            "seed"
+          ],
+          "properties": {
+            "unit": {
+              "const": "prompt"
+            },
+            "n_boot": {
+              "const": 10000
+            }
+          }
+        }
+      }
+    },
+    "criteria": {
+      "type": "object",
+      "required": [
+        "R",
+        "TS",
+        "PC",
+        "PC_star_X",
+        "PC_star_anim",
+        "PC_pos",
+        "R_t_cat",
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7"
+      ],
+      "properties": {
+        "R": {
+          "type": "object",
+          "required": [
+            "threshold"
+          ],
+          "properties": {
+            "threshold": {
+              "const": 0.95
+            }
+          }
+        },
+        "TS": {
+          "type": "object",
+          "required": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "e_c_cat_anim",
+            "e_c_cat_anim_interpretation"
+          ],
+          "properties": {
+            "e_c_cat_anim": {
+              "type": "string",
+              "not": {
+                "pattern": "OPEN"
+              }
+            }
+          }
+        },
+        "A4": {
+          "type": "object",
+          "required": [
+            "window"
+          ],
+          "properties": {
+            "window": {
+              "const": [
+                0.01,
+                0.5
+              ]
+            }
+          }
+        }
+      }
+    },
+    "candidates": {
+      "type": "object",
+      "required": [
+        "order",
+        "third_fallback"
+      ],
+      "properties": {
+        "order": {
+          "const": [
+            "dog",
+            "wolf"
+          ]
+        },
+        "third_fallback": {
+          "const": null
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "order",
+        "label"
+      ],
+      "properties": {
+        "order": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "required": [
+              "rank",
+              "class",
+              "if"
+            ]
+          }
+        }
+      }
+    },
+    "integrity_checks": {
+      "type": "array",
+      "minItems": 9
+    }
+  }
+}

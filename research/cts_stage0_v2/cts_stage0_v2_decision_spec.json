@@ -1,0 +1,521 @@
+{
+  "spec_version": "cts-stage0-v2",
+  "status": "DRAFT - not frozen, not audited for freeze, no forward pass authorized",
+  "governing_text": "PREREGISTRATION.md",
+  "authority": "This spec governs where it and PREREGISTRATION.md differ; any difference is a draft-audit defect.",
+  "supersedes": "nothing; cts-stage0-v1 (tag prereg/cts-stage0-v1, commit 43dd95d3d476a9db9ebb9f8d0aa5639c65a1c1ab) is a stopped registration and stays unchanged",
+  "frozen_v1_inputs_by_hash": {
+    "note": "Reused byte-identically. Referenced only by SHA-256; never copied, edited or re-derived. The implementation must verify each hash before use and refuse on mismatch.",
+    "source_package": "research/cts_stage0_v1/ at tag prereg/cts-stage0-v1",
+    "files": {
+      "cts_stage0_personas.json": "c019ef5ca91226b9c518998188a4e3333cce1032a144589ffafe38696365aed8",
+      "cts_stage0_null_pool.json": "ec2eccf4b3376f610cf13b67e6cb8e0db0a6c4a64b30e8eaa479117fe519e206",
+      "cts_stage0_endpoint_tokens.json": "fb1fba6838d7fc67302275a764790dff1d77a64eea635497bf051dc93d8805c5",
+      "cts_stage0_prompts.jsonl": "0d9e771228ad79f9979179805d27429a8ced78fffd6e669564e3d450ef5e43b8",
+      "cts_stage0_partition.json": "2f30ab9c3707d80abfc84d2fe5e03a016eaaf10fe1ae3e4dd40b8233a4b58a29",
+      "cts_stage0_validation_prompts.jsonl": "5bd4fbe11a8b7b625cae82c4e30a226135671b7ac1e478c1b8babccd5d321896",
+      "cts_stage0_parser_lexicon.json": "353ff98c97bc5a5d1ec9a9461ca70a7e96f9d4e178c001c43925fb6647077e82",
+      "ADMISSIBILITY_A1_A3.md": "c58e99a32da8bbdd406c947377bbe02d48aebab3e01e88073707547c8919c6bc",
+      "PROMPT_AUTHORING.md": "01a35ed8ba133530bfe0feef3c2a4c9ff94b24c1b8b7db8250b6e2dc1fceedf2"
+    },
+    "external_inputs": {
+      "model_revision": "Qwen/Qwen2.5-7B-Instruct@a09a35458c702b33eeacc393d103063234e8bc28",
+      "extraction_file": "data/generated/reference_qwen7b_cat_subliminal_30k.jsonl",
+      "extraction_file_sha256": "0d87aaa549251f883950a87b8dbce89db7862cd228ac551c3e7d0be4bd5ffaf5",
+      "extraction_prompts_json_sha256": "ea910ff82cf7ef33ca16709cae6a999b2c981f0163cf72e1e0d88c06b0d7f5f7",
+      "tokenizer_files_sha256": {
+        "tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+        "tokenizer_config.json": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+        "merges.txt": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+      }
+    }
+  },
+  "model": {
+    "name": "Qwen/Qwen2.5-7B-Instruct",
+    "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "quantization": "NF4 4-bit via configs/model_qwen7b_4bit.yaml (bnb_4bit_compute_dtype float16)",
+    "execution_identity": "one identity (GPU model, driver, container image digest, python and package versions, snapshot hashes) for TV-v2 and the whole scientific run; recorded in the TV-v2 report and enforced by every scientific job"
+  },
+  "rendering": {
+    "reference_context": "system=None (Qwen default system prompt)",
+    "empty_system_prompt_forbidden": true,
+    "add_generation_prompt": true,
+    "last_three_prompt_token_ids": [
+      151644,
+      77091,
+      198
+    ],
+    "padding": false
+  },
+  "execution_layout": {
+    "canonical": "L2",
+    "L2": {
+      "definition": "Per prompt and per context: one forward over prompt positions 0..L-2 (unsteered) producing a prefix KV cache; per condition, batch 1: forward of position L-1 from a copy of that cache with the condition's hook active, then one flat-packed continuation forward of all answer forms (4D segment mask, explicit position ids, no steering), from which L_w is computed.",
+      "applies_to": "every condition whose steering acts only at position L-1 (mode last) in a context whose prefix is shared",
+      "own_prefix_rule": "conditions with mode all_positions, and persona-context conditions, have no condition-independent prefix to share; for them L2 reduces to one full prefill of positions 0..L-1 followed by the same flat-packed continuation (identical to the v1 L1 layout)",
+      "coupling": "none by construction: every condition is computed at batch 1; the shared prefix is condition-independent at every layer"
+    },
+    "reference_layout": {
+      "name": "L1",
+      "definition": "v1 implemented layout at commit 8afd41d: batch 1, full prefill of positions 0..L-1 with the hook, then the flat-packed continuation",
+      "use": "only for the in-run fragility check (integrity.fragility); never for any gating statistic"
+    },
+    "condition_batching": "not allowed in v2",
+    "baseline_rule": "every steered-minus-unsteered or context-minus-default difference is formed between conditions of the same cost class: L2 conditions against the L2 baseline 'unsteered'; own-prefix conditions (PC_pos, its reference, A6 persona contexts) against the own-prefix baseline 'persona:P_default'; L1 re-scores against the L1 re-score of 'unsteered'. No statistic mixes layouts."
+  },
+  "inputs": {
+    "stage0_uses_set": "S0",
+    "never_forwarded_in_stage0": [
+      "D",
+      "C"
+    ],
+    "prompt_sets": {
+      "S0_all": "all 334 S0 prompts (300 animal-family + 34 non-animal and factual control items)",
+      "S0_animal": "the 300 S0 animal-family prompts (direct, identity, hypothetical; 100 each)"
+    },
+    "prompt_set_rule": "named conditions are scored on S0_all; every null and random-reference condition is scored on S0_animal; every gating statistic uses S0_animal only"
+  },
+  "personas": {
+    "source": "cts_stage0_personas.json (v1, by hash)",
+    "extracted": [
+      "P_default",
+      "P_cat_T1",
+      "P_cat_T2",
+      "P_cat_T3",
+      "P_dog_T1",
+      "P_dog_T2",
+      "P_dog_T3",
+      "P_wolf_T1",
+      "P_wolf_T2",
+      "P_wolf_T3",
+      "P_lion_T1",
+      "P_horse_T1",
+      "P_rabbit_T1",
+      "P_elephant_T1",
+      "P_lion_T3",
+      "P_horse_T3",
+      "P_rabbit_T3",
+      "P_elephant_T3",
+      "M_cat",
+      "M_dog",
+      "M_wolf",
+      "P_chess",
+      "P_blue",
+      "P_id",
+      "P_qwencat",
+      "N_bear_T1",
+      "N_deer_T1",
+      "N_monkey_T1",
+      "N_panda_T1",
+      "N_dolphin_T1",
+      "N_bee_T1",
+      "N_sheep_T1",
+      "N_goat_T1",
+      "N_cow_T1",
+      "N_pig_T1",
+      "N_duck_T1",
+      "N_frog_T1",
+      "N_whale_T1",
+      "N_shark_T1",
+      "N_snake_T1",
+      "N_mouse_T1"
+    ],
+    "not_extracted_in_v2": {
+      "P_fox_T1": "only used by the dropped descriptive fox/owl contrasts; fox stays a scored off-target word",
+      "P_owl_T1": "same",
+      "P_helpful": "rendering descriptor for other studies; not used by any v2 statistic"
+    }
+  },
+  "extraction": {
+    "file": "data/generated/reference_qwen7b_cat_subliminal_30k.jsonl",
+    "rows": [
+      0,
+      1023
+    ],
+    "field": "prompt",
+    "halves": [
+      [
+        0,
+        511
+      ],
+      [
+        512,
+        1023
+      ]
+    ],
+    "read_position": "last prompt token (id 198)",
+    "slots": [
+      1,
+      28
+    ],
+    "slot_definition": "slot k = hidden_states[k] = output of decoder block k-1 (0-based); slot 28 after final RMSNorm",
+    "stored_per_prompt_slots": [
+      14,
+      27,
+      28
+    ],
+    "stored_covariance": {
+      "persona": "P_default",
+      "slot": 14
+    },
+    "mu_default_shared": true,
+    "layout": "batch 1, no padding, unsteered"
+  },
+  "directions": {
+    "site_slot": 14,
+    "secondary_slot_descriptive": 27,
+    "raw_axis": "t_P = mu(P) - mu(P_default)",
+    "pair_contrast": "c_{A,B} = unit(t_A - t_B), template T1 unless stated",
+    "tested_contrasts": [
+      "c_cat_dog",
+      "c_cat_wolf",
+      "c_cat_anim"
+    ],
+    "c_cat_anim": {
+      "formula": "unit(t_cat - mean_{X in A_len} t_X)",
+      "A_len": [
+        "dog",
+        "wolf",
+        "lion",
+        "horse",
+        "rabbit",
+        "elephant"
+      ]
+    },
+    "paraphrase_contrasts": {
+      "c_cat_dog": [
+        "T2",
+        "T3"
+      ],
+      "c_cat_wolf": [
+        "T2",
+        "T3"
+      ],
+      "c_cat_anim": [
+        "T3"
+      ],
+      "c_cat_anim_T3": "unit(t_cat^T3 - mean_{X in A_len} t_X^T3)"
+    },
+    "mention_contrast": "m_{A,B} = unit(t_{M_A} - t_{M_B})",
+    "shared_components": {
+      "g_id": "unit(t_{P_id})",
+      "h": "unit(t_cat - t_qwencat)",
+      "g_tmpl": "unit(mean(t_chess, t_blue))",
+      "g_anim": "unit(mean_{N in null_pool.selected_16} t_{N_T1} - mean(t_chess, t_blue)); held-out animal-generic component built only from the 16 null-pool T1 personas, which share no persona with cat, dog, wolf or A_len (changed from v1, whose g_anim contained t_cat and the A_len axes)",
+      "span_G": "G = column space of the 3584 x 4 matrix [g_anim, g_tmpl, g_id, h] at slot 14 (float64); P_G from its thin SVD, keeping singular vectors with singular value > 1e-6 x the largest; the projector is independent of column order; the retained rank is recorded",
+      "g_anim_v1_descriptive": "unit(mean_{X in A_len + cat} t_X - mean(t_chess, t_blue)); v1 definition, computed and reported descriptively only; never used by TS(f) or any label",
+      "held_out_principle": "every component of G is estimated from personas that do not enter the tested contrast, except h, whose cat content cancels by construction (t_cat - t_qwencat)"
+    },
+    "leakage_free_contrasts": {
+      "formula": "c_perpG = unit(c - P_G c), P_G the orthogonal projector onto G",
+      "applies_to": [
+        "c_cat_dog",
+        "c_cat_wolf",
+        "c_cat_anim"
+      ],
+      "half_estimates": "G and c are rebuilt from the same half means; R(c_perpG) = cos(c_perpG from half 1, c_perpG from half 2)",
+      "reported": "cos(c, P_G c), ||P_G c||, and the share of ||P_G c||^2 per SVD direction and per original component (least-squares coefficients), per contrast"
+    },
+    "slot27_contrasts_descriptive": "c_cat_dog, c_cat_wolf, c_cat_anim rebuilt from slot-27 axes; dose uses tau at slot 27",
+    "random": {
+      "R_cov": {
+        "distribution": "unit(z), z ~ N(0, Sigma_14)",
+        "construction": "as v1 spec directions.random.R_cov.construction: Sigma_14 = sample covariance (ddof 1) of the 1,024 P_default slot-14 states (float64); z = X_c^T g / sqrt(1023), g ~ N(0, I_1024); numpy.random.default_rng(20260925), g drawn as one (199, 1024) standard_normal array in row order; direction i = unit(z_i)",
+        "n": 199,
+        "gating": true,
+        "PC_reference": "the first 99 R_cov directions in generation order",
+        "sign_convention": "random directions are added with sign +1 only"
+      },
+      "R_iso": "not used in v2"
+    },
+    "structured_null": {
+      "pairs": "all 240 ordered pairs (a, b), a != b, of null_pool.selected_16, T1 personas N_a_T1, N_b_T1",
+      "name": "null:{a}>{b} with singular persona stems (e.g. null:bear>deer)",
+      "statistic": "same statistic as the tested contrast, same off-target set, norm-matched to the tested magnitude kappa*|tau(c)|, kappa = 1"
+    }
+  },
+  "intervention": {
+    "hook": "forward hook on decoder block (slot - 1) output",
+    "verification": "change is read at every slot > site (not only site + 1)",
+    "position": "absolute index prompt_len - 1, prefill only; answer forms are scored without steering",
+    "forbidden_helper": "residual_intervention(positions='last')",
+    "dose": {
+      "teacher_coordinate": "tau(D) = <t_cat, unit(D)> at the site slot, from the extraction prompts, written to a hashed sidecar before any steering; for slot-27 directions t_cat at slot 27",
+      "vector": "s * kappa * |tau(D)| * unit(D), s in {+1, -1}",
+      "kappa_primary": 1.0,
+      "kappa_gating_sensitivity": 0.5,
+      "kappa_descriptive": [
+        0.25
+      ],
+      "paraphrase_dose": "kappa * |<t_cat^Tj, unit(c^Tj)>|",
+      "perpG_dose": "kappa * |<t_cat, c_perpG>| (its own teacher coordinate)",
+      "mention_dose": "|tau(c)| of the compared tested contrast",
+      "shared_label_dose": "|tau(c)| of the compared tested contrast (equal norm to c)",
+      "null_dose": "|tau(c)| of the compared tested contrast",
+      "PC": "raw t_cat (magnitude ||t_cat||)",
+      "PC_star": "unit(t_cat) at magnitude |tau(c)|, per tested contrast",
+      "PC_pos": "raw t_cat added at every prompt position 0..L-1 at slot 14, prefill only",
+      "A7_diagonal": "raw t_X (magnitude ||t_X||)"
+    }
+  },
+  "endpoint": {
+    "word_score": "L_w = log sum_{f in F(w)} P(f tokens then any boundary id | prompt)",
+    "forms_and_boundary": "cts_stage0_endpoint_tokens.json (v1, by hash)",
+    "pairwise_log_odds": "l_{w,o} = L_w - L_o",
+    "set_log_odds": "l_{w,O} = L_w - logsumexp_{o in O} L_o",
+    "animal_mass": "L_anim = logsumexp over the 12 scored animal words {cat, dog, wolf, lion, horse, rabbit, elephant, fox, owl, turtle, spider, ant}",
+    "delta": "mean over S0_animal prompts of steered minus unsteered, family weights 1/3 each",
+    "O_panel": [
+      "dog",
+      "wolf",
+      "lion",
+      "horse",
+      "rabbit",
+      "elephant",
+      "fox",
+      "owl"
+    ],
+    "O_for_candidate_X": "O_panel minus X",
+    "O_for_c_cat_anim": [
+      "fox",
+      "owl",
+      "turtle",
+      "spider",
+      "ant"
+    ],
+    "sampling": "not part of v2"
+  },
+  "statistics": {
+    "k_families": 3,
+    "alpha_TS": 0.016666666666666666,
+    "alpha_PC": 0.05,
+    "bootstrap": "identical to v1 spec statistics.bootstrap (prompt unit, stratified by family, fixed weights 1/3, n_boot 10000, numpy.random.default_rng(20260925), one (10000, 100) index matrix per family in order direct, identity, hypothetical, shared by every statistic and condition, type-7 percentile interval at alpha_TS/2 and 1 - alpha_TS/2, a bound equal to 0 does not exclude 0)",
+    "SE_boot": "standard deviation (ddof 1) of the 10,000 bootstrap replicates of a statistic",
+    "rank_test": {
+      "p": "(1 + #{T_null >= T_obs}) / (1 + n)",
+      "pass": "p < alpha",
+      "structured_null": "n = 240, alpha = alpha_TS: pass iff #{T_null >= T_obs} <= 3",
+      "R_cov": "n = 199, alpha = alpha_TS: pass iff #{T_null >= T_obs} <= 2",
+      "PC_reference": "n = 99, alpha = alpha_PC: pass iff #{T_null >= T_obs} <= 3",
+      "ties": "a null equal to T_obs counts as an exceedance"
+    }
+  },
+  "criteria": {
+    "R": {
+      "statistic": "cosine of half-estimates (rows 0-511 vs 512-1023) at slot 14",
+      "threshold": 0.95,
+      "comparison": ">=",
+      "half_axes": "as v1 spec criteria.R.half_axes"
+    },
+    "TS": {
+      "applies_to": [
+        "c_cat_dog",
+        "c_cat_wolf",
+        "c_cat_anim"
+      ],
+      "pass": "a and b and c and d1 and d2 and e and f",
+      "a": "R(c, T1)",
+      "b": "CI_low(Delta l_{cat,O}(+c)) > 0 and CI_high(Delta l_{cat,O}(-c)) < 0; for c_cat_X also CI_low(Delta l_{X,O}(-c)) > 0",
+      "c": "for every o in O: CI_low(Delta l_{cat,o}(+c)) > 0; for c_cat_X also for every o in O: CI_low(Delta l_{X,o}(-c)) > 0",
+      "d1": "structured-null rank test on T = Delta l_{cat,O}(+c) passes",
+      "d2": "R_cov rank test on T = Delta l_{cat,O}(+c) passes (R_cov at magnitude |tau(c)|)",
+      "e": "for c_cat_dog and c_cat_wolf: point-estimate signs of (b) hold at kappa 0.5 (T1) and with c^T2 and c^T3 at their own kappa 1 doses; for c_cat_anim: at kappa 0.5 (T1) and with c_cat_anim^T3 only",
+      "e_c_cat_anim_interpretation": "robustness to one independent persona paraphrase (T3) only; never described as multi-paraphrase robustness",
+      "f": "for c_perpG of the same contrast: R(c_perpG) >= 0.95 and the (b) and (c) conditions hold for c_perpG at its own kappa 1 teacher coordinate",
+      "c_cat_anim_off_target": "O replaced by O_for_c_cat_anim in b, c, d1, d2, e, f and PC_star_anim",
+      "TS_abcde": "a and b and c and d1 and d2 and e (reported; used to name the pivot reason)"
+    },
+    "PC": "CI_low(Delta l_{cat,O_panel}(t_cat)) > 0 at level 1 - alpha_TS AND PC_reference rank test vs the first 99 R_cov at magnitude ||t_cat|| (mode last) passes",
+    "PC_star": "per tested contrast: CI_low(Delta l_{cat,O}(unit(t_cat) at |tau(c)|)) > 0 at level 1 - alpha_TS (O per contrast)",
+    "PC_pos": "PC criterion with t_cat added at every prompt position; reference = the first 99 R_cov added at every position at magnitude ||t_cat||",
+    "R_t_cat": "R(raw t_cat) at slot 14",
+    "A1_A3": "decided pre-freeze in v1 ADMISSIBILITY_A1_A3.md (by hash): dog pass, wolf pass-weak",
+    "A4": {
+      "statistic": "mean over S0_animal (family weights 1/3) of exp(L_X), unsteered",
+      "window": [
+        0.01,
+        0.5
+      ],
+      "classification": "heuristic (unchanged from v1)"
+    },
+    "A5": "TS(c_cat_X)",
+    "A6": "unsteered: CI_low(l_{X,O}(P_X_T1 context) - l_{X,O}(default context)) > 0 at level 1 - alpha_TS, O = O_panel minus X",
+    "A7": "CI_low(Delta l_{X,O}(raw t_X)) > 0 at level 1 - alpha_TS, O = O_panel minus X"
+  },
+  "candidates": {
+    "order": [
+      "dog",
+      "wolf"
+    ],
+    "third_fallback": null
+  },
+  "decision": {
+    "compute_all_criteria_for_all_candidates": true,
+    "order": [
+      {
+        "rank": 1,
+        "class": "TECHNICAL_FAIL",
+        "if": "any integrity check fails (including integrity.fragility and a BUDGET_STOP)",
+        "rerun": "governed by accounting.rerun"
+      },
+      {
+        "rank": 2,
+        "class": "STOP_INSTRUMENT",
+        "if": "(not PC and not PC_pos) or not R_t_cat"
+      },
+      {
+        "rank": 3,
+        "class": "INCONCLUSIVE_POSITION",
+        "if": "not PC and PC_pos",
+        "note": "overrides any TS pass"
+      },
+      {
+        "rank": 4,
+        "class": "GO_X",
+        "if": "first X in candidates.order with A4 and A5 and A6 and A7",
+        "stage2a_primary": "c_cat_anim if TS(c_cat_anim) else c_cat_X"
+      },
+      {
+        "rank": 5,
+        "class": "GO_CAT_ONLY",
+        "if": "TS(c_cat_anim) or TS(c_cat_X) for some X",
+        "stage2a_primary": "c_cat_anim if TS(c_cat_anim) else first passing c_cat_X in candidate order",
+        "stage1": "not started"
+      },
+      {
+        "rank": 6,
+        "class": "INCONCLUSIVE_DOSE",
+        "if": "none of ranks 1-5, and PC_star fails for all three tested contrasts"
+      },
+      {
+        "rank": 7,
+        "class": "PIVOT_SHARED_LEAKAGE",
+        "if": "none of ranks 1-6, and TS_abcde holds for at least one tested contrast",
+        "meaning": "at least one contrast passes every TS part except f: its selectivity is not separable from the constructed shared components"
+      },
+      {
+        "rank": 8,
+        "class": "PIVOT_NO_BASE_VALIDATED_CONTRAST",
+        "if": "otherwise"
+      }
+    ],
+    "pivot_consequence": "ranks 7 and 8: CTS as designed stops; next steps (DAS or model diffing) need a separate preregistration",
+    "labels": {
+      "applies_to": "every contrast c with TS(c)",
+      "PREFERENCE_CONTRAST": "CI_low(Delta l_{cat,O}(+c) - Delta l_{cat,O}(+m)) > 0 at level 1 - alpha_TS, m the matching mention contrast at |tau(c)| (for c_cat_anim: against m_cat_dog and m_cat_wolf both, with O_for_c_cat_anim)",
+      "LEXICAL_NOT_EXCLUDED": "otherwise",
+      "BASE_SHARED_DIRECTION": {
+        "applies_to": "each g in {g_anim, g_tmpl, g_id}, relative to each c with TS(c)",
+        "dose": "+g at magnitude |tau(c)|",
+        "i_shared_effect": "CI_low(Delta L_anim(+g)) > 0 at level 1 - alpha_TS",
+        "ii_not_trait_selective": "for every o in S(c), with D+_o = Delta l_{cat,o}(+g) - r * Delta l_{cat,o}(+c) and D-_o = Delta l_{cat,o}(+g) + r * Delta l_{cat,o}(+c) computed per paired bootstrap replicate: the type-7 quantile of D+_o at probability 1 - alpha_TS is < 0 AND the type-7 quantile of D-_o at probability alpha_TS is > 0 (two one-sided tests, each at level alpha_TS; equivalent to a (1 - 2 alpha_TS) interval inside the margin)",
+        "S_of_c": "for c_cat_X: O_panel minus X, plus X; for c_cat_anim: O_for_c_cat_anim",
+        "r": 0.2,
+        "r_classification": "heuristic smallest effect of interest, inherited from the frozen program value 'carries' = 0.20 (v1 spec stage2a_precommitments.carries); no absolute nat margin is justified by existing evidence",
+        "if_not_assessable": "if no c passes TS, the label is NOT_ASSESSABLE for every g",
+        "consequence": "label only; constrains Stage-2 wording; never changes the decision"
+      }
+    }
+  },
+  "integrity_checks": [
+    "every frozen_v1_inputs_by_hash file and external input hash matches",
+    "render identity test on all 1024 extraction rows",
+    "last-three-token assertion on every forward",
+    "hook unit tests pass in the execution environment (change visible at every slot > site)",
+    "no NaN or inf in any stored tensor or score",
+    "all extraction rows and all prompts of the assigned prompt set present for every persona and condition",
+    "baseline (unsteered, L2) scored twice on different hosts: every form log-prob identical within 1e-4",
+    "sidecars carry the execution commit and the execution identity digest",
+    "no D or C prompt id appears in any Stage-0 output",
+    "runtime re-tokenization reproduces every frozen token id and boundary_ids_sha256",
+    "integrity.fragility passes",
+    "accounting ledger complete and within accounting.scientific.cap"
+  ],
+  "integrity": {
+    "fragility": {
+      "purpose": "decision-level numerical robustness: no gating statistic may depend on the choice between two legitimate batch-1 layouts by more than a fixed fraction of its statistical uncertainty",
+      "reference_rescore": "re-scored in L1 on their prompt sets: the L2 baseline, every gating named condition of cost class L2_shared_prefix, and the first 10 conditions in registry order of each of the 7 L2 null families (structured null x 3 magnitudes, R_cov x 3 magnitudes, PC_reference mode last); own-prefix conditions are computed identically in L2 and L1 and are not re-scored (registry flag reference_rescore)",
+      "epsilon": 0.04,
+      "epsilon_derivation": "Monte-Carlo standard error of the percentile-bootstrap CI bound at probability 1 - alpha_TS/2 with n_boot = 10,000, in units of the bootstrap SE, under a normal approximation: sqrt(p(1-p)/B) / phi(z_p) with p = 0.991667, z_p = 2.394, phi(z_p) = 0.0227, B = 10,000, giving 0.040. The frozen design already accepts random imprecision of this size in every CI bound; a deterministic layout shift no larger than it cannot change decisions more often than the bootstrap's own Monte-Carlo noise does.",
+      "criterion_CI_statistics": "standardized shift z_S = (S_L2 - S_L1) / SE_boot(S_L2) for every gating or label statistic S computable from re-scored conditions",
+      "criterion_rank_tests": "standardized shift z_j = (T_j,L2 - T_j,L1) / SD_F for every re-scored null condition j of family F, SD_F = standard deviation (ddof 1) of the L2 statistics of all members of F",
+      "consequence": "any violation: TECHNICAL_FAIL (reason FRAGILITY); not rerunnable, because the cause is not infrastructure",
+      "order": "evaluated automatically before any decision criterion is evaluated; the decision JSON then contains only the fragility report",
+      "criterion": "pool all m standardized shifts (m is counted and reported by the implementation). PASS iff (1) RMS(z) <= epsilon and (2) max |z| <= epsilon * q_m, q_m = Phi^{-1}(1 - 0.05 / (2 m)). Rationale: (1) compares the typical layout shift with the Monte-Carlo imprecision the design accepts in every CI bound; (2) flags a single gross shift, set so that shifts distributed as N(0, epsilon^2) - the accepted regime - exceed it with probability <= 0.05 over all m statistics"
+    }
+  },
+  "accounting": {
+    "unit": "A100-h = sum over GPU jobs of RemoteWallClockTime (s) x RequestGpus / 3600, read from the HTCondor job ad of every execution attempt; any GPU model counts 1:1",
+    "cpu_jobs": "not counted",
+    "categories": {
+      "ENG": "development and debugging; never forwards S0, D or C prompts; logged, not capped by this prereg",
+      "TV": "every job of TV-v2 (all attempts); cap 6 A100-h; at most 3 TV-v2 attempts; exceeding either stops TV-v2 and requires a dated researcher decision (TV is outcome-blind, so an extension is a resource decision, not a forking risk)",
+      "SCI": "every job submitted under the scientific authorization: successful, failed, preempted, retried, infrastructure-failed and integrity-failed jobs alike"
+    },
+    "scientific": {
+      "cap": 30.0,
+      "authorization_rule": "authorization is refused unless P <= 0.8 * cap, P = projected SCI A100-h from the frozen registry x TV-v2-measured seconds per cost class x TV-v2-measured end-to-end overhead factor",
+      "submit_rule": "every scientific submission is refused unless consumed_SCI + remaining_projection <= cap; enforced in code (E4)",
+      "budget_stop": "if at any point consumed_SCI + remaining_projection > cap: no further submission; outputs are sealed and not analysed; the decision is TECHNICAL_FAIL (reason BUDGET_STOP); remedy only a new preregistration version",
+      "shard_retry": "infrastructure-class failures (preemption, node or GPU fault, scheduler eviction) may be retried at most 2 times per shard; integrity-class failures are final (E1, E2); every attempt counts to SCI",
+      "rerun": "at most one rerun of the run for a documented infrastructure cause; it reuses completed, hash-verified shards; it counts to the same cap; the cap is never reset",
+      "rationale": "counting every attempt makes the cap a hard property and removes the classification 'infrastructure' as a degree of freedom; the 0.8 planning fraction is the v1 convention, retained as the reserve for shard retries",
+      "pre_authorization_reductions": "if the TV-v2 projection P exceeds 0.8 x cap, the following outcome-blind reductions are applied in this order, each only as far as needed, before freeze: (1) drop all descriptive conditions; (2) reduce the fragility null subset from the first 10 to the first 5 members per null family; if P still exceeds 0.8 x cap, v2 is not authorized and the researcher decides (a dated record before freeze) between raising the cap and a new version. No confirmatory condition is ever removed."
+    },
+    "historical": "v1 TV, v1 development and Phase F jobs are recorded as historical and count to no v2 category"
+  },
+  "condition_registry": {
+    "generator": "tools/generate_registry.py",
+    "outputs": [
+      "cts_stage0_v2_condition_registry.jsonl",
+      "COST_TABLE.md"
+    ],
+    "authority": "the generated registry is the complete list of scientific conditions; the implementation must reproduce it byte-identically from this spec (static test)",
+    "cost_classes": {
+      "L2_shared_prefix": "steering mode last in the default context: per condition only position L-1 plus the packed continuation",
+      "own_prefix": "mode all_positions or a persona context: full prefill plus packed continuation",
+      "extraction": "unsteered prefill of extraction prompts, one per persona and row",
+      "L1_reference": "fragility re-score in the reference layout"
+    },
+    "planning_seconds_placeholder": {
+      "L2_shared_prefix": 0.11,
+      "own_prefix": 0.21,
+      "L1_reference": 0.21,
+      "extraction_forward": 0.1,
+      "overhead_factor": 1.25,
+      "source": "Phase F A100 measurements (L1 0.207-0.227 s; prefix-reuse prototype 0.104-0.114 s); extraction per-forward time and the overhead factor are estimates; all are replaced by TV-v2 measurements before authorization"
+    }
+  },
+  "engineering_prerequisites_for_authorization": {
+    "E1": "failed preflight is final: no retry, and a completion marker with pass=false is refused by every downstream stage",
+    "E2": "error classes: infrastructure -> bounded retry (accounting.scientific.shard_retry); integrity (sentinel, self-test, hash, non-finite, D/C leak, fragility) -> final",
+    "E3": "shard size derived from TV-v2 throughput so that a shard runs <= 0.5 x the retirement time; intra-shard resumption not required",
+    "E4": "code-level budget gate: ledger of every GPU job by category from job ads; submit refused per accounting rules; BUDGET_STOP implemented",
+    "E5": "immutable per-attempt records (cluster.proc.attempt), read by the integrity stage",
+    "minors": "freeze or remove the untested cached-vs-uncached tolerance; hook verification at every slot > site; multi-row real-model self-test; guards recompute pass flags instead of trusting stored ones; write_once without TOCTOU; image check on CPU nodes; venv verified by hash",
+    "status": "all open; required before scientific authorization, not before freeze"
+  },
+  "tv_v2": {
+    "prompts": "V (cts_stage0_validation_prompts.jsonl, v1, by hash) only; nonce persona and TV-seed directions only; no real persona, panel word, S0/D/C id or scientific direction",
+    "checks": [
+      "execution identity recorded and matched on >= 2 hosts",
+      "hook self-test; planted effect at block 13 and block 27 (both reported; the gate is block 27 as in v1 technical validation)",
+      "L2 repeat and cross-host bitwise identity",
+      "L2 vs L1 fragility estimate on V (descriptive; V has 40 prompts, too few for a gate; see PREREGISTRATION §9.3)",
+      "throughput per cost class on S0-length-matched stand-in prompts, steered, and end-to-end overhead factor from a shard dry run",
+      "budget projection P from the frozen registry"
+    ],
+    "gate": "authorization requires every check to pass and P <= 0.8 * cap",
+    "layout_failure": "if L2 fails any TV-v2 determinism check, L1 becomes canonical only if its projection satisfies the authorization rule; otherwise v2 is not authorized (researcher decision as in accounting.scientific.pre_authorization_reductions)"
+  },
+  "sequence": [
+    "1 draft (this spec) and independent static audit",
+    "2 implementation on a public branch from master (not the v1 lineage), including E1-E5",
+    "3 TV-v2 at the execution commit on the execution identity",
+    "4 freeze: the only values filled from TV-v2 are the planning seconds per cost class, the overhead factor, the extraction seconds and the execution identity; no scientific parameter may change as a function of TV-v2",
+    "5 researcher authorization if P <= 0.8 x cap",
+    "6 one scientific execution; automated analysis; independent audit; release"
+  ],
+  "stage2a_precommitments": "unchanged from v1 spec stage2a_precommitments, plus: Stage 2a may consume the BASE_SHARED_DIRECTION labels and the c_perpG vectors of passing contrasts; it may not consume doses or prompt-level results"
+}

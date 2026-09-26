@@ -8,3 +8,5 @@
 *.sh text eol=lf
 *.sub text eol=lf
 *.dag text eol=lf
+research/cts_stage0_v1/** -text
+research/cts_stage0_v2/** -text

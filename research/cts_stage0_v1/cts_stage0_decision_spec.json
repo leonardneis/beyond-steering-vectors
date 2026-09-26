@@ -1,0 +1,381 @@
+{
+  "spec_version": "cts-stage0-v1",
+  "governing_text": "PREREGISTRATION.md",
+  "status": "freeze candidate",
+  "model": {
+    "name": "Qwen/Qwen2.5-7B-Instruct",
+    "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "quantization": "NF4 4-bit via configs/model_qwen7b_4bit.yaml (bnb_4bit_compute_dtype float16)",
+    "package_versions": "recorded from the cluster execution environment in the execution sidecar; hook unit tests run in that environment"
+  },
+  "rendering": {
+    "reference_context": "system=None (Qwen default system prompt)",
+    "empty_system_prompt_forbidden": true,
+    "add_generation_prompt": true,
+    "last_three_prompt_token_ids": [
+      151644,
+      77091,
+      198
+    ],
+    "batch_size": 1,
+    "padding": false,
+    "condition_batching_allowed_if": {
+      "max_abs_logprob_diff_vs_batch1_on_V": 0.001
+    }
+  },
+  "inputs": {
+    "personas_file": "cts_stage0_personas.json",
+    "null_pool_file": "cts_stage0_null_pool.json",
+    "endpoint_tokens_file": "cts_stage0_endpoint_tokens.json",
+    "prompts_file": "cts_stage0_prompts.jsonl",
+    "partition_file": "cts_stage0_partition.json",
+    "validation_prompts_file": "cts_stage0_validation_prompts.jsonl",
+    "stage0_uses_set": "S0",
+    "never_forwarded_in_stage0": [
+      "D",
+      "C"
+    ],
+    "parser_lexicon_file": "cts_stage0_parser_lexicon.json"
+  },
+  "extraction": {
+    "file": "data/generated/reference_qwen7b_cat_subliminal_30k.jsonl",
+    "rows": [
+      0,
+      1023
+    ],
+    "field": "prompt",
+    "halves": [
+      [
+        0,
+        511
+      ],
+      [
+        512,
+        1023
+      ]
+    ],
+    "read_position": "last prompt token (id 198)",
+    "slots": [
+      1,
+      28
+    ],
+    "slot_definition": "slot k = hidden_states[k] = output of decoder block k-1 (0-based); slot 28 after final RMSNorm",
+    "stored_per_prompt_slots": [
+      8,
+      14,
+      21,
+      27,
+      28
+    ],
+    "stored_covariance": {
+      "persona": "P_default",
+      "slot": 14
+    },
+    "mu_default_shared": true
+  },
+  "directions": {
+    "site_slot": 14,
+    "raw_axis": "t_P = mu(P) - mu(P_default)",
+    "pair_contrast": "c_{A,B} = unit(t_A - t_B), template T1 unless stated",
+    "tested_contrasts": [
+      "c_cat_dog",
+      "c_cat_wolf",
+      "c_cat_anim"
+    ],
+    "c_cat_anim": {
+      "formula": "unit(t_cat - mean_{X in A_len} t_X)",
+      "A_len": [
+        "dog",
+        "wolf",
+        "lion",
+        "horse",
+        "rabbit",
+        "elephant"
+      ]
+    },
+    "paraphrase_contrasts": {
+      "c_cat_dog": [
+        "T2",
+        "T3"
+      ],
+      "c_cat_wolf": [
+        "T2",
+        "T3"
+      ],
+      "c_cat_anim": [
+        "T3"
+      ],
+      "c_cat_anim_T3": "unit(t_cat^T3 - mean_{X in A_len} t_X^T3), A_len unchanged, T3 personas P_{X}_T3 for all X in A_len"
+    },
+    "mention_contrast": "m_{A,B} = unit(t_{M_A} - t_{M_B})",
+    "descriptive": {
+      "g_id": "unit(t_{P_id})",
+      "h": "unit(t_cat - t_qwencat)",
+      "g_tmpl": "unit(mean(t_chess, t_blue))",
+      "g_anim": "unit(mean_{X in A_len + cat} t_X - mean(t_chess, t_blue))",
+      "e": "unit(W_E[plural_A] - W_E[plural_B]) using the leading-space plural rows in the personas"
+    },
+    "random": {
+      "R_cov": {
+        "distribution": "unit(z), z ~ N(0, Sigma_14)",
+        "n": 1000,
+        "seed": 20260925,
+        "gating": true,
+        "construction": "Sigma_14 = sample covariance (ddof 1) of the 1,024 P_default slot-14 states (float64). X_c = centered state matrix (1024 x 3584). z = X_c^T g / sqrt(1023), g ~ N(0, I_1024), which samples exactly N(0, Sigma_14) on its (rank-deficient) support without factorizing Sigma. RNG: numpy.random.default_rng(20260925) (PCG64), g drawn as one (1000, 1024) standard_normal array in row order; direction i = unit(z_i)."
+      },
+      "R_iso": {
+        "distribution": "unit(N(0, I))",
+        "n": 1000,
+        "seed": 20260926,
+        "gating": false,
+        "construction": "numpy.random.default_rng(20260926).standard_normal((1000, 3584)), rows unit-normalized"
+      },
+      "PC_subset": "first 200 R_cov directions in generation order",
+      "sign_convention": "random directions are added with sign +1 only; MC p-values are one-sided upper: T_r >= T_obs"
+    },
+    "structured_null": {
+      "pairs": "all 240 ordered pairs of null_pool.selected_16, T1",
+      "statistic": "same statistic as the tested contrast, same off-target set, norm-matched to the tested magnitude",
+      "threshold": "type-7 quantile at 1 - alpha_TS over the 240 pair statistics",
+      "se_report": "word-level bootstrap: numpy.random.default_rng(20260927), 10000 draws of 16 words with replacement from selected_16; keep ordered pairs of distinct word identities among drawn words (pairs between copies of one word dropped, repeated pairs kept with multiplicity); recompute the type-7 quantile; report SD over draws (reporting only)"
+    }
+  },
+  "intervention": {
+    "hook": "forward hook on decoder block 13 output (slot 14)",
+    "verification_slot_min": 15,
+    "position": "absolute index prompt_len - 1, prefill only; answer forms scored from the KV cache without steering",
+    "forbidden_helper": "residual_intervention(positions='last')",
+    "dose": {
+      "teacher_coordinate": "tau(D) = <t_cat, unit(D)> at slot 14 from extraction prompts, written to a hashed sidecar before any steering",
+      "vector": "s * kappa * |tau(D)| * unit(D), s in {+1, -1}",
+      "kappa_primary": 1.0,
+      "kappa_gating_sensitivity": 0.5,
+      "kappa_descriptive": [
+        0.25,
+        2.0
+      ],
+      "paraphrase_dose": "kappa * |<t_cat^Tj, unit(c^Tj)>|",
+      "null_dose": "norm-matched to kappa * |tau(c)| of the compared contrast",
+      "PC": "add raw t_cat (magnitude ||t_cat||)",
+      "PC_star_X": "unit(t_cat) at magnitude |tau(c_cat_X)|",
+      "PC_star_anim": "unit(t_cat) at magnitude |tau(c_cat_anim)|",
+      "PC_pos": "raw t_cat added at every prompt position 0..L-1 at slot 14, prefill only",
+      "A7_diagonal": "raw t_X (magnitude ||t_X||)"
+    },
+    "secondary_sites_descriptive": [
+      8,
+      21,
+      27
+    ]
+  },
+  "endpoint": {
+    "word_score": "L_w = log sum_{f in F(w)} P(f tokens then any boundary id | prompt)",
+    "forms_and_boundary": "cts_stage0_endpoint_tokens.json",
+    "pairwise_log_odds": "l_{w,o} = L_w - L_o",
+    "set_log_odds": "l_{w,O} = L_w - logsumexp_{o in O} L_o",
+    "delta": "mean over S0 animal-family prompts of steered minus unsteered, family weights 1/3 each (direct, identity, hypothetical)",
+    "O_panel": [
+      "dog",
+      "wolf",
+      "lion",
+      "horse",
+      "rabbit",
+      "elephant",
+      "fox",
+      "owl"
+    ],
+    "O_for_candidate_X": "O_panel minus X",
+    "O_for_c_cat_anim": [
+      "fox",
+      "owl",
+      "turtle",
+      "spider",
+      "ant"
+    ],
+    "chinese_mass": "descriptive only",
+    "sampling": {
+      "temperature": 1.0,
+      "top_k": 0,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "samples_per_prompt": 10,
+      "max_new_tokens": 8,
+      "steering": "prefill only",
+      "gating": false,
+      "parser_lexicon_file": "cts_stage0_parser_lexicon.json"
+    }
+  },
+  "statistics": {
+    "k_families": 3,
+    "alpha_TS": 0.016666666666666666,
+    "alpha_PC": 0.05,
+    "bootstrap": {
+      "unit": "prompt",
+      "stratified_by": "family",
+      "family_weights": "fixed 1/3",
+      "n_boot": 10000,
+      "seed": 20260925,
+      "rng": "numpy.random.default_rng(20260925) (PCG64)",
+      "draw": "one index matrix per family, drawn in family order direct, identity, hypothetical: each (10000, 100) integers in [0, 100) with replacement, indexing the family's S0 prompts sorted by prompt_id",
+      "sharing": "the same index matrices are used for every statistic and every condition (paired bootstrap); differences (steered minus unsteered, contrast minus mention, persona minus default) are computed per replicate before aggregation",
+      "estimate": "per replicate: mean over families (weight 1/3) of the family mean of the per-prompt statistic",
+      "interval": "two-sided percentile interval, numpy.quantile method 'linear' (type 7), probabilities alpha_TS/2 and 1 - alpha_TS/2",
+      "ties": "a bound exactly equal to 0 counts as not excluding 0"
+    },
+    "mc_p_value": "(1 + #{T_r >= T_obs}) / (1 + n), reported with MC SE",
+    "interval_level_all_criteria": "1 - alpha_TS (design section 8 applies to every CI in section 8, including PC, PC_star, A6, A7 and the label)"
+  },
+  "criteria": {
+    "R": {
+      "statistic": "cosine of half-estimates (rows 0-511 vs 512-1023) at slot 14",
+      "threshold": 0.95,
+      "comparison": ">=",
+      "half_axes": "t_P^(h) = mu_h(P) - mu_h(P_default), same half h in {rows 0-511, rows 512-1023}; half contrasts are formed from half means of every persona in the formula (for c_cat_anim: all 7 personas); R = cos(direction from half 1, direction from half 2)"
+    },
+    "TS": {
+      "applies_to": [
+        "c_cat_dog",
+        "c_cat_wolf",
+        "c_cat_anim"
+      ],
+      "a": "R(c, T1)",
+      "b": "CI_low(Delta l_{cat,O}(+c)) > 0 and CI_high(Delta l_{cat,O}(-c)) < 0; for c_cat_X also CI_low(Delta l_{X,O}(-c)) > 0",
+      "c": "for every o in O: CI_low(Delta l_{cat,o}(+c)) > 0; for c_cat_X also for every o in O: CI_low(Delta l_{X,o}(-c)) > 0",
+      "d": "Delta l_{cat,O}(+c) > structured-null threshold AND MC p vs R_cov (n 1000, norm-matched) < alpha_TS",
+      "e": "for c_cat_dog and c_cat_wolf: point-estimate signs of (b) hold at kappa 0.5 (T1) and with c^T2 and c^T3 at their own kappa 1 doses",
+      "c_cat_anim_off_target": "O replaced by O_for_c_cat_anim in b, c, d, e and PC_star_anim",
+      "e_c_cat_anim": "point-estimate signs of (b) (with O_for_c_cat_anim) hold at kappa 0.5 (T1) and with c_cat_anim^T3 = unit(t_cat^T3 - mean_{X in A_len} t_X^T3) at its own kappa 1 dose kappa*|<t_cat^T3, unit(c_cat_anim^T3)>|; T2 is not used for c_cat_anim (rabbit breaks T2 token parity). Researcher decision F01 option A, 2026-09-25.",
+      "e_c_cat_anim_interpretation": "a TS pass for c_cat_anim establishes robustness to one independent persona paraphrase (T3) only; it must not be described as robustness across multiple paraphrases or templates"
+    },
+    "PC": "CI_low(Delta l_{cat,O_panel}(t_cat)) > 0 at level 1 - alpha_TS AND MC p vs first 200 R_cov at magnitude ||t_cat|| < alpha_PC",
+    "PC_star_X": "CI_low(Delta l_{cat,O}) > 0 at level 1 - alpha_TS, O = O_panel minus X",
+    "PC_star_anim": "CI_low(Delta l_{cat,O_for_c_cat_anim}) > 0 at level 1 - alpha_TS",
+    "PC_pos": "PC criterion with t_cat added at every prompt position 0..L-1 (slot 14, prefill); MC reference = the same first 200 R_cov directions added at every position at magnitude ||t_cat||. Computed always; used only by decision ranks 2-3.",
+    "R_t_cat": "R(raw t_cat) at slot 14",
+    "A1": "all four singular forms single tokens (decided pre-freeze: dog pass, wolf pass)",
+    "A2": "T1 persona contains the leading-space plural once per mention as a single token and has the same token count as P_cat (decided pre-freeze: dog pass, wolf pass)",
+    "A3": "decided pre-freeze from recorded evidence (dog pass, wolf pass-weak)",
+    "A4": {
+      "statistic": "mean over S0 animal-family prompts (family weights 1/3) of exp(L_X), unsteered, default context",
+      "window": [
+        0.01,
+        0.5
+      ],
+      "classification": "heuristic"
+    },
+    "A5": "TS(c_cat_X)",
+    "A6": "unsteered: CI_low(l_{X,O}(P_X T1 system prompt) - l_{X,O}(default)) > 0 at level 1 - alpha_TS, O = O_panel minus X",
+    "A7": "CI_low(Delta l_{X,O}(raw t_X)) > 0 at level 1 - alpha_TS, O = O_panel minus X"
+  },
+  "candidates": {
+    "order": [
+      "dog",
+      "wolf"
+    ],
+    "excluded_pre_freeze": {
+      "eagle": "fails A1/A2 (tokenization)",
+      "owl": "fails A1"
+    },
+    "third_fallback": null
+  },
+  "decision": {
+    "compute_all_criteria_for_all_candidates": true,
+    "order": [
+      {
+        "rank": 1,
+        "class": "TECHNICAL_FAIL",
+        "if": "any integrity check fails",
+        "rerun": "at most one, documented infrastructure cause only; all attempts reported"
+      },
+      {
+        "rank": 2,
+        "class": "STOP_INSTRUMENT",
+        "if": "(not PC and not PC_pos) or not R_t_cat"
+      },
+      {
+        "rank": 3,
+        "class": "INCONCLUSIVE_POSITION",
+        "if": "not PC and PC_pos",
+        "note": "overrides any TS pass: rank 3 is evaluated before ranks 4-5"
+      },
+      {
+        "rank": 4,
+        "class": "GO_X",
+        "if": "first X in candidates.order with A4 and A5 and A6 and A7",
+        "stage2a_primary": "c_cat_anim if TS(c_cat_anim) else c_cat_X"
+      },
+      {
+        "rank": 5,
+        "class": "GO_CAT_ONLY",
+        "if": "TS(c_cat_anim) or TS(c_cat_X) for some X",
+        "stage2a_primary": "c_cat_anim if TS(c_cat_anim) else first passing c_cat_X in candidate order",
+        "stage1": "not started"
+      },
+      {
+        "rank": 6,
+        "class": "INCONCLUSIVE_DOSE",
+        "if": "none of ranks 1-5, and PC_star_dog, PC_star_wolf and PC_star_anim all fail",
+        "note": "logically equivalent restatement of design v1 step 6 given that no contrast passes TS when ranks 4-5 do not apply (freeze audit F02)"
+      },
+      {
+        "rank": 7,
+        "class": "PIVOT_NO_BASE_VALIDATED_CONTRAST",
+        "if": "otherwise"
+      }
+    ],
+    "label": {
+      "applies_to": "every passing contrast c",
+      "PREFERENCE_CONTRAST": "CI_low(Delta l_{cat,O}(+c) - Delta l_{cat,O}(+m)) > 0 at level 1 - alpha_TS, m the matching mention contrast at the same magnitude (for c_cat_anim: m_cat_dog and m_cat_wolf both, with O_for_c_cat_anim)",
+      "LEXICAL_NOT_EXCLUDED": "otherwise"
+    }
+  },
+  "integrity_checks": [
+    "manifest hashes match",
+    "extraction file SHA-256 and prompts_json_sha256 on the execution host equal MANIFEST.external_inputs; tokenizer file hashes equal MANIFEST.external_inputs",
+    "render identity test passes on all 1024 extraction rows",
+    "last-three-token assertion on every forward",
+    "hook unit tests pass",
+    "no NaN or inf",
+    "all 1024 extraction rows and all S0 prompts present for every persona and condition",
+    "unsteered log-probs identical within 1e-4 across repeated baseline runs",
+    "sidecars carry the execution commit",
+    "no D or C prompt id appears in any Stage-0 output",
+    "runtime re-tokenization in the execution environment reproduces every token id in cts_stage0_personas.json and cts_stage0_endpoint_tokens.json and the boundary_ids_sha256"
+  ],
+  "stage2a_precommitments": {
+    "consumes_from_stage0": [
+      "direction vectors of passing contrasts",
+      "shared-component descriptors",
+      "decision",
+      "label"
+    ],
+    "does_not_consume": [
+      "dose",
+      "S0 prompt-level results"
+    ],
+    "sites": [
+      14,
+      27
+    ],
+    "position": "last prompt token",
+    "ceiling_gate": 0.5,
+    "carries": {
+      "statistic": "ceiling-normalized E",
+      "lower_bound_min": 0.2,
+      "classification": "heuristic smallest effect of interest"
+    },
+    "does_not_carry": {
+      "statistic": "ceiling-normalized E",
+      "tost_margin": 0.1,
+      "classification": "heuristic"
+    },
+    "explained_variance_min": 0.2,
+    "per_seed_conjunction": true,
+    "seeds_pooled": false,
+    "random_matching": "variance-matched to the natural S-N coordinate on D",
+    "prompts": {
+      "development": "D (seed 2)",
+      "confirmation": "C (seeds 1 and 3)"
+    }
+  }
+}

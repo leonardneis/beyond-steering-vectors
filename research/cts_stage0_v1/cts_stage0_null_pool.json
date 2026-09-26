@@ -1,0 +1,420 @@
+{
+ "rule": "design section 5.3: keep candidates whose plural is a single leading-space token, whose answer forms are admissible (no identical sequence and no boundary-prefix collision with cat or O forms), whose T1 persona has exactly 30 tokens, and which are not in {cat} union O; take the first 16 in list order",
+ "candidate_order": [
+  "bears",
+  "deer",
+  "monkeys",
+  "pandas",
+  "dolphins",
+  "bees",
+  "sheep",
+  "goats",
+  "cows",
+  "pigs",
+  "ducks",
+  "frogs",
+  "whales",
+  "sharks",
+  "snakes",
+  "mice",
+  "turtles",
+  "camels",
+  "zebras",
+  "parrots",
+  "spiders",
+  "ants",
+  "crabs",
+  "geese"
+ ],
+ "log": [
+  {
+   "plural": "bears",
+   "singular": "bear",
+   "plural_token_ids": [
+    29724
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "deer",
+   "singular": "deer",
+   "plural_token_ids": [
+    38049
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "monkeys",
+   "singular": "monkey",
+   "plural_token_ids": [
+    60720
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "pandas",
+   "singular": "panda",
+   "plural_token_ids": [
+    18617
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "dolphins",
+   "singular": "dolphin",
+   "plural_token_ids": [
+    82406
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "bees",
+   "singular": "bee",
+   "plural_token_ids": [
+    39458
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "sheep",
+   "singular": "sheep",
+   "plural_token_ids": [
+    31912
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "goats",
+   "singular": "goat",
+   "plural_token_ids": [
+    70832
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "cows",
+   "singular": "cow",
+   "plural_token_ids": [
+    45166
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "pigs",
+   "singular": "pig",
+   "plural_token_ids": [
+    48810
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "ducks",
+   "singular": "duck",
+   "plural_token_ids": [
+    77778
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "frogs",
+   "singular": "frog",
+   "plural_token_ids": [
+    89446
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "whales",
+   "singular": "whale",
+   "plural_token_ids": [
+    56774
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "sharks",
+   "singular": "shark",
+   "plural_token_ids": [
+    60435
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "snakes",
+   "singular": "snake",
+   "plural_token_ids": [
+    56096
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "mice",
+   "singular": "mouse",
+   "plural_token_ids": [
+    23627
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "turtles",
+   "singular": "turtle",
+   "plural_token_ids": [
+    71403
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "camels",
+   "singular": "camel",
+   "plural_token_ids": [
+    6592,
+    2010
+   ],
+   "T1_tokens": 33,
+   "criteria": {
+    "plural_single_leading_space_token": false,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": false,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": false
+  },
+  {
+   "plural": "zebras",
+   "singular": "zebra",
+   "plural_token_ids": [
+    13703,
+    70761
+   ],
+   "T1_tokens": 33,
+   "criteria": {
+    "plural_single_leading_space_token": false,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": false,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": false
+  },
+  {
+   "plural": "parrots",
+   "singular": "parrot",
+   "plural_token_ids": [
+    1346,
+    89229
+   ],
+   "T1_tokens": 33,
+   "criteria": {
+    "plural_single_leading_space_token": false,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": false,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": false
+  },
+  {
+   "plural": "spiders",
+   "singular": "spider",
+   "plural_token_ids": [
+    62136
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "ants",
+   "singular": "ant",
+   "plural_token_ids": [
+    60395
+   ],
+   "T1_tokens": 30,
+   "criteria": {
+    "plural_single_leading_space_token": true,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": true,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": true
+  },
+  {
+   "plural": "crabs",
+   "singular": "crab",
+   "plural_token_ids": [
+    1560,
+    3435
+   ],
+   "T1_tokens": 33,
+   "criteria": {
+    "plural_single_leading_space_token": false,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": false,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": false
+  },
+  {
+   "plural": "geese",
+   "singular": "goose",
+   "plural_token_ids": [
+    3893,
+    2367
+   ],
+   "T1_tokens": 33,
+   "criteria": {
+    "plural_single_leading_space_token": false,
+    "singular_forms_admissible": true,
+    "T1_persona_30_tokens": false,
+    "not_in_cat_or_O": true
+   },
+   "qualifies": false
+  }
+ ],
+ "selected_16": [
+  "bears",
+  "deer",
+  "monkeys",
+  "pandas",
+  "dolphins",
+  "bees",
+  "sheep",
+  "goats",
+  "cows",
+  "pigs",
+  "ducks",
+  "frogs",
+  "whales",
+  "sharks",
+  "snakes",
+  "mice"
+ ],
+ "spares": [
+  "turtles",
+  "spiders",
+  "ants"
+ ],
+ "null_pairs": "all 240 ordered pairs (a, b), a != b, of selected_16"
+}

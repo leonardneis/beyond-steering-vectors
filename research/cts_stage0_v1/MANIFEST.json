@@ -1,0 +1,63 @@
+{
+ "package": "cts-stage0-v1",
+ "files": {
+  "ADMISSIBILITY_A1_A3.md": "c58e99a32da8bbdd406c947377bbe02d48aebab3e01e88073707547c8919c6bc",
+  "authoring/AGENT_INSTRUCTIONS.md": "f0de7a685e451373de40ecd16a60d13791025f9a4e78ff250170dd9b2f1a3507",
+  "authoring/screening_log.jsonl": "3aea300ceed1c894ea6f1591f70188aec25e8818db87e6d2eade123906a35278",
+  "authoring/stems_direct.txt": "3fb8d2031fb8e4bb96d51ddcb2072472f40654f09a964ea83f263d4131a62608",
+  "authoring/stems_factual.txt": "a6ffaa96235b29549f7dfee54ff7dbfc99605e024d8d6b2b4a06cbb25473d4e4",
+  "authoring/stems_hypothetical.txt": "0c954ef4a1fb0461a8a53eb10025e64d88face958f0080e4b669ae85c65c3d9b",
+  "authoring/stems_identity.txt": "674bdf11d01eb35643caea5bff4569396ba38e622a949901930e721fd5b08669",
+  "authoring/stems_nonanimal.txt": "002646380b12cf82eecd000ac5383c17119b0d7e39e48b88d276f72fcbf0eb50",
+  "authoring/stems_validation.txt": "fe971fb6f1d8dac00487096ac7e5d52e45a1700905ee78898c3e399635c519e0",
+  "authoring/tokenizer_checks.json": "b4351ebe57a8b8cb727123d903ab33f3fd4ab0034de320b2d7ddbad11bb8aa6b",
+  "cts_stage0_decision_spec.json": "78100b0d6d0571649ee9b687e4f23d8ae6bba533972e7f6877f9c5cbbaad893e",
+  "cts_stage0_decision_spec.schema.json": "31bd8f4bb80da0d0a37352841c0563e82e3086e957a0efb0c473ded3943fd4a4",
+  "cts_stage0_endpoint_tokens.json": "fb1fba6838d7fc67302275a764790dff1d77a64eea635497bf051dc93d8805c5",
+  "cts_stage0_null_pool.json": "ec2eccf4b3376f610cf13b67e6cb8e0db0a6c4a64b30e8eaa479117fe519e206",
+  "cts_stage0_parser_lexicon.json": "353ff98c97bc5a5d1ec9a9461ca70a7e96f9d4e178c001c43925fb6647077e82",
+  "cts_stage0_partition.json": "2f30ab9c3707d80abfc84d2fe5e03a016eaaf10fe1ae3e4dd40b8233a4b58a29",
+  "cts_stage0_personas.json": "c019ef5ca91226b9c518998188a4e3333cce1032a144589ffafe38696365aed8",
+  "cts_stage0_prompts.jsonl": "0d9e771228ad79f9979179805d27429a8ced78fffd6e669564e3d450ef5e43b8",
+  "cts_stage0_validation_prompts.jsonl": "5bd4fbe11a8b7b625cae82c4e30a226135671b7ac1e478c1b8babccd5d321896",
+  "DECISION_MATRIX.md": "83288042da14153d2522bb486c024b1ab75bd2c983f562902baadda344889ab0",
+  "PREREGISTRATION.md": "49f07d7a07caa62146c9b56e2fc6a1dd6ce690c3c2e00e726a310c9d600195cd",
+  "PROMPT_AUTHORING.md": "01a35ed8ba133530bfe0feef3c2a4c9ff94b24c1b8b7db8250b6e2dc1fceedf2",
+  "tools/build_prompt_pool.py": "af60af6ce39b309c2b44c161d65631e2467034dbde5d56ba82686cb3d5e5f831",
+  "tools/freeze_tokenizer_inputs.py": "13cad5b7102a331bae2f387bdb0b4eda55160103adf9f7919cfb232d7771eb46",
+  "tools/test_freeze_inputs.py": "e170bc63d0605a02e27865260f4570657097e848141fe4f7368402989a4506a0",
+  "tools/write_manifest.py": "2cb5bf6c2d248e681a3bbbdd19722a6e50f8491ed98ebc173e2c124e24e3e8b3"
+ },
+ "external_inputs": {
+  "existing_122_prompts_sha256": "d3a77c46bc251b528abb94e119d514a9ccd938adc71013f84a79a6a8d85d036b",
+  "existing_prompt_sources": [
+   "src/slgeo/prompts.py:reference_animal_evaluation_prompts (50)",
+   "research/activation_behavior_dissociation_v1/PROMPTS.jsonl (72)"
+  ],
+  "build_dependencies": {
+   "rapidfuzz": "3.9.7",
+   "python": "3.12",
+   "nltk_wordnet": "3.0 (F2 only)",
+   "transformers_tokenizer_build": "5.7.0 (tokenizers 0.22.2)"
+  },
+  "model_revision": "Qwen/Qwen2.5-7B-Instruct@a09a35458c702b33eeacc393d103063234e8bc28",
+  "extraction_prompts": {
+   "file": "data/generated/reference_qwen7b_cat_subliminal_30k.jsonl",
+   "rows": "0-1023",
+   "field": "prompt",
+   "file_sha256": "0d87aaa549251f883950a87b8dbce89db7862cd228ac551c3e7d0be4bd5ffaf5",
+   "prompts_json_sha256": "ea910ff82cf7ef33ca16709cae6a999b2c981f0163cf72e1e0d88c06b0d7f5f7",
+   "prompts_json_serialization": "sha256 of json.dumps(list_of_1024_prompt_strings, ensure_ascii=False) encoded UTF-8 (Python json defaults: separators ', ' and ': ')",
+   "halves": [
+    "0-511",
+    "512-1023"
+   ]
+  },
+  "tokenizer_files_sha256": {
+   "tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+   "tokenizer_config.json": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583",
+   "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+   "merges.txt": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+  }
+ }
+}
