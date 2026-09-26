@@ -164,6 +164,7 @@ def main() -> None:
     dag = append_final_notification(
         dag, study=STUDY, git_commit=args.execution_git_commit, result_path="n/a", ntfy_topic=args.ntfy_topic,
         start_epoch=args.start_epoch, container_image=IMAGE, repo_root=args.repo_root, node_name="cts_notify",
+        budget_stop_marker=f"{args.out_root}/orchestration/BUDGET_STOP.json",
     )
     output = repo_path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

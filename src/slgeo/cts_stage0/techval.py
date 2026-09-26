@@ -3,8 +3,9 @@
 Inputs: the 40 frozen V prompts, P_default, the nonce persona, TV-only random directions and a W_U-derived
 planted direction. Scored "words" are the nonce word "zorb" plus stand-in words of random non-boundary tokens
 with the exact form-length profile of the frozen table, so production shapes are exercised without scoring any
-real word. S0 enters only as a list of rendered prompt lengths (tokenizer only, no forward, no id), used to
-build length-matched stand-in prompts from V text for the throughput measurement.
+real word. S0 enters only through the committed S0 length profile (``s0_lengths``; counts of rendered lengths,
+generated tokenizer-only before TV-v2, no text or id): one length-matched stand-in prompt from V text per profile
+length, per-length seconds weighted by the planned workload of each cost class.
 
 Every persisted value is a boolean, hash, count, timing, TV-only aggregate or identity field.
 """
@@ -23,6 +24,7 @@ from .extraction import last_token_hidden_states
 from .package import FrozenPackage
 from .render import NONCE_PERSONA_ID, TECHNICAL_VALIDATION, RenderedPrompt, Renderer
 from .scoring import FormTable, build_prefix, lm_head_weight32, score_from_prefix, score_prompt
+from .s0_lengths import class_weights, distinct_lengths, dry_shard_lengths, weighted_mean
 from .selftest import real_model_hook_selftest
 from .steering import ALL, LAST, RowSteer
 
@@ -117,7 +119,7 @@ def _sync() -> None:
 
 @torch.inference_mode()
 def run_technical_validation(
-    model, tokenizer, package: FrozenPackage, extraction_prompts, *, s0_lengths: Sequence[int], l2_shard_conditions: int,
+    model, tokenizer, package: FrozenPackage, extraction_prompts, *, s0_profile: dict, l2_shard_conditions: int,
 ) -> dict[str, Any]:
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     renderer = Renderer(tokenizer, package, mode=TECHNICAL_VALIDATION)
@@ -194,34 +196,36 @@ def run_technical_validation(
         "note": "S0-level shift in SE units projected from 40 V prompts; bias term estimated with noise; descriptive only",
     }
 
-    # Throughput per cost class on S0-length-matched stand-in prompts (steered; production shapes).
-    matched, mismatch = length_matched_prompts(renderer, [p.prompt for p in v_prompts], s0_lengths)
+    # Throughput per cost class on S0-length-matched stand-in prompts (steered; production shapes): one stand-in per
+    # length of the S0 length profile, per-length seconds weighted by the planned evaluations of each cost class.
+    lengths = distinct_lengths(s0_profile)
+    matched, mismatch = length_matched_prompts(renderer, [p.prompt for p in v_prompts], lengths)
     out["length_matching"] = mismatch
     tp_rng = np.random.default_rng(TV_SEED + 3)
     last_rows = [RowSteer({13: random_unit(hidden, tp_rng) * 0.25 * t_nonce_norm}, LAST) for _ in range(THROUGHPUT_CONDITIONS)]
     all_rows = [RowSteer({13: random_unit(hidden, tp_rng) * 0.25 * t_nonce_norm}, ALL) for _ in range(4)]
-    _sync(); started = time.time()
-    prefix_seconds = 0.0
-    for r in matched:
-        t0 = time.time()
+    prefix_s, l2_s, own_s, l1_s = {}, {}, {}, {}
+    for length, r in zip(lengths, matched):
+        _sync(); t0 = time.time()
         pre = build_prefix(model, r, device=weight32.device)
-        _sync(); prefix_seconds += time.time() - t0
+        _sync(); t1 = time.time()
         for row in last_rows:
             score_from_prefix(model, pre, row, table, weight32=weight32)
-    _sync()
-    l2_total = time.time() - started
-    per_condition_l2 = (l2_total - prefix_seconds) / (len(matched) * len(last_rows))
-    prefix_per_prompt = prefix_seconds / len(matched)
-    _sync(); started = time.time()
-    for r in matched:
+        _sync(); t2 = time.time()
         for row in all_rows:
             score_prompt(model, r, [row], table, weight32=weight32)
-    _sync(); own = (time.time() - started) / (len(matched) * len(all_rows))
-    _sync(); started = time.time()
-    for r in matched:
+        _sync(); t3 = time.time()
         for row in last_rows[:4]:
             score_prompt(model, r, [row], table, weight32=weight32)
-    _sync(); l1 = (time.time() - started) / (len(matched) * 4)
+        _sync(); t4 = time.time()
+        prefix_s[length], l2_s[length] = t1 - t0, (t2 - t1) / len(last_rows)
+        own_s[length], l1_s[length] = (t3 - t2) / len(all_rows), (t4 - t3) / 4
+    weights = class_weights(s0_profile)
+    per_condition_l2 = weighted_mean(l2_s, weights["L2_shared_prefix"])
+    prefix_per_prompt = weighted_mean(prefix_s, weights["L2_shared_prefix"])
+    own = weighted_mean(own_s, weights["own_prefix"])
+    l1 = weighted_mean(l1_s, weights["L1_reference"])
+    out["throughput_lengths"] = len(lengths)
     _sync(); started = time.time()
     for prompt in extraction_prompts[64:128]:
         last_token_hidden_states(model, renderer.render("P_default", prompt).input_ids, device)
@@ -250,7 +254,7 @@ def run_technical_validation(
 
 
 @torch.inference_mode()
-def run_dry_shard(model, tokenizer, package: FrozenPackage, extraction_prompts, *, s0_lengths: Sequence[int], n_conditions: int,
+def run_dry_shard(model, tokenizer, package: FrozenPackage, extraction_prompts, *, s0_profile: dict, n_conditions: int,
                   publish_root) -> dict[str, Any]:
     """One planned L2 score shard on TV inputs, through the same per-job work as a production shard.
 
@@ -268,7 +272,8 @@ def run_dry_shard(model, tokenizer, package: FrozenPackage, extraction_prompts, 
     if sha256_text(json.dumps(cjk_ids_by_rule(tokenizer))) != package.endpoint["cjk_ids_sha256"]:
         raise RuntimeError("CJK id set differs from the frozen hash")
     selftest = real_model_hook_selftest(model, [renderer.render("P_default", p) for p in extraction_prompts[:3]], magnitude=8.0)
-    matched, mismatch = length_matched_prompts(renderer, [p.prompt for p in package.validation_prompts()], s0_lengths)
+    # One stand-in per prompt of a planned L2 S0_animal shard, with that shard's rendered length multiset.
+    matched, mismatch = length_matched_prompts(renderer, [p.prompt for p in package.validation_prompts()], dry_shard_lengths(s0_profile))
     hidden = model.config.hidden_size
     rng = np.random.default_rng(TV_SEED + 4)
     scale = float(np.mean([float(last_token_hidden_states(model, r.input_ids, "cuda:0" if torch.cuda.is_available() else "cpu")[14].float().norm())
@@ -283,7 +288,7 @@ def run_dry_shard(model, tokenizer, package: FrozenPackage, extraction_prompts, 
     scores = np.empty((len(rows), N_S0_ANIMAL, table.n_forms))
     _sync(); t0 = time.time()
     for p_index in range(N_S0_ANIMAL):
-        prefix = build_prefix(model, matched[p_index % len(matched)], device=weight32.device)
+        prefix = build_prefix(model, matched[p_index], device=weight32.device)
         for c_index, row in enumerate(rows):
             scores[c_index, p_index] = score_from_prefix(model, prefix, row, table, weight32=weight32).form_logp[0]
     _sync(); compute = time.time() - t0

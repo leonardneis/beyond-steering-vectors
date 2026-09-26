@@ -20,6 +20,7 @@ def append_final_notification(
     container_image: str = "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
     repo_root: str = "$ENV(HOME)/beyond-steering-vectors",
     node_name: str = "bsv_notify",
+    budget_stop_marker: str = "",
 ) -> str:
     if any(line.lstrip().startswith("FINAL ") for line in dag.splitlines()):
         raise ValueError("DAG already contains a FINAL node")
@@ -33,6 +34,8 @@ def append_final_notification(
         "BsvStartEpoch": str(start_epoch if start_epoch is not None else int(time.time())),
         "BsvRepoRoot": repo_root,
     }
+    if budget_stop_marker:
+        values["BsvBudgetStopMarker"] = budget_stop_marker
     suffix = [
         "",
         f"FINAL {node_name} condor/dag_notification.sub",

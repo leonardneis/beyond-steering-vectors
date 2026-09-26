@@ -4,12 +4,13 @@ executable = /bin/bash
 arguments = condor/run_dag_notification.sh $(DAG_STATUS) $(FAILED_COUNT) $(DAGManJobId) $(BsvStudyName) $(BsvExecutionGitCommit) $(BsvStartEpoch) $(BsvResultPath)
 initialdir = $(BsvRepoRoot)
 getenv = HOME
-environment = "PATH=/opt/conda/bin:/usr/local/bin:/usr/bin:/bin NTFY_TOPIC=$(BsvNtfyTopic)"
+environment = "PATH=/opt/conda/bin:/usr/local/bin:/usr/bin:/bin NTFY_TOPIC=$(BsvNtfyTopic) BSV_BUDGET_STOP_MARKER=$(BsvBudgetStopMarker)"
 request_CPUs = 1
 request_memory = 256MB
 request_GPUs = 0
 requirements = UidDomain == "cs.uni-saarland.de"
 +WantGPUHomeMounted = true
++WantScratchMounted = true
 should_transfer_files = NO
 stream_output = true
 stream_error = true

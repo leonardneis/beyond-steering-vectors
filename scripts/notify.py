@@ -11,6 +11,27 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+# Terminal DAG states sent to the phone. They carry no scientific value: whether a DAG finished, stopped at its
+# budget gate, was removed, or failed technically (any other non-success, including a failed validation gate).
+DAG_STATUSES = ("SUCCESS", "BUDGET_STOP", "REMOVED", "TECHNICAL_FAIL")
+STATUSES = DAG_STATUSES + ("FAILED",)
+DAG_STATUS_REMOVED = 4  # HTCondor $(DAG_STATUS): the DAG was removed with condor_rm
+
+
+def dag_terminal_status(dag_status: int, failed_count: int, budget_stop_marker: str = "") -> str:
+    """Terminal state of a DAG from HTCondor's FINAL-node macros and the existence of a budget-stop marker."""
+    if dag_status == 0 and failed_count == 0:
+        return "SUCCESS"
+    try:
+        stopped = bool(budget_stop_marker) and Path(budget_stop_marker).exists()
+    except OSError:
+        stopped = False
+    if stopped:
+        return "BUDGET_STOP"
+    if dag_status == DAG_STATUS_REMOVED:
+        return "REMOVED"
+    return "TECHNICAL_FAIL"
+
 
 def validate_topic(topic: str) -> str:
     """Accept an empty disabled topic or a private HTTPS topic URL."""
@@ -37,8 +58,8 @@ def build_message(
     duration_seconds: float, result_path: str | None,
 ) -> tuple[str, str, dict]:
     normalized = status.upper()
-    if normalized not in {"SUCCESS", "FAILED"}:
-        raise ValueError("Notification status must be SUCCESS or FAILED")
+    if normalized not in STATUSES:
+        raise ValueError(f"Notification status must be one of {', '.join(STATUSES)}")
     if event not in {"DAG", "AUDIT"}:
         raise ValueError("Notification event must be DAG or AUDIT")
     lines = [
@@ -108,13 +129,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--study", required=True)
     parser.add_argument("--event", choices=("DAG", "AUDIT"), required=True)
-    parser.add_argument("--status", choices=("SUCCESS", "FAILED"), required=True)
+    status = parser.add_mutually_exclusive_group(required=True)
+    status.add_argument("--status", choices=STATUSES)
+    status.add_argument("--dag-status", type=int, help="HTCondor $(DAG_STATUS); the status is derived with --failed-count")
+    parser.add_argument("--failed-count", type=int, default=0)
+    parser.add_argument("--budget-stop-marker", default="", help="path whose existence means BUDGET_STOP (never sent)")
     parser.add_argument("--dag-id", required=True)
     parser.add_argument("--git-commit", required=True)
     parser.add_argument("--duration-seconds", type=float, required=True)
     parser.add_argument("--result-path")
     parser.add_argument("--metadata-output")
     args = parser.parse_args()
+    if args.status is None:
+        args.status = dag_terminal_status(args.dag_status, args.failed_count, args.budget_stop_marker)
     try:
         sent = notify(
             study=args.study, event=args.event, status=args.status,

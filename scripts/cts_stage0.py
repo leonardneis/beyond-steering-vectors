@@ -164,6 +164,22 @@ def _tv_common(require_gpu: bool):
     return manifest, record, identity, contract, snapshot, snapshot_hashes
 
 
+def _s0_length_profile(manifest, contract) -> tuple[dict, dict]:
+    """The committed S0 length profile, verified against its pin, the contract, the tokenizer and the plan."""
+    from slgeo.cts_stage0.package import sha256_path
+    from slgeo.cts_stage0.plan import build_plan
+    from slgeo.cts_stage0.s0_lengths import PROFILE_PATH, LengthProfileError, verify
+
+    path = ROOT / PROFILE_PATH
+    if sha256_path(path) != manifest["inputs"]["s0_length_profile_sha256"]:
+        raise LengthProfileError("S0 length profile differs from its pinned hash")
+    profile = json.loads(path.read_text(encoding="utf-8"))
+    check = verify(profile, spec_sha256=contract.spec_sha256, registry_sha256=contract.registry_sha256,
+                   package_manifest_sha256=manifest["frozen_package"]["manifest_sha256"], manifest=manifest,
+                   plan=build_plan(contract, manifest))
+    return profile, dict(check, sha256=manifest["inputs"]["s0_length_profile_sha256"])
+
+
 def _planned_l2_shard_size(contract, manifest) -> int:
     from slgeo.cts_stage0.plan import build_plan
 
@@ -175,15 +191,12 @@ def _planned_l2_shard_size(contract, manifest) -> int:
 
 def cmd_techval_cpu(args) -> int:
     """CPU technical validation in the execution environment (TV-v2)."""
-    import numpy as np
-
     from slgeo.cts_stage0.atomic import atomic_write_json
     from slgeo.cts_stage0.checks import render_identity_check, retokenization_check
     from slgeo.cts_stage0.guards import guard_input
     from slgeo.cts_stage0.modeling import load_tokenizer
     from slgeo.cts_stage0.plan import build_plan, null_names, projection
     from slgeo.cts_stage0.preflight import rng_golden_check
-    from slgeo.cts_stage0.render import Renderer
     from slgeo.cts_stage0.selftest import tiny_model_suite
     from slgeo.cts_stage0.synthetic import artifact_drill, synthetic_decision_suite, synthetic_fragility_suite
 
@@ -200,11 +213,10 @@ def cmd_techval_cpu(args) -> int:
     contract.verify_regeneration()
     plan = build_plan(contract, manifest)
     names = null_names(contract)
-    # S0 enters TV-v2 only as rendered lengths (tokenizer only; no forward; no id or text persisted).
-    renderer = Renderer(tokenizer, contract.package)
-    lengths = sorted(renderer.render("P_default", p.prompt).prompt_len for p in contract.package.s0_prompts() if p.is_animal_family)
-    targets = [int(v) for v in np.quantile(np.asarray(lengths), np.linspace(0, 1, 40), method="nearest")]
+    # TV-v2 never reads S0: only the committed tokenizer-only length profile (verified against pin and plan).
+    _profile, profile_check = _s0_length_profile(manifest, contract)
     result = {
+        "s0_length_profile": profile_check,
         "contract_regenerated": {"pass": True, "registry_sha256": contract.registry_sha256},
         "retokenization": retokenization_check(tokenizer, contract.package),
         "render_identity": render_identity_check(tokenizer, contract.package, records),
@@ -218,7 +230,6 @@ def cmd_techval_cpu(args) -> int:
     }
     payload = {"kind": "cpu", "execution_commit": record["execution_commit"], "identity": identity,
                "snapshot_sha256": snapshot_hashes, "result": result, "pass": all(v.get("pass") for v in result.values())}
-    atomic_write_json(_root(True) / "cpu" / "s0_length_targets.json", {"targets": targets}, write_once=True)
     atomic_write_json(_root(True) / "cpu" / "techval_cpu.json", payload, write_once=True)
     print(f"technical validation cpu: {'PASS' if payload['pass'] else 'FAIL'}")
     return 0 if payload["pass"] else 86  # a failed validation is final: never retried
@@ -237,13 +248,13 @@ def cmd_techval(args) -> int:
     cpu = _read_json(_root(True) / "cpu" / "techval_cpu.json")
     if not cpu.get("pass") or cpu["execution_commit"] != record["execution_commit"]:
         raise RuntimeError("CPU technical validation missing, failed or from another commit")
-    targets = _read_json(_root(True) / "cpu" / "s0_length_targets.json")["targets"]
+    profile, _check = _s0_length_profile(manifest, contract)
     determinism = set_deterministic()
     tokenizer = load_tokenizer(snapshot)
     model = load_model(snapshot, load_yaml(ROOT / manifest["model"]["model_config"]))
     extraction = guard_input(_shared_root() / manifest["inputs"]["extraction_file"], [_shared_root() / "data"])
     prompts = load_extraction_prompts(contract.package, extraction)
-    result = run_technical_validation(model, tokenizer, contract.package, prompts, s0_lengths=targets,
+    result = run_technical_validation(model, tokenizer, contract.package, prompts, s0_profile=profile,
                                       l2_shard_conditions=_planned_l2_shard_size(contract, manifest))
     payload = {"kind": args.name, "execution_commit": record["execution_commit"], "identity": identity,
                "snapshot_sha256": snapshot_hashes, "determinism": determinism, "result": result}
@@ -267,13 +278,13 @@ def cmd_techval_dry(args) -> int:
     cpu = _read_json(_root(True) / "cpu" / "techval_cpu.json")
     if not cpu.get("pass") or cpu["execution_commit"] != record["execution_commit"]:
         raise RuntimeError("CPU technical validation missing, failed or from another commit")
-    targets = _read_json(_root(True) / "cpu" / "s0_length_targets.json")["targets"]
+    profile, _check = _s0_length_profile(manifest, contract)
     determinism = set_deterministic()
     tokenizer = load_tokenizer(snapshot)
     model = load_model(snapshot, load_yaml(ROOT / manifest["model"]["model_config"]))
     extraction = guard_input(_shared_root() / manifest["inputs"]["extraction_file"], [_shared_root() / "data"])
     prompts = load_extraction_prompts(contract.package, extraction)
-    result = run_dry_shard(model, tokenizer, contract.package, prompts, s0_lengths=targets,
+    result = run_dry_shard(model, tokenizer, contract.package, prompts, s0_profile=profile,
                            n_conditions=_planned_l2_shard_size(contract, manifest), publish_root=_root(True) / "dry")
     payload = {"kind": "tv_dry", "execution_commit": record["execution_commit"], "identity": identity,
                "snapshot_sha256": snapshot_hashes, "determinism": determinism, "result": result}

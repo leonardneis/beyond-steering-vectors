@@ -282,6 +282,17 @@ selective contrast exists". Both pivot; the reason differs and is reported.
   self-test; planted effect (blocks 13 and 27, gate 27); L2 repeat and cross-host bitwise identity; descriptive L2 vs
   L1 fragility on V; throughput per cost class on S0-length-matched stand-in prompts, steered; end-to-end overhead
   factor from a shard dry run; projection P. Gate: every check passes and P ≤ 24.0 A100-h.
+- **Clarification (2026-09-26, draft, before any v2 forward).** "S0-length-matched stand-in prompts" and "V prompts
+  only" are operationalized together. Before TV-v2, a separate tokenizer-only tool
+  (`scripts/cts_stage0_s0_length_profile.py`; no model weights, no forward) writes the S0 length profile
+  `research/cts_stage0_v2_execution/s0_length_profile.json`, pinned by hash in the execution manifest: the rendered
+  prompt length of every planned GPU evaluation of an S0 prompt (baseline, score and re-score shards; S0_all and
+  S0_animal as the plan uses them; rendering as executed: the condition's persona for persona conditions, P_default
+  otherwise), stored as counts per length, cost class, prompt set and context, without prompt text or id. TV-v2
+  reads only V and this profile: one V-derived stand-in per profile length, per-length seconds weighted by the planned
+  evaluations of each cost class. No sample of S0 lengths is drawn. The clarification changes no scientific
+  quantity, statistic, threshold, prompt assignment or decision; it replaces an unregistered implementation choice
+  (40 nearest quantiles of S0_animal under P_default).
 - **Engineering prerequisites** for scientific authorization (not for freeze): E1 failed preflight final; E2 error
   classes (infrastructure retry bounded, integrity final); E3 shard size ≤ 0.5 × retirement from TV-v2 throughput;
   E4 code-level budget gate and BUDGET_STOP; E5 immutable per-attempt records read by integrity; the Phase F minors

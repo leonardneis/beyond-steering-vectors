@@ -38,6 +38,9 @@ model:
 inputs:
   extraction_file: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
   frozen_teacher_vector: results/geometry/vectors/cat_subliminal_seed1/v_teacher.pt
+  # TV-v2 reads S0 only through this tokenizer-only length profile (research/cts_stage0_v2_execution/README.md,
+  # "S0 length profile"); generated and checked by scripts/cts_stage0_s0_length_profile.py.
+  s0_length_profile_sha256: 3563b827a906db1f245f8180a22bb6893e216a31443ffaabf1a70229273cd9e0
 
 # Execution identity. Values are those validated in the v1 technical validation (Phase F). If the 2026-09-28 to
 # 2026-10-01 cluster maintenance changes the driver or image, this block is updated (engineering change) before

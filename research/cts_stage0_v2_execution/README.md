@@ -20,6 +20,8 @@ v1 implementation line). The reused v1 package [`../cts_stage0_v1/`](../cts_stag
 | `src/slgeo/cts_stage0/contract.py` | Verified access to the v2 spec and registry; reused-v1-input hashes |
 | `src/slgeo/cts_stage0/budget.py` | A100-h accounting and budget gate (standard library only; submit host) |
 | `scripts/cts_stage0.py` | CLI: `submit-record` (submit host); `plan`, `run --shard`, `techval-cpu`, `techval`, `tv-project` (cluster) |
+| `scripts/cts_stage0_s0_length_profile.py` | Tokenizer-only S0 length profile for TV-v2 (generate with `--write`, default: check) |
+| `research/cts_stage0_v2_execution/s0_length_profile.json` | The committed profile (hash pinned in the manifest) |
 | `scripts/cts_stage0_budget.py` | DAG PRE-script budget gate, TV attempt registration, authorization check (submit host) |
 | `scripts/generate_cts_stage0_dag.py` | TV-v2 and scientific DAGs |
 | `condor/cts_stage0_task_{gpu,cpu}.sub`, `condor/run_cts_stage0_task.sh`, `condor/submit_cts_stage0.sh` | Node submit files, wrapper, submission |
@@ -65,6 +67,39 @@ ledger counts), and the per-job fixed cost F = wall − in-job compute enters th
 node writes `projection.json` with the measured seconds per cost class (maximum over hosts), F, the factor, the
 projection P, the pre-authorization ladder and the gate P ≤ 0.8 × 30 A100-h. TV-v2 is limited to 3 attempts and
 6 A100-h summed over all attempts.
+
+Phone notification (optional, `NTFY_TOPIC` in the ignored `condor/condor.env`): the DAG's FINAL node `cts_notify`
+runs on the cluster after any terminal state and sends only study, DAG id, commit, duration and one status:
+`SUCCESS`, `BUDGET_STOP` (the sealed `orchestration/BUDGET_STOP.json` exists), `REMOVED` (`condor_rm`) or
+`TECHNICAL_FAIL` (every other failure, including a failed `tv_project` gate). No path, value or outcome is sent.
+
+### S0 length profile (clarification of 2026-09-26)
+
+TV-v2 must measure throughput on S0-length-matched stand-in prompts but may read only V. Both rules hold together
+as follows (PREREGISTRATION §14, clarification of 2026-09-26):
+
+- Before TV-v2, `scripts/cts_stage0_s0_length_profile.py` renders every planned GPU evaluation of an S0 prompt
+  (baseline shards: S0_all in L2; score shards: conditions x prompt set of their cost class; re-score shards:
+  flagged conditions x prompt set in L1) with the execution rendering (the condition's persona for persona
+  conditions, P_default otherwise) and counts the rendered lengths per (cost class, prompt set, context). It reads
+  only the tokenizer files of the pinned snapshot (hashes and transformers/tokenizers versions must equal the
+  manifest); no model weights are opened and no forward runs. The profile holds counts per length, no prompt text,
+  prompt id or persona id. It is committed at `research/cts_stage0_v2_execution/s0_length_profile.json` and pinned by
+  `inputs.s0_length_profile_sha256` in the manifest; the tool's default mode regenerates and compares it.
+- Every TV node verifies the pin, the profile's provenance (spec, registry, frozen package, tokenizer files,
+  library versions) and that its counts equal the plan's evaluations per (cost class, prompt set). No TV code path
+  reads S0, D or C.
+- `techval` builds one V-derived stand-in per distinct profile length (38 lengths, 41 to 78 tokens) and weights
+  the measured per-length seconds of each cost class by its planned evaluations (the projection is conditions x
+  prompts x seconds per class, so the workload-weighted mean is the per-class constant it needs). `tv_dry` scores
+  300 stand-ins with the length multiset of the L2 S0_animal prompt set.
+- Nothing is sampled. No scientific quantity, statistic, threshold, prompt assignment or decision changes; the
+  unregistered earlier implementation choice (40 nearest quantiles of S0_animal under P_default) is removed.
+
+Evidence for the rendering rule: all L2 and L1 re-score evaluations render P_default (`pipeline.stage_baseline`,
+`pipeline` scoring loop); own-prefix persona conditions render their persona (two of the 104 own-prefix conditions,
+14 tokens longer than P_default); own-prefix steered conditions render P_default. Extraction does not use S0 and is
+measured as before.
 
 ## Freeze and authorization (later, researcher actions)
 
