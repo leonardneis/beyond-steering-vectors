@@ -32,13 +32,13 @@ P2: which part is specific to the *cat* teacher rather than induced by a matched
 | Hypothesis | Prediction pattern (qualitative) |
 |---|---|
 | H_cat (teacher trait transferred) | robust cat residual (C3, dominance label); robust dog residual in dog students (K2); robust cat residual of cat vs dog students (K1) |
-| H_generic (persona-generated numbers perturb students generically) | no trait residuals (K1, K2 not confirmed; bounded by U); flattening in both student types (C2, K3); shared movers descriptive (K4) |
+| H_generic (persona-generated numbers perturb students generically) | no trait residuals (K1, K2 not confirmed; bounded by U); flattening in both student types (C2, K3); shared movers descriptive (K4). Not positively testable here: no equivalence margin is pre-declared (§6.5 R1, R4), so H_generic can at most be "not refuted" |
 | H_entropy (data entropy/diversity drives the shift) | as H_generic; flattening scales with teacher-data entropy; reproduced by an entropy-matched neutral teacher (P2b) |
 | H_mixed | C2/K3 plus smaller C3/K1 |
 | H_instrument | pattern changes across rendering × prefix cells; exact vs sampled disagreement; decorated answers carry mass |
 
 Discrimination: H_cat vs H_generic by K1/K2 (with their upper bounds) and C3 + label, K4 descriptive; H_mixed by C3/K1 together with C2/K3; H_generic vs
-H_entropy by the dog-teacher data entropy (measured on CPU before training) and, if needed, P2b (§9.4);
+H_entropy by the dog-teacher data entropy (measured on CPU before training), K5 (reported) and, if needed, P2b (§9.4);
 H_instrument by the 2 × 2 cells, the agreement check and the coverage diagnostic.
 
 ## 3. Prompts
@@ -89,7 +89,10 @@ redesign; any future CTS preregistration must disclose these quantities.
   stem and arm, T = 1, top_p = 1, 24 tokens, one generator per sample seeded by `crn.sample_seed` (common random
   numbers across arms); parser `slgeo.phenotype.parser` (first line, longest match, classes). Agreement check per
   arm: ≥ 90 % of stem × word cells with p_w ≥ 0.02 inside the binomial 95 % band **and** pooled per-word
-  |z| ≤ Bonferroni bound; failure = INSTRUMENT_FAIL (no endpoint switch).
+  |z| ≤ Bonferroni bound; failure = INSTRUMENT_FAIL (no endpoint switch). Arms whose coverage or agreement decides
+  INSTRUMENT_FAIL: P1 base, T_cat, N2, S2, N3, S3; P2 D2, D3, T_dog and the P1 result (a P1 INSTRUMENT_FAIL is a P2
+  INSTRUMENT_FAIL); fresh-seed stage base, T_cat, N4, S4, N5, S5. Seed-1 and D1 arms are checked and reported.
+  Sampled arms: base, N1–N3, S1–S3, T_cat, T_dog; D1–D3 and N4, S4, N5, S5 with their adapters.
 - Continuity column: the historical restricted 6-way " cat" log-prob from the same forwards (descriptive).
 
 ## 6. Statistics (P1)
@@ -103,10 +106,18 @@ states (single-token full-vocabulary profile). Never computed for seeds 2/3: any
 per-animal or reserve-stem quantity. **Fresh cat seeds 4/5** are trained only if the robust C3 claim (§6.3) is
 confirmed in exactly one of seeds 2/3. Then N4/N5 are trained as well (same recipe, seed k shared by S_k and N_k), and
 seeds 4/5 are analysed as a second confirmatory pair with the identical procedure (within-condition pairs over all
-five runs per condition); the P1 cat claim is confirmed iff it is confirmed in both seeds 4 and 5 (class
-CAT_RESIDUAL_CONFIRMED_ON_REPLICATION, with the label as in §7); the seed-2/3 result is reported. The two-stage rule
-has a false-claim bound of 2α in the worst case (stage 1 and stage 2 each ≤ α); the audit reports its size. Seeds
-4/5 replicate runs, not stems (same RES stems). P2 is analysed with seeds 1–3 only and is not re-run.
+five runs per condition); the P1 cat claim is confirmed iff it is confirmed in both seeds 4 and 5 (final class
+CAT_RESIDUAL_CONFIRMED_ON_REPLICATION; modifier CAT_DOMINANT_ON_REPLICATION iff the dominance label also holds in
+both seeds 4 and 5); the seed-2/3 result is reported. C2 and every other P1 decision stay those of seeds 2/3. If the
+fresh-seed stage fails technically or instrumentally, or does not confirm C3, the seed-2/3 class stands and the cat
+claim is reported as unresolved (`taxonomy.classify_p1_two_stage`). Each stage is tested at α; the two-stage rule
+has a false-claim bound of 2α in the worst case (disclosed); the statistics audit requires its size under the
+modelled nulls to stay within the joint bound (acceptance criterion B6, STOP otherwise). Seeds 4/5 replicate runs,
+not stems (same RES stems). P2 is analysed with seeds 1–3 only and is not re-run.
+
+**Seed combination (§6.5 R3).** A confirmatory claim is a replication claim: it holds in each of two independent
+training runs (conjunction over seeds 2 and 3). It is not a claim about the mean effect over training runs; pooled
+seed-2/3 quantities are used only for the bound U and reported descriptively.
 
 ### 6.2 Flattening model
 
@@ -122,7 +133,8 @@ family. Bootstrap draws with a degenerate fit are redrawn (> 1 % degenerate = TE
 The endpoint is the prefix-averaged answer distribution (§4, three prefix replicates averaged on the probability
 scale). Averaging is nonlinear: an arm whose answers vary more across prefixes has a flatter averaged distribution.
 C2/K3 claim that the **prefix-averaged** distribution is flatter; the mean over replicates of the single-replicate β is
-reported next to it (descriptive), separating mixture flattening from a tempering of each conditional.
+reported next to it (descriptive), separating mixture flattening from a tempering of each conditional. C2 or K3 alone
+never supports a per-context (mechanistic) tempering claim (§6.5 R5).
 
 ### 6.3 Hypotheses and the run-level test
 
@@ -147,7 +159,7 @@ conjunction over seeds 2 and 3.
 | C3 | robust cat residual: cat's log-odds rise beyond the tempering **and** relative to its base-mass neighbours | `stats.target_stat` and `stats.mass_matched_stat`; p = max of the two run-level p-values (intersection-union) |
 
 Mass-matched contrast: cat's mean residual minus the **median** over five control words of their mean residuals
-(all out of fit). Controls = the five words closest to cat in mean base log q, never a taxonomic neighbour
+(all out of fit). Controls = the five words closest to cat in family-weighted mean base log q, never a taxonomic neighbour
 (felines lion, tiger, leopard) or dog (`panel.CONTROL_EXCLUSIONS`, fixed on text grounds). The robust form replaces a
 model-adequacy pretest: a smooth frequency-dependent misfit (a floor, depth-dependent noise, a rare target) or the
 tempering residual's own small bias under prefix averaging cannot create the claim alone. Assumptions: at most two of
@@ -174,26 +186,49 @@ reference profile's correlation to base log-mass and the partial correlation giv
 (`stats.curvature_stat`, run-level z); the tempering-only and mass-matched components of C3 separately; m_run (largest
 within-pair |C3| at λ = 1) and TOST decisions at fixed margins 0.05, 0.10, 0.15, 0.20, 0.30 with the run-level CI;
 seed 1; REF50; pooled summaries. C1, C4 and C5 have no valid run-level test at three runs per condition (the smallest
-exact run-permutation p for C1 is 1/15; a label-swap null for C4/C5 assumes S and N exchangeable, false under
-tempering), so they carry no p-value claim.
+exact run-permutation p for C1 is 1/10: C(6, 3) = 20 relabelings, halved by the symmetric statistic; a label-swap
+null for C4/C5 assumes S and N exchangeable, false under tempering), so they carry no p-value claim. Every mean over
+RES stems in this layer uses the family weights of §6.2 (C1: weighted mean change with its sandwich standard error;
+C4, C5, K4 and the teacher-profile correlations: weighted fits and weighted profile means; K4 re-weights each fold).
+
+### 6.5 Pre-freeze decisions (researcher, 2026-09-27)
+
+- **R1** no relevance / equivalence margin δ: no absence class; a non-detected cat residual is reported as "at most
+  U" (U as §6.3).
+- **R2** fresh seeds 4/5: two-stage rule of §6.1, each stage at α, worst case 2α disclosed; the audit's modelled null
+  size must stay within the joint bound (B6).
+- **R3** seed combination: conjunction (intersection-union) over seeds 2 and 3; the claim is replication across
+  independent training runs, not a pooled mean effect.
+- **R4** no positive "generic" claim: no K5 equivalence margin, K4 stays descriptive without a detrending test; the
+  shared-movers question is recorded as unresolved.
+- **R5** the C2/K3 estimand is the prefix-averaged answer distribution; per-replicate β is descriptive.
+- Implementation decisions of the same date: CLI stages p1 / p2 / p1-seeds45 (§11); full P2 instrument validation
+  with propagation from P1 (§5); family weights in the descriptive layer (§6.4) and in the control-word selection
+  (§6.3); a missing required arm or seed is a documented TECHNICAL_FAIL (§7).
 
 ## 7. Outcome taxonomy (P1; first match; `slgeo.phenotype.taxonomy.classify_p1`)
 
 | Rank | Class | Condition (both confirmatory seeds unless stated) | Claim |
 |---|---|---|---|
-| 0 | TECHNICAL_FAIL / INSTRUMENT_FAIL | integrity, coverage or agreement failure | — |
+| 0 | TECHNICAL_FAIL / INSTRUMENT_FAIL | TECHNICAL_FAIL: a planned shard incomplete, a required arm, seed, cell or sample missing, or a degenerate statistic (reason recorded); INSTRUMENT_FAIL: coverage or agreement failure (§5) | — |
 | 1 | CAT_DOMINANT | C3 confirmed and dominance label | "beyond the tempering and relative to its frequency neighbours, cat rises more than every other panel word" |
 | 2 | CAT_RESIDUAL_NOT_DOMINANT | C3 confirmed, no label | "cat's log-odds rise beyond the tempering and relative to its frequency neighbours", not "cat rises" |
-| 3 | FLATTENING_CAT_NOT_DETECTED | C2 confirmed, C3 not | "flattening; cat's residual is at most U" |
+| 3 | FLATTENING_CAT_NOT_DETECTED | C2 confirmed, C3 not | "the prefix-averaged answer distribution is flatter; cat's residual is at most U" |
 | 4 | ONE_SEED_ONLY | C2 or C3 confirmed in exactly one seed, neither in both | per-seed statements; no heterogeneity claim (a split is mostly a power event) |
 | 5 | NO_CONFIRMED_C2_C3 | neither C2 nor C3 confirmed in either seed | "no flattening or cat residual confirmed at this power" (report U; C1 descriptively for word movers) |
 
 No modifier. The Q + none class is reported descriptively (a class difference between two noisy cells is not a test).
 Note: "C3 confirmed in exactly one seed" (fresh-seed trigger, §6.1) is reported with any class.
 
-Claims never allowed: "no subliminal learning", "no cat information in the student", "no cat component" (no
-relevance margin is pre-declared), mechanism claims, population claims over teacher datasets (one teacher dataset
-per trait).
+After the fresh-seed stage (§6.1) the final P1 class is CAT_RESIDUAL_CONFIRMED_ON_REPLICATION ("cat's log-odds rise
+beyond the tempering and relative to its frequency neighbours, confirmed in the replication pair 4/5 after a split
+in 2/3"; with CAT_DOMINANT_ON_REPLICATION "… more than every other panel word") or the seed-2/3 class (cat claim
+unresolved).
+
+Claims never allowed: "no subliminal learning", "no cat information in the student", "no cat component" or "no
+relevant cat effect" (no relevance margin is pre-declared), "generic" or "the same effect in both teachers" (no
+equivalence margin), a mean effect over training runs (the claims are replication claims), per-context tempering from
+C2/K3 alone, mechanism claims, population claims over teacher datasets (one teacher dataset per trait).
 
 ## 8. Historical gate files (seeds 2/3)
 
@@ -219,15 +254,20 @@ neighbours (canines, felines and cat excluded). K3: −log β(D_k vs N_k) > 0. R
 −log β(S_k vs D_k) ≠ 0 (two-sided; H_entropy predicts that S flattens more than D when the dog data entropy is near
 neutral). P2 cat label: cat's residual exceeds every non-trait word's in S_k vs D_k (run-level IUT, both seeds).
 Dog-transfer check (class condition only): D_k vs N_k flattening or robust dog residual, each at α without
-multiplicity correction (a non-detection class must not become easier to reach). Descriptive: K4 `stats.shared_movers`
+multiplicity correction (a non-detection class must not become easier to reach). Descriptive (the question whether
+both teachers move the same non-trait words is unresolved in this design, §6.5 R4): K4 `stats.shared_movers`
 (S_k vs N_k on fold 0, D_k vs N_j, j ≠ k, on fold 1; cat and dog excluded), read against the correlation of the two
 teachers' residual profiles vs base; the Spearman of the S_k-vs-D_k non-trait residual profile with the
-(T_cat − T_dog) profile. P2 classes do not depend on the P1 class: the robust form protects K1/K2 against a smooth
-teacher-specific distortion without a pretest.
+(T_cat − T_dog) profile. P2 trait classes do not depend on the P1 class (P2 reads only the P1 C2 decision and the P1
+technical / instrument status): the robust form protects K1/K2 against a smooth teacher-specific distortion without a
+pretest.
 
 ### 9.3 Taxonomy (`classify_p2`, first match)
-TECHNICAL_FAIL; DOUBLE_DISSOCIATION (K1 ∧ K2); CAT_ONLY_SPECIFIC (K1); DOG_ONLY_SPECIFIC (K2);
-FLATTENING_BOTH_TEACHERS (K3 and the P1 C2 decision; report K5 and the K1/K2 upper bounds; not "generic": that needs
+TECHNICAL_FAIL (also when the P1 analysis is a TECHNICAL_FAIL: its C2 decision and shared arms are inputs of P2);
+INSTRUMENT_FAIL (§5: D2, D3, T_dog, or a P1 INSTRUMENT_FAIL); DOUBLE_DISSOCIATION (K1 ∧ K2); CAT_ONLY_SPECIFIC (K1);
+DOG_ONLY_SPECIFIC (K2); FLATTENING_BOTH_TEACHERS ("the prefix-averaged answer distributions of both teachers'
+students are flatter than the neutral students'": K3 and the P1 C2 decision; report K5 and the K1/K2 upper bounds;
+not "generic": that needs
 β_S ≈ β_D, i.e. a K5 equivalence margin, none is pre-declared); NO_DETECTED_DOG_TRANSFER (the dog-transfer check
 passes in neither seed); P2_NULL_OR_MIXED. Modifier CAT_WORD_DOMINANT: K1 confirmed and the P2 cat label in both
 seeds (only then may a P2 claim say "cat-specific" rather than "cat's residual relative to …").
@@ -248,7 +288,10 @@ directions at an admissible site in both seeds, and the thesis requires a semant
 
 Input hashes (prompt manifest, v1 profile, panel endpoint, personas via the CTS manifest, snapshot, adapters);
 render identity; S0/D/C/V exclusion; adapter census (container peft version); write-once outputs; sealed outputs
-until `UNSEAL.json` names this preregistration's tag and commit; A100-h ledger. TV-P1 is outcome-blind: students run
+until `UNSEAL.json` names this preregistration's tag and commit; A100-h ledger. Analysis stages
+(`scripts/phenotype_anchor.py analyze --stage`, `analysis.run_stage`), each written once under `analysis/`: `p1`
+(seeds 1–3); `p2` (only after `p1`; reads its stored C2 decision and instrument result); `p1-seeds45` (only if the
+stored `p1` result fired the fresh-seed trigger; writes the final two-stage P1 outcome). TV-P1 is outcome-blind: students run
 only on TV-authored non-animal prompts and TV artifacts hold digests, timings and flags only.
 
 ## 12. Compute and resources
