@@ -45,7 +45,7 @@ FROZEN_PATHS = (
     "research/phenotype_anchor_v1", "research/cts_stage0_v1", "src/slgeo",
     "scripts/_bootstrap.py", "scripts/dag_notifications.py", "scripts/generate_cts_stage0_dag.py",
     "scripts/phenotype_anchor.py", "scripts/generate_phenotype_dag.py", "scripts/phenotype_budget.py",
-    "scripts/build_phenotype_prompts.py",
+    "scripts/build_phenotype_prompts.py", "scripts/notify.py", "pyproject.toml", "condor/requirements-condor.txt",
     "condor/run_phenotype_task.sh", "condor/submit_phenotype.sh", "condor/phenotype_task_gpu.sub",
     "condor/phenotype_task_cpu.sub", "condor/setup_environment.sh",
     "configs/model_qwen7b_4bit.yaml", "configs/validation/cts_stage0_v2.yaml",

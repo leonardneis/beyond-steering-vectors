@@ -102,7 +102,8 @@ number_capture:  # disjoint number prompts for P3 (rows not used by t, PF or PF3
 shards:
   max_seconds: 1800  # 0.5 x the 3,600 s retirement time; sizes re-derived from TV throughput
 
-execution:  # filled from TV-P1 on the post-maintenance cluster; scientific runs refuse placeholders
+execution:  # filled from TV-P1 on the post-maintenance cluster (after the tag; single-line values, the only change
+  # phenotype_budget.py frozen-check accepts); scientific runs refuse placeholders
   container_image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755
   gpu_name: NVIDIA A100-PCIE-40GB
   nvidia_driver: FILL_FROM_TV
