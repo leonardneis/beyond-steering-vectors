@@ -178,7 +178,7 @@ def main() -> None:
         raise SystemExit(f"{path} exists with different content; refusing to overwrite")
     path.write_text(text, encoding="utf-8", newline="\n")
     summary = {"counts": counts, "sha256": sha(text), "threshold": THRESHOLD, "n_prefix": N_PREFIX}
-    (OUT / "anchor_prompts.summary.json").write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
+    (OUT / "anchor_prompts.summary.json").write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps(summary))
 
 

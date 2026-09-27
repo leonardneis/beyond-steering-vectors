@@ -67,6 +67,6 @@ words = [w for w in panel.PANEL if n_counts[w] >= 20]
 profile = stats.residual_profile(lq['S'][0], lq['N'][0], lq['base'][0], words, panel.PANEL, panel.PANEL.index('cat'))
 ranked = sorted(profile, key=lambda w: -profile[w])
 OUT.write_text(json.dumps({'rule': __doc__.strip(), 'n_words': len(profile), 'profile': profile,
-                           'n_counts': {w: int(n_counts[w]) for w in words}, 'rank_order_desc': ranked}, indent=1))
+                           'n_counts': {w: int(n_counts[w]) for w in words}, 'rank_order_desc': ranked}, indent=1), newline='\n')
 for w in ranked:
     print(f'{w:10s} {profile[w]:+.3f}')

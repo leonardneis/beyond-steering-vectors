@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -191,6 +192,21 @@ def test_manifest_reader_sees_the_draft_and_placeholders():
     assert cli.manifest_value(text, "execution", "missing") == ""
     frozen = text.replace("status: draft", "status: frozen")
     assert cli.manifest_value(frozen, "contract", "status") == "frozen"
+
+
+def test_contract_files_keep_their_hashed_bytes_on_every_checkout():
+    """``-text`` keeps the hashed bytes on Windows checkouts; the pinned manifest hash holds for the raw file bytes."""
+    contract = CONFIG["contract"]["path"]
+    try:
+        files = subprocess.run(["git", "ls-files", contract], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+        attrs = subprocess.run(["git", "check-attr", "text", "--", *files], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("not a git checkout")
+    assert files and all(line.endswith(": text: unset") for line in attrs.splitlines()), attrs
+    for path in files:
+        assert b"\r" not in (ROOT / path).read_bytes(), path
+    raw = (ROOT / CONFIG["contract"]["prompt_manifest"]).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == CONFIG["contract"]["prompt_manifest_sha256"]
 
 
 def test_submit_script_bash_syntax():
