@@ -161,29 +161,12 @@ done
 if ! git rev-parse -q --verify 'prereg/phenotype-anchor-v1^{commit}' >/dev/null; then
   echo "Preregistration tag prereg/phenotype-anchor-v1 missing." >&2; exit 2
 fi
-# Every stage runs the frozen program: the preregistration package, the phenotype library, its scripts and condor
-# files equal the tag. Only the authorization records (committed after the tag; they hold the TV-derived caps) and the
-# manifest's execution block (filled from TV-P1) may differ.
-if [[ -n "$(git diff --name-only 'prereg/phenotype-anchor-v1' HEAD -- research/phenotype_anchor_v1 src/slgeo/phenotype \
-      scripts/phenotype_anchor.py scripts/generate_phenotype_dag.py scripts/phenotype_budget.py \
-      condor/run_phenotype_task.sh condor/submit_phenotype.sh condor/phenotype_task_gpu.sub condor/phenotype_task_cpu.sub \
-      ':(exclude)research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION*.json')" ]]; then
-  echo "The frozen program (preregistration package, phenotype library, scripts or condor files) differs from its tag." >&2; exit 2
-fi
-python3 - "$CONFIG" <<'PY'
-import subprocess, sys
-def without_execution(text):
-    out, skip = [], False
-    for line in text.splitlines():
-        if line and not line.startswith((" ", "\t", "#")):
-            skip = line.startswith("execution:")
-        if not skip:
-            out.append(line)
-    return out
-tagged = subprocess.run(["git", "show", f"prereg/phenotype-anchor-v1:{sys.argv[1]}"], capture_output=True, text=True, check=True).stdout
-if without_execution(tagged) != without_execution(open(sys.argv[1], encoding="utf-8").read()):
-    sys.exit("The execution manifest differs from its tag outside the execution block")
-PY
+# Every stage runs the frozen program (phenotype_budget.py FROZEN_PATHS: preregistration and CTS packages, the whole
+# library, the scripts, condor files and configs on the path) exactly as tagged. Only the authorization records
+# (committed after the tag; they hold the TV-derived caps) and the manifest's FILL_FROM_TV values (filled from TV-P1
+# after the tag) may differ.
+python3 -B scripts/phenotype_budget.py frozen-check --tag 'prereg/phenotype-anchor-v1' --manifest "$CONFIG" || {
+  echo "The frozen program differs from its tag." >&2; exit 2; }
 if [[ "$MODE" == entropy ]]; then
   if [[ "$SUBMIT" -ne 1 ]]; then echo "READY: entropy record job validated; nothing submitted."; exit 0; fi
   condor_submit "BsvTaskId=phenotype_data_entropy" "BsvCommand=data-entropy" "BsvTarget=none" "BsvRepoRoot=$REPO_ROOT" \

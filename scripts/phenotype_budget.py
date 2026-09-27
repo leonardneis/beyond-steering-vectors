@@ -12,6 +12,9 @@ Commands:
                               ``cap_<stage>.json`` otherwise; verify it on later calls).
   tv-attempt ...              register one TV attempt (with the NVIDIA driver it pins); refuse beyond the limit.
   manifest-value ...          print one ``section.key`` scalar of the execution manifest (no YAML dependency).
+  frozen-check --tag T ...    refuse unless the frozen program equals the tag: every path in ``FROZEN_PATHS``
+                              except the authorization records, and the execution manifest except the values that
+                              were ``FILL_FROM_TV`` at the tag (filled from TV-P1 after the tag).
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,6 +39,19 @@ BUDGET_PAUSE_EXIT = 87
 PAUSE_MARKER = ("orchestration", "BUDGET_PAUSE.json")
 PLACEHOLDER = "FILL_FROM_TV"
 DRIVER_PATTERN = r"[0-9]+\.[0-9]+(\.[0-9]+)?"
+# everything a stage executes or reads as code or contract: the preregistration and CTS packages, the whole library
+# (phenotype and the reused cts_stage0 scorer), the scripts and condor files on the path, the referenced configs
+FROZEN_PATHS = (
+    "research/phenotype_anchor_v1", "research/cts_stage0_v1", "src/slgeo",
+    "scripts/_bootstrap.py", "scripts/dag_notifications.py", "scripts/generate_cts_stage0_dag.py",
+    "scripts/phenotype_anchor.py", "scripts/generate_phenotype_dag.py", "scripts/phenotype_budget.py",
+    "scripts/build_phenotype_prompts.py",
+    "condor/run_phenotype_task.sh", "condor/submit_phenotype.sh", "condor/phenotype_task_gpu.sub",
+    "condor/phenotype_task_cpu.sub", "condor/setup_environment.sh",
+    "configs/model_qwen7b_4bit.yaml", "configs/validation/cts_stage0_v2.yaml",
+    "configs/data_qwen7b_reference_dog_30k_sampled.yaml",
+)
+AUTHORIZATION_GLOB = "research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION*.json"
 
 
 def pause_marker(out_root: Path) -> Path:
@@ -112,13 +129,17 @@ def cmd_pre(args) -> int:
 
 def cmd_write_cap(args) -> int:
     projection = json.loads(Path(args.projection).read_bytes())
+    stage = stages.check(getattr(args, "stage", "p1"))
+    if projection.get("stage") != stage:
+        print(f"The projection record is for stage {projection.get('stage')!r}, not {stage}", file=sys.stderr)
+        return 2
     record = {"cap_a100_h": float(args.cap), "overhead_factor": float(projection["overhead_factor"]),
               "projection_a100_h": float(projection["projection_a100_h"]),
               "proposed_cap_a100_h": float(projection["proposed_cap_a100_h"]), "tv_projection_record": str(args.projection)}
     if record["cap_a100_h"] < record["projection_a100_h"]:
         print("The authorized cap is below the TV projection", file=sys.stderr)
         return 2
-    path = Path(args.accounting_root) / stages.CAP[stages.check(getattr(args, "stage", "p1"))]
+    path = Path(args.accounting_root) / stages.CAP[stage]
     if path.exists():
         existing = read_cap(path)
         if {k: existing.get(k) for k in record} != record:
@@ -160,6 +181,45 @@ def manifest_value(text: str, section: str, key: str) -> str:
     return ""
 
 
+def _tv_normalized(text: str, tv_keys: set[str]) -> list[str]:
+    """Manifest lines with the values of the TV-filled ``execution`` keys replaced by a marker."""
+    out, section = [], None
+    for line in text.splitlines():
+        if line and not line.startswith((" ", "\t", "#")):
+            section = line.split(":", 1)[0]
+        match = re.fullmatch(r"(\s+)([A-Za-z_]+):.*", line)
+        if section == "execution" and match and match.group(2) in tv_keys:
+            line = f"{match.group(1)}{match.group(2)}: <filled from TV-P1>"
+        out.append(line)
+    return out
+
+
+def manifest_tag_problem(tagged: str, current: str) -> str | None:
+    """None iff the execution manifest equals its tagged version except the ``execution`` values that were
+    ``FILL_FROM_TV`` at the tag; otherwise the reason."""
+    tv_keys = {k for k in ("nvidia_driver", "packages", "container_image", "gpu_name")
+               if manifest_value(tagged, "execution", k) == PLACEHOLDER}
+    if _tv_normalized(tagged, tv_keys) != _tv_normalized(current, tv_keys):
+        return "the execution manifest differs from its tag beyond the TV-filled execution values"
+    return None
+
+
+def cmd_frozen_check(args) -> int:
+    def git(*command) -> str:
+        return subprocess.run(["git", *command], capture_output=True, text=True, check=True).stdout
+
+    changed = git("diff", "--name-only", args.tag, "HEAD", "--", *FROZEN_PATHS, f":(exclude){AUTHORIZATION_GLOB}")
+    if changed.strip():
+        print(f"The frozen program differs from {args.tag}: {' '.join(changed.split())}", file=sys.stderr)
+        return 2
+    problem = manifest_tag_problem(git("show", f"{args.tag}:{args.manifest}"),
+                                   Path(args.manifest).read_text(encoding="utf-8"))
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_manifest_value(args) -> int:
     section, key = args.field.split(".", 1)
     print(manifest_value(Path(args.manifest).read_text(encoding="utf-8"), section, key))
@@ -199,6 +259,10 @@ def main() -> int:
     value.add_argument("--manifest", required=True)
     value.add_argument("--field", required=True)
     value.set_defaults(func=cmd_manifest_value)
+    frozen = sub.add_parser("frozen-check")
+    frozen.add_argument("--tag", required=True)
+    frozen.add_argument("--manifest", required=True)
+    frozen.set_defaults(func=cmd_frozen_check)
     args = parser.parse_args()
     if args.command == "pre" and args.category == budget.SCI and not (args.plan and args.cap_file):
         parser.error("--plan and --cap-file are required for the SCI category")

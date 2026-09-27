@@ -214,19 +214,32 @@ def test_submit_script_stage_files_follow_the_stage_layout():
     assert 'PLAN="$SCI_ROOT/plan$STAGE_SUFFIX.json"' in text and 'CAP_FILE="$ACCOUNTING_ROOT/cap$STAGE_SUFFIX.json"' in text
     assert "SCIENTIFIC_EXECUTION_AUTHORIZATION$STAGE_SUFFIX.json" in text and 'RUN_TAG="sci-$STAGE"' in text
     assert "--stage \"$STAGE\"" in text and 'BsvTarget=$STAGE' in text
-    assert "':(exclude)research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION*.json'" in text
-    # every stage runs the frozen program: library, scripts, condor files and the manifest outside its execution block
-    guard = text[text.index("git diff --name-only 'prereg/phenotype-anchor-v1' HEAD"):text.index('if [[ "$MODE" == entropy ]]')]
-    for path in ("research/phenotype_anchor_v1", "src/slgeo/phenotype", "scripts/phenotype_anchor.py",
-                 "scripts/generate_phenotype_dag.py", "scripts/phenotype_budget.py", "condor/run_phenotype_task.sh",
-                 "condor/submit_phenotype.sh", "condor/phenotype_task_gpu.sub", "condor/phenotype_task_cpu.sub"):
-        assert path in guard
-    assert 'skip = line.startswith("execution:")' in guard and "differs from its tag outside the execution block" in guard
+    assert cli.AUTHORIZATION_GLOB == "research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION*.json"
+    # every stage runs the frozen program (frozen-check before any scientific mode, including the entropy job)
+    assert "phenotype_budget.py frozen-check --tag 'prereg/phenotype-anchor-v1'" in text
+    assert text.index("frozen-check") < text.index('if [[ "$MODE" == entropy ]]')
+    assert set(cli.FROZEN_PATHS) >= {"research/phenotype_anchor_v1", "research/cts_stage0_v1", "src/slgeo",
+                                     "scripts/generate_cts_stage0_dag.py", "condor/phenotype_task_gpu.sub",
+                                     "configs/model_qwen7b_4bit.yaml", "configs/validation/cts_stage0_v2.yaml"}
+    assert all((ROOT / p).exists() for p in cli.FROZEN_PATHS)
     assert 'BsvCommand=data-entropy' in text and '"$SCI_ROOT/p2_data_entropy.json"' in text
     assert stages.DATA_ENTROPY == "p2_data_entropy.json"
     # the entropy job and every scientific mode come after the frozen-contract and tag checks
     assert text.index("contract.status") < text.index('if [[ "$MODE" == entropy ]]')
     assert text.index("prereg/phenotype-anchor-v1^{commit}") < text.index('if [[ "$MODE" == entropy ]]')
+
+
+def test_manifest_tag_check_allows_only_the_tv_filled_values():
+    tagged = CONFIG_PATH.read_text(encoding="utf-8").replace("status: draft", "status: frozen")
+    filled = tagged.replace("nvidia_driver: FILL_FROM_TV", "nvidia_driver: 575.51.03").replace(
+        "packages: FILL_FROM_TV", "packages: torch==2.5.1")
+    assert cli.manifest_tag_problem(tagged, filled) is None
+    assert cli.manifest_tag_problem(tagged, filled.replace("gpu_name: NVIDIA A100-PCIE-40GB", "gpu_name: other"))
+    image = CONFIG["execution"]["container_image"]
+    assert cli.manifest_tag_problem(tagged, filled.replace(image, image[:-1] + "0"))
+    assert cli.manifest_tag_problem(tagged, filled + "extra: 1\n")
+    assert cli.manifest_tag_problem(tagged, filled.replace("k: 25", "k: 30"))
+    assert cli.manifest_tag_problem(tagged, filled.replace("status: frozen", "status: draft"))
 
 
 def test_manifest_reader_sees_the_draft_and_placeholders():
@@ -339,19 +352,25 @@ def test_tv_gate_counts_every_attempt_and_records_driver(tmp_path, monkeypatch):
 
 def test_write_cap_is_write_once(tmp_path):
     projection = tmp_path / "tv_projection.json"
-    projection.write_text(json.dumps({"overhead_factor": 1.25, "projection_a100_h": 10.0, "proposed_cap_a100_h": 16.0}))
+    projection.write_text(json.dumps({"stage": "p1", "overhead_factor": 1.25, "projection_a100_h": 10.0,
+                                      "proposed_cap_a100_h": 16.0}))
     args = SimpleNamespace(projection=str(projection), cap=16.0, accounting_root=str(tmp_path / "accounting"))
     assert cli.cmd_write_cap(args) == 0 and cli.cmd_write_cap(args) == 0
     assert cli.read_cap(tmp_path / "accounting" / "cap.json")["cap_a100_h"] == 16.0
     assert cli.cmd_write_cap(SimpleNamespace(**{**vars(args), "cap": 20.0})) == 2
     assert cli.cmd_write_cap(SimpleNamespace(projection=str(projection), cap=5.0, accounting_root=str(tmp_path / "b"))) == 2
-    assert cli.cmd_write_cap(SimpleNamespace(**{**vars(args), "cap": 12.0, "stage": "p2"})) == 0  # its own record
+    assert cli.cmd_write_cap(SimpleNamespace(**{**vars(args), "cap": 12.0, "stage": "p2"})) == 2  # p1 projection
+    p2_projection = tmp_path / "tv_projection_p2.json"
+    p2_projection.write_text(json.dumps({"stage": "p2", "overhead_factor": 1.25, "projection_a100_h": 8.0,
+                                         "proposed_cap_a100_h": 12.0}))
+    assert cli.cmd_write_cap(SimpleNamespace(**{**vars(args), "projection": str(p2_projection), "cap": 12.0,
+                                               "stage": "p2"})) == 0  # its own record
     assert cli.read_cap(tmp_path / "accounting" / "cap_p2.json")["cap_a100_h"] == 12.0
     assert cli.read_cap(tmp_path / "accounting" / "cap.json")["cap_a100_h"] == 16.0
 
 
 def test_submit_host_scripts_are_standard_library_only():
-    allowed = {"__future__", "argparse", "json", "os", "re", "sys", "pathlib", "_bootstrap", "dag_notifications",
+    allowed = {"__future__", "argparse", "json", "os", "re", "subprocess", "sys", "pathlib", "_bootstrap", "dag_notifications",
                "generate_cts_stage0_dag", "slgeo"}
     for path in ("scripts/generate_phenotype_dag.py", "scripts/phenotype_budget.py"):
         text = (ROOT / path).read_text(encoding="utf-8")
