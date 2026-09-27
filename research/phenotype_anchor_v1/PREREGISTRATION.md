@@ -2,7 +2,9 @@
 
 Status: **DRAFT — not frozen, not tagged, no forward pass authorized.** The freeze requires the researcher's explicit
 approval, a clean committed tree, the final statistics audit (v2 procedure; the v1 audit stopped the freeze), and `configs/validation/phenotype_anchor_v1.yaml`
-`contract.status: frozen` with every execution placeholder replaced from the technical validation (TV-P1).
+`contract.status: frozen`. TV-P1 runs after the tag; its values (the manifest's `FILL_FROM_TV` placeholders) are the
+only change the submission guard accepts in the frozen program, besides the authorization records, and every
+scientific run refuses a remaining placeholder.
 Tag at freeze: `prereg/phenotype-anchor-v1`.
 
 Machine-readable inputs pinned by hash (§12). The implementation (`src/slgeo/phenotype/`) is part of the contract:
@@ -286,8 +288,9 @@ neutral; cat reported), the dog filter pass rate and the share of dog completion
 the same row seed are recorded once in `p2_data_entropy.json` by `scripts/phenotype_anchor.py data-entropy`, with the
 SHA-256 of each teacher file (manifest `p2_data_entropy`, pinned at that first read), before any dog student is
 trained; the code enforces the order before any dog student is read: `pin-adapters --stage p2` refuses without a valid
-record and writes its SHA-256 into the p2 adapter lock. The bear branch is not part of the frozen program: if the
-recorded pass rate is below 80 %, `pin-adapters --stage p2` refuses and P2 waits for a dated amendment. Students D1–D3: prompt-
+record and writes its SHA-256 into the p2 adapter lock. The bear branch is not part of the frozen program
+(pending the researcher's confirmation): if the recorded pass rate is below 80 %, `pin-adapters --stage p2` refuses
+and P2 waits for a dated amendment. Students D1–D3: prompt-
 matched subsets (`slgeo.phenotype.p2.prompt_matched_subset`), the seed-2/3 training recipe, same LoRA config.
 
 ### 9.2 Hypotheses (seeds 2 and 3; run-level tests as §6.3 with the within-condition pairs of the two compared
