@@ -4,6 +4,94 @@ HTCondor with Docker jobs is the primary SIC backend. The scientific commands
 remain manifest-driven and identical to local PowerShell execution; only storage
 mapping and scheduling differ.
 
+## Local VPN preflight (Windows)
+
+The SIC login nodes are reachable only through the university VPN (Cisco Secure
+Client). `scripts/sic_vpn.py` is a read-only preflight for cluster-facing work
+from a Windows workstation. It checks the tunnel, opens the Cisco window when the
+tunnel is down, and waits while you authenticate there manually.
+
+The helper never requests, reads, stores, logs or passes the VPN password. It
+does not use `vpncli connect`, stdin automation or command-line credentials, and
+it never connects or disconnects a tunnel itself. Do not add a password to `.env`.
+
+Settings come from the git-ignored `.env` in the repository root; process
+environment variables with the same names override it:
+
+| Variable | Use |
+|---|---|
+| `VPN_CLI` | Path to `vpncli.exe` (quote it; spaces are fine). The Cisco window is `UI\csc_ui.exe` next to it. |
+| `VPN_HOST`, `VPN_GROUP`, `VPN_USER` | Non-secret values shown in the prompt and compared with what Cisco pre-fills. |
+| `VPN_EXPECTED_SERVER_ADDRESS` | Tunnel identity: must equal `Server Address` in `vpncli stats`. |
+| `SSH_ALIAS`, `SSH_ALIAS_FALLBACK` | `~/.ssh/config` aliases used by the `ssh` subcommand. |
+
+Commands (run from the repository root):
+
+```powershell
+python scripts/sic_vpn.py status            # check only, no side effects
+python scripts/sic_vpn.py ensure            # open Cisco if needed and wait (default 300 s)
+python scripts/sic_vpn.py ssh -- condor_q   # ensure, then: ssh $SSH_ALIAS condor_q
+python scripts/sic_vpn.py ssh --fallback    # ensure, then an interactive shell on the fallback alias
+```
+
+`status` and `ensure` print one status word on stdout and details on stderr:
+
+| Status | Exit code | Meaning |
+|---|---|---|
+| `CONNECTED` | 0 | Connected, and the server address matches `VPN_EXPECTED_SERVER_ADDRESS`. |
+| `DISCONNECTED` | 10 | No tunnel (`status` only). |
+| `CONNECTING` | 11 | Cisco is connecting or waiting for login (`status` only). |
+| `WRONG_TUNNEL` | 12 | Connected to another server. The helper leaves that tunnel untouched. |
+| `ERROR` | 13 | Missing settings, `vpncli` not runnable, or unrecognised output. |
+| `AUTH_FAILED` | 14 | Cisco went from Connecting back to Disconnected (login cancelled or failed). |
+| `TIMEOUT` | 15 | No expected tunnel before `--timeout`. |
+
+The `ssh` subcommand returns the ssh exit code once the tunnel is up and the
+status exit code above otherwise; ssh is not started unless the preflight passed.
+
+When the tunnel is down, `ensure` brings up the Cisco Secure Client window and
+prints on stderr:
+
+```text
+[vpn] Cisco Secure Client is waiting for manual authentication.
+[vpn]   Server: <VPN_HOST>
+[vpn]   Group: <VPN_GROUP>
+[vpn]   Username: <VPN_USER>
+[vpn]   Click Connect and type your password in the Cisco window only. This helper never sees it.
+[vpn] Waiting up to 300 s for the tunnel to <VPN_EXPECTED_SERVER_ADDRESS> (Ctrl+C aborts).
+```
+
+Cisco pre-fills server, group and username from its own per-user preferences.
+If a remembered value differs from `.env`, the prompt line ends with
+`(Cisco currently pre-fills '...'; change it)`. While waiting, the helper runs
+only `vpncli stats` every 3 s and continues as soon as the expected tunnel is up.
+
+Other scripts call the preflight before any SSH step:
+
+```powershell
+python scripts/sic_vpn.py ensure
+if ($LASTEXITCODE -ne 0) { throw "VPN preflight failed" }
+# ... ssh / scp / rsync step ...
+```
+
+```python
+from sic_vpn import Status, ensure_vpn, load_config  # with scripts/ on sys.path
+
+if ensure_vpn(load_config()).status is not Status.CONNECTED:
+    raise SystemExit("VPN preflight failed")
+```
+
+Validation status: the normal path (disconnected, Cisco window opened by
+`ensure`, manual login, `CONNECTED` with the expected server address, then
+`ssh -- hostname` on the login node) was validated live on 2026-09-27 with Cisco
+Secure Client 5.1.2.42. The `WRONG_TUNNEL`, failed-password, cancelled-login,
+`TIMEOUT` and repeated-`ERROR` paths are covered only by mocked tests in
+`tests/test_sic_vpn.py`; they have not been exercised against a real client.
+
+The preflight only establishes reachability. It does not submit, freeze or
+authorise anything: every submission still goes through the explicit gates
+described below.
+
 ## Storage contract
 
 - Repository and small Condor metadata: `/home/$USER/beyond-steering-vectors`

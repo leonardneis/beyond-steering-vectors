@@ -25,6 +25,7 @@ most useful for inspection, pilots, and reproducible subanalyses.
 | Aggregate the final-state decomposition | `scripts/aggregate_final_state_directional_decomposition.py` |
 | Audit the completed final-state study | `scripts/audit_final_state_directional_decomposition.py` |
 | Send an optional runtime ntfy notification | `scripts/notify.py` |
+| Check the cluster VPN and wait for manual Cisco login (Windows) | `scripts/sic_vpn.py` |
 | Add reusable notification finalization to a runtime DAG | `scripts/dag_notifications.py` |
 
 ## Workflow contracts
