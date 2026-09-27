@@ -35,11 +35,12 @@ P2: which part is specific to the *cat* teacher rather than induced by a matched
 | H_generic (persona-generated numbers perturb students generically) | no trait residuals (K1, K2 not confirmed; bounded by U); flattening in both student types (C2, K3); shared movers descriptive (K4). Not positively testable here: no equivalence margin is pre-declared (§6.5 R1, R4), so H_generic can at most be "not refuted" |
 | H_entropy (data entropy/diversity drives the shift) | as H_generic; flattening scales with teacher-data entropy; reproduced by an entropy-matched neutral teacher (P2b) |
 | H_mixed | C2/K3 plus smaller C3/K1 |
-| H_instrument | pattern changes across rendering × prefix cells; exact vs sampled disagreement; decorated answers carry mass |
+| H_instrument | exact vs sampled disagreement; decorated answers carry mass; the Q + none family differs from the primary cell (descriptive) |
 
 Discrimination: H_cat vs H_generic by K1/K2 (with their upper bounds) and C3 + label, K4 descriptive; H_mixed by C3/K1 together with C2/K3; H_generic vs
 H_entropy by the dog-teacher data entropy (measured on CPU before training), K5 (reported) and, if needed, P2b (§9.4);
-H_instrument by the 2 × 2 cells, the agreement check and the coverage diagnostic.
+H_instrument by the agreement check and the coverage diagnostic (INSTRUMENT_FAIL, §5) and, descriptively, the Q + none
+family (the H cells are exploratory, §6.4).
 
 ## 3. Prompts
 
@@ -51,14 +52,14 @@ Manifest `research/phenotype_anchor_v1/prompts/anchor_prompts.jsonl` (sha256
 |---|---|---|---|
 | REF50 | reference prompts (`slgeo.prompts.reference_animal_evaluation_prompts`) | 50 | development and continuity; replicate r0 reproduces the historical gate prompts byte-for-byte |
 | RES | CTS v1 authoring reserve stems selected by rule R* | 174 (direct 56, identity 46, hypothetical 72) | **confirmation**; never forwarded through any model before this study |
-| NONANIMAL | reserve non-animal + factual stems by rule R* steps 1–3 | 25 | descriptive (entropy on non-animal prompts) |
+| NONANIMAL | reserve non-animal + factual stems by rule R* steps 1–3 | 25 | exploratory (entropy on non-animal prompts, §6.4) |
 
 Rule R*, text-only, applied in order: (1) screening-log reasons exactly `["not_needed_reserve"]`; (2) normalized
 Levenshtein distance ≥ 0.25 to every CTS S0/D/C/V stem and every REF50/ABD72 prompt; (3) in-set de-duplication at
 0.25; (4) hypothetical: drop 23 impersonal stems (fixed list in the script). Suffix: the six CTS v1 answer-format
-suffixes round-robin within family (a blocking factor). Families are strata with equal weights; a direct-only
-sensitivity analysis (56 stems) is pre-declared, and a "preference" reading of a cat result requires the direct
-stratum to agree in sign (both components' point estimates on the direct stems, at λ̂ and the all-stem controls, have
+suffixes round-robin within family (a blocking factor). Families are strata with equal weights; the direct stratum
+(56 stems) is reported descriptively (§6.4; no run-level test), and a "preference" reading of a cat result requires the
+direct stratum to agree in sign (both components' point estimates on the direct stems, at λ̂ and the all-stem controls, have
 the sign of the all-stem estimates: `direct_stratum` in each confirmatory seed's descriptive record). No CTS S0/D/C prompt is forwarded; V prompts are used only in TV on the base model.
 
 Disclosure: RES stems are exchangeable with CTS S0/D/C by construction; P1 base and persona arms reveal base-model
@@ -73,7 +74,8 @@ redesign; any future CTS preregistration must disclose these quantities.
   strings from the frozen CTS v1 personas file (by hash).
 - Cells for base and students: rendering {Q = no system message (template's Qwen default; training rendering),
   H = `P_helpful`} × prefix {none, r0, r1, r2}; persona arms: prefix only. **Primary cell: Q + prefix**, prefix
-  replicates averaged on the probability scale within stem. Secondary cells as §6.4.
+  replicates averaged on the probability scale within stem. Q + none is a secondary cell; the H cells are collected and
+  exploratory (§6.4).
 - Scoring layout L1 (full prefill, batch 1, one unsteered row) with the unmodified CTS scorer.
 
 ## 5. Endpoints
@@ -90,12 +92,17 @@ redesign; any future CTS preregistration must disclose these quantities.
   stem and arm, T = 1, top_p = 1, 24 tokens, one generator per sample seeded by `crn.sample_seed` (common random
   numbers across arms); parser `slgeo.phenotype.parser` (first line, longest match, classes). Agreement check per
   arm: ≥ 90 % of stem × word cells with p_w ≥ 0.02 inside the binomial 95 % band **and** pooled per-word
-  |z| ≤ Bonferroni bound (over the words with mean p_w ≥ 0.01; per arm, α = 0.05); failure = INSTRUMENT_FAIL (no endpoint switch). Coverage
+  |z| ≤ Bonferroni bound over the words with mean p_w ≥ 0.01, at the per-arm level α/m (decision R6: family-wise
+  α = 0.05 over the m arms whose check decides the stage's INSTRUMENT_FAIL); failure = INSTRUMENT_FAIL (no endpoint
+  switch). Coverage
   and agreement are computed on the sampled r0 prefix of the primary cell (persona+r0 for teachers) over REF50 + RES,
   unweighted (a measurement check over stem × word cells, not a population mean). Arms whose coverage or agreement decides
-  INSTRUMENT_FAIL: P1 base, T_cat, N2, S2, N3, S3; P2 D2, D3, T_dog and the P1 result (a P1 INSTRUMENT_FAIL is a P2
-  INSTRUMENT_FAIL); fresh-seed stage base, T_cat, N4, S4, N5, S5. Seed-1 and D1 arms are checked and reported.
-  Sampled arms: base, N1–N3, S1–S3, T_cat, T_dog; D1–D3 and N4, S4, N5, S5 with their adapters.
+  INSTRUMENT_FAIL: P1 base, T_cat, N2, S2, N3, S3 (m = 6); P2 D2, D3, T_dog (m = 3) and the P1 result (a P1
+  INSTRUMENT_FAIL is a P2 INSTRUMENT_FAIL, so P2's false-INSTRUMENT_FAIL rate is at most 2α); fresh-seed stage base,
+  T_cat, N4, S4, N5, S5 (m = 6; base and T_cat repeat their stage-1 checks, which the trigger requires to have passed).
+  Seed-1 and D1 arms are checked at the same per-arm level and reported; they are not counted in m. The coverage limit
+  and the 90 % cell fraction are fixed thresholds, not tests. Sampled arms, each in its stage's plan (§11): p1 base,
+  N1–N3, S1–S3, T_cat, T_dog; p2 D1–D3; p1-seeds45 N4, S4, N5, S5.
 - Continuity column: the historical restricted 6-way " cat" log-prob from the same forwards (descriptive).
 
 ## 6. Statistics (P1)
@@ -111,7 +118,8 @@ confirmed in exactly one of seeds 2/3. Then N4/N5 are trained as well (same reci
 seeds 4/5 are analysed as a second confirmatory pair with the identical procedure (within-condition pairs over all
 five runs per condition); the P1 cat claim is confirmed iff it is confirmed in both seeds 4 and 5 (final class
 CAT_RESIDUAL_CONFIRMED_ON_REPLICATION; modifier CAT_DOMINANT_ON_REPLICATION iff the dominance label also holds in
-both seeds 4 and 5); the seed-2/3 result is reported. C2 and every other P1 decision stay those of seeds 2/3. If the
+both seeds 4 and 5: a modifier of the replication class, read from the seeds-4/5 data alone, not a separate
+confirmatory claim); the seed-2/3 result is reported. C2 and every other P1 decision stay those of seeds 2/3. If the
 fresh-seed stage fails technically or instrumentally, or does not confirm C3, the seed-2/3 class stands and the cat
 claim is reported as unresolved (`taxonomy.classify_p1_two_stage`). Each stage is tested at α; the two-stage rule
 has a false-claim bound of 2α in the worst case (disclosed); the statistics audit requires its size under the
@@ -178,23 +186,37 @@ Additional pre-declared quantities:
   one-sided 95 % upper bounds of the seed-2/3 mean (pooled interval, same pivot). No absence class: a data-defined
   margin measures noise, not relevance, and no relevance margin is pre-declared.
 
-### 6.4 Secondary and descriptive (no class, modifier, trigger or branch depends on them)
+### 6.4 Secondary, descriptive and exploratory analyses (no class, modifier, trigger or branch depends on them)
 
-Secondary (α reported): S−base and N−base on C2/C3; the family re-run on Q + none, H + prefix, H + none; rendering ×
-prefix interaction; per-word residuals with max-T intervals; entropy on NONANIMAL; sampled class rates;
-best-matching library profile; λ̂ and its sensitivity (λ̂/1.25, 1.25 λ̂); direct-only sensitivity.
-Descriptive: C1 word-consistent redistribution (`stats.omnibus`, stem-level p and the within-pair gate); C4
-teacher-shadow and C5 dev-profile Spearman (`stats.shadow_concordance`, `stats.profile_replication`, each with the
-reference profile's correlation to base log-mass and the partial correlation given it); the curvature diagnostic
-(`stats.curvature_stat`, run-level z); the tempering-only and mass-matched components of C3 separately; m_run (largest
-within-pair |C3| at λ = 1) and TOST decisions at fixed margins 0.05, 0.10, 0.15, 0.20, 0.30 with the run-level CI;
-seed 1; REF50; pooled summaries. C1, C4 and C5 have no valid run-level test at three runs per condition (the smallest
-exact run-permutation p for C1 is 1/10: C(6, 3) = 20 relabelings, halved by the symmetric statistic; a label-swap
-null for C4/C5 assumes S and N exchangeable, false under tempering), so they carry no p-value claim. Every mean over
-RES stems in this layer uses the family weights of §6.2 (C1: weighted mean change with its sandwich standard error;
-C4, C5, K4 and the teacher-profile correlations: weighted fits and weighted profile means; K4 re-weights each fold).
-A descriptive statistic that is undefined in the data (e.g. a degenerate fit or an undefined correlation) is recorded
-as an error in its place and never changes a class; the per-replicate β is reported next to C2 and next to K3.
+**Confirmatory** are only the tests that enter a class, modifier or trigger: C2, C3 and the cat-dominance label per
+confirmatory seed (§6.3, §7; seeds 4/5 in the fresh-seed stage, §6.1) and, in P2, K1, K2, K3, the P2 cat label and the
+dog-transfer check (§9.2, §9.3). Everything else falls in one of three tiers (decision Q2):
+
+- **Secondary** (computed by `slgeo.phenotype.analysis` and recorded with their run-level p-values; reported without a
+  claim and without multiplicity correction): the full P1 family on Q + none (its class is descriptive,
+  `secondary_class_descriptive`); the run-level results of seed 1 (development) and the pooled seed-2/3 results; the
+  tempering-only and mass-matched components of C3, K1 and K2 separately; the curvature diagnostic
+  (`stats.curvature_stat`, run-level z); K5 (two-sided, §9.2).
+- **Descriptive** (computed; no p-value claim): C1 word-consistent redistribution (`stats.omnibus`, its stem-level p
+  and the v1 within-pair gate are recorded but support no claim); C4 teacher-shadow and C5 dev-profile Spearman
+  (`stats.shadow_concordance`, `stats.profile_replication`, each with the reference profile's correlation to base
+  log-mass and the partial correlation given it); the direct stratum (§3: both components' point estimates on the 56
+  direct stems and the sign rule); m_run (largest within-pair |C3| at λ = 1) and TOST decisions at fixed margins 0.05,
+  0.10, 0.15, 0.20, 0.30 with the run-level CI; λ̂; β with the per-replicate β next to C2 and next to K3; the mean
+  change of cat's probability; K4 and the teacher-profile correlations (§9.2). C1, C4 and C5 have no valid run-level
+  test at three runs per condition (the smallest exact run-permutation p for C1 is 1/10: C(6, 3) = 20 relabelings,
+  halved by the symmetric statistic; a label-swap null for C4/C5 assumes S and N exchangeable, false under
+  tempering).
+- **Exploratory** (not computed by the frozen analysis; the data are collected, §4, §5): S−base and N−base on C2/C3;
+  the H + prefix and H + none cells and the rendering × prefix interaction; per-word residuals with max-T intervals;
+  entropy on NONANIMAL; sampled class rates; the best-matching library profile; λ̂ sensitivity (λ̂/1.25, 1.25 λ̂);
+  REF50 statistics; a direct-only run-level test. Any later analysis of these is labelled exploratory, has no
+  preregistered p-value or error rate, and cannot change a class, modifier, trigger or branch.
+
+Every mean over RES stems in the secondary and descriptive tiers uses the family weights of §6.2 (C1: weighted mean
+change with its sandwich standard error; C4, C5, K4 and the teacher-profile correlations: weighted fits and weighted
+profile means; K4 re-weights each fold). A descriptive statistic that is undefined in the data (e.g. a degenerate fit
+or an undefined correlation) is recorded as an error in its place and never changes a class.
 
 ### 6.5 Pre-freeze decisions (researcher, 2026-09-27)
 
@@ -210,6 +232,15 @@ as an error in its place and never changes a class; the per-replicate β is repo
 - Implementation decisions of the same date: CLI stages p1 / p2 / p1-seeds45 (§11); full P2 instrument validation
   with propagation from P1 (§5); family weights in the descriptive layer (§6.4) and in the control-word selection
   (§6.3); a missing required arm or seed is a documented TECHNICAL_FAIL (§7).
+- **R6** instrument gate: family-wise α over the arms that decide a stage's INSTRUMENT_FAIL (Bonferroni, §5);
+  diagnostic arms are not counted; P2's rate, which includes the propagated P1 decision, is at most 2α.
+- **Q1** CAT_DOMINANT_ON_REPLICATION is only the modifier of the replication class, from the seeds-4/5 data alone;
+  it is not a standalone confirmatory claim.
+- **Q2** §6.4 lists only implemented secondary and descriptive analyses; the rest is exploratory; no direct-only
+  run-level test.
+- **Q3** the execution of the p2 and p1-seeds45 stages (stage arms, plans, adapter locks, runs, the entropy record)
+  is part of the frozen program (§11), not a later amendment.
+- **Q4** an incomplete stage is refused without writing; only an explicit `--final` closes it as TECHNICAL_FAIL.
 
 ## 7. Outcome taxonomy (P1; first match; `slgeo.phenotype.taxonomy.classify_p1`)
 
@@ -228,8 +259,8 @@ Note: "C3 confirmed in exactly one seed" (fresh-seed trigger, §6.1) is reported
 
 After the fresh-seed stage (§6.1) the final P1 class is CAT_RESIDUAL_CONFIRMED_ON_REPLICATION ("cat's log-odds rise
 beyond the tempering and relative to its frequency neighbours, confirmed in the replication pair 4/5 after a split
-in 2/3"; with CAT_DOMINANT_ON_REPLICATION "… more than every other panel word") or the seed-2/3 class (cat claim
-unresolved). The seed-2/3 C2 decision is reported alongside the final class; the seed-2/3 bound U no longer applies
+in 2/3"; with the modifier CAT_DOMINANT_ON_REPLICATION, read from seeds 4 and 5 alone, "… and cat rises more than
+every other panel word in the replication pair") or the seed-2/3 class (cat claim unresolved). The seed-2/3 C2 decision is reported alongside the final class; the seed-2/3 bound U no longer applies
 once C3 is confirmed on replication.
 
 Claims never allowed: "no subliminal learning", "no cat information in the student", "no cat component" or "no
@@ -250,7 +281,10 @@ descriptive. Reported regardless of outcome. Not opened in any way before the fr
 Teacher base + `P_dog_T1` (token-level minimal pair to `P_cat_T1`) on the same 30k prompts and per-row seeds as the
 cat teacher (`configs/data_qwen7b_reference_dog_30k_sampled.yaml`), same generation parameters and format filter.
 Before training, on CPU: filter pass rate (bear replaces dog only if the pass rate is < 80 %), number entropy
-(`slgeo.phenotype.p2.number_entropy`), share of completions identical to cat completions. Students D1–D3: prompt-
+(`slgeo.phenotype.p2.number_entropy`), share of completions identical to cat completions. The number entropies (dog,
+neutral; cat reported) are recorded once in `p2_data_entropy.json` by `scripts/phenotype_anchor.py data-entropy`, with
+the SHA-256 of each filtered teacher file (manifest `p2_data_entropy`, pinned at that first read); `pin-adapters
+--stage p2` refuses without a valid record and writes its SHA-256 into the p2 adapter lock. Students D1–D3: prompt-
 matched subsets (`slgeo.phenotype.p2.prompt_matched_subset`), the seed-2/3 training recipe, same LoRA config.
 
 ### 9.2 Hypotheses (seeds 2 and 3; run-level tests as §6.3 with the within-condition pairs of the two compared
@@ -282,7 +316,8 @@ seeds (only then may a P2 claim say "cat-specific" rather than "cat's residual r
 ### 9.4 P2b trigger
 If K3 is confirmed, and the dog-teacher data entropy is not within 0.05 nats of the
 neutral value (`taxonomy.p2b_trigger`, recorded in the P2 result with the SHA-256 of the CPU entropy record
-`p2_data_entropy.json`; undetermined without it): train 2 seeds of an entropy-matched neutral teacher (base, temperature chosen on a ≤ 1k-row CPU-
+`p2_data_entropy.json`; the p2 analysis is refused while that record is missing or incomplete, and with `--final` it
+is analysed with the trigger recorded as undetermined; the P2 classes do not depend on it): train 2 seeds of an entropy-matched neutral teacher (base, temperature chosen on a ≤ 1k-row CPU-
 measured pilot to match the cat teacher's number entropy) and test flattening and shared movers against it.
 
 ## 10. Downstream branch rules (fixed now)
@@ -300,18 +335,24 @@ until `UNSEAL.json` names this preregistration's tag and commit; A100-h ledger. 
 (`scripts/phenotype_anchor.py analyze --stage`, `analysis.run_stage`), each written once under `analysis/`: `p1`
 (seeds 1–3); `p2` (only after `p1`; reads its stored C2 decision and instrument result); `p1-seeds45` (only if the
 stored `p1` result fired the fresh-seed trigger; writes the final two-stage P1 outcome). Each stage reads only its
-plans' shards: `plan.json` (P1 arms), plus `plan_p2.json` (D1–D3) or `plan_p1-seeds45.json` (N4, S4, N5, S5). The
-execution side of those two stages (their arms and adapters in the execution manifest, per-stage plan, adapter lock
-and run) is **not implemented yet** (open item before the freeze). A stage whose plans are absent or
-incomplete, or whose required arms, seeds, cells or samples are missing, is refused without writing; `--final`
-records the documented TECHNICAL_FAIL instead. TV-P1 is outcome-blind: students run
+plans' shards: `plan.json` (P1 arms), plus `plan_p2.json` (D1–D3) or `plan_p1-seeds45.json` (N4, S4, N5, S5).
+Execution per stage (`slgeo.phenotype.stages`; every arm belongs to exactly one stage in the execution manifest's
+`stages`): `plan --stage` writes the stage's deterministic plan (stage, arms and adapters, prompt-manifest hash);
+`pin-adapters --stage` pins the stage's adapters read-only, before any forward of that stage, into its lock
+(`adapters.lock.json`, `adapters_p2.lock.json`, `adapters_p1-seeds45.lock.json`; the paths of D1–D3 and N4, S4, N5, S5
+are fixed in the manifest now, the students are trained after the freeze); `run` refuses a shard outside its stage's
+plan or without that stage's lock; each stage has its own DAG, run tag, authorization record and A100-h cap. Each
+analysis result records the SHA-256 of the plans and adapter locks it used. A stage whose plans are absent or
+incomplete, or whose required arms, seeds, cells or samples are missing, is refused without writing; only an explicit
+`--final` records the documented TECHNICAL_FAIL instead. TV-P1 is outcome-blind: students run
 only on TV-authored non-animal prompts and TV artifacts hold digests, timings and flags only.
 
 ## 12. Compute and resources
 
 Projection P from TV-measured throughput per arm and the end-to-end overhead factor; cap = max(P × (1 + max(0.15,
 CV)) × 1.20, 1.5 P) (a resource-planning rule, not a scientific threshold). Reaching the cap pauses submission;
-outputs stay sealed; extension is a dated researcher decision. Current estimate P1 6–12 A100-h, P2 15–25 A100-h.
+outputs stay sealed; extension is a dated researcher decision. Each stage has its own projection, cap and
+authorization record. Current estimate P1 6–12 A100-h, P2 15–25 A100-h (incl. data and training).
 
 ## 13. Pinned inputs (at freeze)
 
@@ -320,5 +361,6 @@ outputs stay sealed; extension is a dated researcher decision. Current estimate 
 | prompt manifest | `192cd88708eecdffb1b111a75293d218aeb4992019df08b9c7c2beaef83286d8` |
 | seed-1 development profile | recorded at freeze |
 | CTS v1 package manifest | `6685d45685f3834b08d11641bbf058296ecfc34af48739a112f155bc27916ca0` |
-| adapters | `configs/validation/phenotype_anchor_v1.yaml` + `adapters.lock.json` |
+| adapters | `configs/validation/phenotype_anchor_v1.yaml` + the stage locks `adapters.lock.json`, `adapters_p2.lock.json`, `adapters_p1-seeds45.lock.json` (written at first read) |
+| P2 teacher-data entropy record | `p2_data_entropy.json` (written before any P2 forward; SHA-256 in the p2 lock and the P2 result) |
 | implementation commit | recorded at freeze |
