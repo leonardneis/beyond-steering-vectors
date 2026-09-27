@@ -145,7 +145,7 @@ def test_controls_and_descriptive_statistics_use_the_family_weights():
     c4 = stats.shadow_concordance(teacher, logq["base"], ref, logq["S2"], logq["N2"], t, lam=fam["lambda"], stem_w=w)
     assert fam["seeds"]["2"]["descriptive"]["C4"] == pytest.approx(dataclasses.asdict(c4))
     c1 = stats.omnibus(logq["S2"], logq["N2"], n_flip=19, seed=stats.SEED, stem_w=w)
-    assert fam["seeds"]["2"]["descriptive"]["C1_T"] == pytest.approx(c1.statistic)
+    assert fam["seeds"]["2"]["descriptive"]["C1"]["T"] == pytest.approx(c1.statistic)
 
 
 # --- instrument (P2 arms and propagation from P1) ------------------------------------------------------------------
@@ -182,6 +182,31 @@ def test_p2_instrument_agreement_on_a_dog_arm(flat_world, flat_p1):
                for r in samples]
     out = _p2(scores, swapped, flat_p1)
     assert not out["instrument"]["D3"]["agreement"]["passed"] and out["outcome"]["cls"] == "INSTRUMENT_FAIL"
+
+
+def _decorated(scores, arm):
+    cell = "persona+r0" if arm.startswith("T_") else "Q+r0"
+    return {k: (dict(v, decoration_mass=0.2) if k.startswith(f"{arm}|") and k.endswith(cell) else v)
+            for k, v in scores.items()}
+
+
+@pytest.mark.parametrize("arm, fails", [("S2", True), ("N3", True), ("base", True), ("T_cat", True), ("S1", False)])
+def test_p1_instrument_coverage_on_the_deciding_arms(flat_world, flat_p1, arm, fails):
+    scores, samples = flat_world
+    out = analysis.analyze_p1(_decorated(scores, arm), samples, ENTRIES, V1, integrity_ok=True, sample_k=K,
+                              n_boot=19, n_ref=200, engine="fast")
+    assert out["instrument"][arm]["ok"] is False
+    assert (out["outcome"]["cls"] == "INSTRUMENT_FAIL") is fails
+    assert out["fresh_seed_trigger"] is (False if fails else out["fresh_seed_trigger"])
+
+
+def test_seeds45_instrument_failure_leaves_the_claim_unresolved(five_seed_world):
+    scores, samples = five_seed_world
+    out = analysis.analyze_p1_seeds45(_decorated(scores, "N5"), samples, ENTRIES, V1, p1=_p1_stored(SPLIT),
+                                      integrity_ok=True, sample_k=K, n_boot=19, n_ref=200, engine="fast")
+    assert out["stage2"]["outcome"]["cls"] == "INSTRUMENT_FAIL"
+    assert out["final_outcome"]["cls"] == "ONE_SEED_ONLY" and not out["final_outcome"]["confirmed"]["C3"]
+    assert any("INSTRUMENT_FAIL" in n for n in out["final_outcome"]["notes"])
 
 
 # --- TECHNICAL_FAIL instead of exceptions --------------------------------------------------------------------------
@@ -286,13 +311,22 @@ def test_two_stage_rule_size_under_independent_null_seeds():
 # --- stages on disk and the CLI ------------------------------------------------------------------------------------
 
 
+def _plan_of(arm):
+    """The plan an arm's shards belong to: D arms plan_p2.json, seeds 4/5 plan_p1-seeds45.json, else plan.json."""
+    if arm.startswith("D"):
+        return "plan_p2.json"
+    if arm[0] in "NS" and arm[1:] in ("4", "5"):
+        return "plan_p1-seeds45.json"
+    return "plan.json"
+
+
 def _write_outputs(root: Path, scores, samples):
-    """Score and sample shards (one per arm), plan.json, UNSEAL.json: the layout ``run_stage`` reads."""
+    """Score and sample shards (one per arm), the stage plans and UNSEAL.json: the layout ``run_stage`` reads."""
     raw = root / "raw"
     by_arm: dict[str, list[str]] = {}
     for cid in scores:
         by_arm.setdefault(cid.split("|")[0], []).append(cid)
-    shards = []
+    plans: dict[str, list[str]] = {"plan.json": []}
     for arm, ids in by_arm.items():
         shard = raw / f"{arm}.score.000"
         shard.mkdir(parents=True)
@@ -306,34 +340,98 @@ def _write_outputs(root: Path, scores, samples):
         sshard.mkdir(parents=True)
         (sshard / "samples.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
         (sshard / "COMPLETE").write_text("")
-        shards += [shard.name, sshard.name]
-    (root / "plan.json").write_text(json.dumps({"shards": [{"shard_id": s} for s in shards]}))
+        plans.setdefault(_plan_of(arm), []).extend([shard.name, sshard.name])
+    for name, shards in plans.items():
+        (root / name).write_text(json.dumps({"shards": [{"shard_id": s} for s in shards]}))
     (root / "UNSEAL.json").write_text(json.dumps({"prereg_tag": "prereg/phenotype-anchor-v1",
                                                   "prereg_commit": "synthetic-test"}))
+
+
+KW = dict(entries=ENTRIES, v1=V1, sample_k=K, expected_tag="prereg/phenotype-anchor-v1", n_boot=19, n_ref=200,
+          engine="fast")
 
 
 def test_stage_chain_on_disk(tmp_path, flat_world):
     scores, samples = flat_world
     _write_outputs(tmp_path, scores, samples)
-    kw = dict(entries=ENTRIES, v1=V1, sample_k=K, expected_tag="prereg/phenotype-anchor-v1", n_boot=19, n_ref=200,
-              engine="fast")
     with pytest.raises(analysis.StageOrderError):
-        analysis.run_stage(tmp_path, "p2", **kw)  # P2 needs the stored P1 result
-    p1 = analysis.run_stage(tmp_path, "p1", **kw)
+        analysis.run_stage(tmp_path, "p2", **KW)  # P2 needs the stored P1 result
+    p1 = analysis.run_stage(tmp_path, "p1", **KW)
     analysis.write_stage(tmp_path, "p1", p1)
     with pytest.raises(analysis.StageOrderError):
         analysis.write_stage(tmp_path, "p1", p1)  # write-once
     with pytest.raises(analysis.StageOrderError):
-        analysis.run_stage(tmp_path, "p1", **kw)
+        analysis.run_stage(tmp_path, "p1", **KW)
     with pytest.raises(analysis.StageOrderError):
-        analysis.run_stage(tmp_path, "p1-seeds45", **kw)  # no trigger
-    p2 = analysis.run_stage(tmp_path, "p2", **kw)
+        analysis.run_stage(tmp_path, "p1-seeds45", **KW)  # no trigger
+    p2 = analysis.run_stage(tmp_path, "p2", **KW)
     assert p2["p1_input"]["C2_confirmed"] == bool(p1["outcome"]["confirmed"]["C2"])
-    assert p2["outcome"]["cls"] == analysis.analyze_p2(scores, samples, ENTRIES, p1=p1, integrity_ok=True,
-                                                       sample_k=K, n_boot=19, n_ref=200)["outcome"]["cls"]
+    direct = analysis.analyze_p2(scores, samples, ENTRIES, p1=p1, integrity_ok=True, sample_k=K, n_boot=19, n_ref=200)
+    assert p2["outcome"] == direct["outcome"] and p2["p2b_trigger"]["value"] == direct["p2b_trigger"]["value"]
     analysis.write_stage(tmp_path, "p2", p2)
+    assert analysis.plan_complete(tmp_path, "p2")
     (tmp_path / "raw" / "D3.sample.000" / "COMPLETE").unlink()
-    assert analysis.plan_complete(tmp_path) is False
+    assert analysis.plan_complete(tmp_path, "p1") and not analysis.plan_complete(tmp_path, "p2")
+
+
+def test_stages_refuse_until_their_outputs_exist(tmp_path, flat_world):
+    scores, samples = flat_world
+    _write_outputs(tmp_path, scores, samples)
+    analysis.write_stage(tmp_path, "p1", analysis.run_stage(tmp_path, "p1", **KW))
+    (tmp_path / "plan_p2.json").rename(tmp_path / "plan_p2.later")  # the P2 outputs are not planned yet
+    with pytest.raises(analysis.StageNotReady):
+        analysis.run_stage(tmp_path, "p2", **KW)
+    assert not (tmp_path / "analysis" / "p2_analysis.json").exists()
+    out = analysis.run_stage(tmp_path, "p2", final=True, **KW)  # deliberate, documented TECHNICAL_FAIL
+    assert out["outcome"]["cls"] == "TECHNICAL_FAIL" and out["technical_fail_kind"] == "integrity"
+
+
+def test_stage_loads_only_its_planned_shards_and_rejects_duplicates(tmp_path, flat_world):
+    scores, samples = flat_world
+    _write_outputs(tmp_path, scores, samples)
+    stray = tmp_path / "raw" / "N4.score.000"  # an unplanned, incomplete shard of a later stage
+    stray.mkdir()
+    p1 = analysis.run_stage(tmp_path, "p1", **KW)
+    assert p1["outcome"]["cls"] == "FLATTENING_CAT_NOT_DETECTED"
+    with pytest.raises(stats.PhenotypeStatsError, match="scored twice"):
+        dup = tmp_path / "raw" / "N1.score.001"
+        dup.mkdir()
+        np.savez(dup / "scores.npz", **dict(np.load(tmp_path / "raw" / "N1.score.000" / "scores.npz")))
+        (dup / "COMPLETE").write_text("")
+        analysis.load_scores(tmp_path, ["N1.score.000", "N1.score.001"])
+
+
+def test_a_degenerate_descriptive_statistic_never_fails_the_stage(monkeypatch, flat_world, flat_p1):
+    scores, samples = flat_world
+
+    def undefined(*args, **kwargs):
+        raise stats.PhenotypeStatsError("Partial correlation undefined")
+
+    monkeypatch.setattr(stats, "shadow_concordance", undefined)
+    monkeypatch.setattr(stats, "shared_movers", undefined)
+    out = analysis.analyze_p1(scores, samples, ENTRIES, V1, integrity_ok=True, sample_k=K, n_boot=NB, n_ref=NR,
+                              engine="fast")
+    assert out["outcome"] == flat_p1["outcome"]
+    assert out["families"]["primary"]["seeds"]["2"]["descriptive"]["C4"] == {"error": "Partial correlation undefined"}
+    p2 = _p2(scores, samples, flat_p1)
+    assert p2["outcome"]["cls"] != "TECHNICAL_FAIL" and "error" in p2["family"]["seeds"]["2"]["descriptive"]["K4"]
+
+
+def test_descriptive_additions_direct_stratum_and_k3_per_replicate_beta(flat_world, flat_p1):
+    block = flat_p1["families"]["primary"]["seeds"]["2"]["descriptive"]
+    assert set(block["direct_stratum"]) == {"C3", "C3mm", "same_sign_as_all_stems"}
+    assert "c3_tost_fixed_margins_descriptive" in block and "c3_equivalent_fixed" not in block
+    scores, samples = flat_world
+    p2 = _p2(scores, samples, flat_p1)
+    beta = p2["family"]["seeds"]["2"]["descriptive"]["beta_DN_per_replicate"]
+    assert 0.5 < beta < 0.9  # the dog students are tempered by 0.7 like the cat students
+    assert p2["p2b_trigger"]["value"] is (None if p2["outcome"]["confirmed"]["K3"] else False)
+
+
+def test_p2b_trigger_rule():
+    assert taxonomy.p2b_trigger(False, 7.0, 6.5) is False
+    assert taxonomy.p2b_trigger(True, None, 6.5) is None
+    assert taxonomy.p2b_trigger(True, 6.53, 6.5) is False and taxonomy.p2b_trigger(True, 6.56, 6.5) is True
 
 
 def _cli(monkeypatch, shared: Path):
@@ -361,14 +459,30 @@ def test_cli_analyze_runs_p1_then_p2_in_order(monkeypatch, tmp_path):
     assert cli.cmd_analyze(cfg, "p2") == cli.FINAL  # before p1
     assert cli.cmd_analyze(cfg, "p1") == 0
     p1 = json.loads((root / "analysis" / "p1_analysis.json").read_text())
-    assert p1["outcome"]["cls"] in {"FLATTENING_CAT_NOT_DETECTED", "ONE_SEED_ONLY", "NO_CONFIRMED_C2_C3"}
+    v1 = json.loads((ROOT / cfg["contract"]["path"] / "seed1_v1_profile.json").read_text())["profile"]
+    direct = analysis.analyze_p1(scores, samples, entries, v1, integrity_ok=True, sample_k=K, n_boot=19, n_ref=200)
+    assert p1["outcome"] == json.loads(json.dumps(direct["outcome"]))  # the CLI result is the library's
     assert cli.cmd_analyze(cfg, "p1") == cli.FINAL  # write-once
     if not p1["fresh_seed_trigger"]:
         assert cli.cmd_analyze(cfg, "p1-seeds45") == cli.FINAL
     assert cli.cmd_analyze(cfg, "p2") == 0
     p2 = json.loads((root / "analysis" / "p2_analysis.json").read_text())
-    assert p2["p1_input"]["class"] == p1["outcome"]["cls"] and p2["instrument_arms"] == ["D2", "D3", "T_dog"]
-    assert p2["outcome"]["cls"] in {"FLATTENING_BOTH_TEACHERS", "P2_NULL_OR_MIXED", "NO_DETECTED_DOG_TRANSFER"}
+    direct2 = analysis.analyze_p2(scores, samples, entries, p1=p1, integrity_ok=True, sample_k=K, n_boot=19,
+                                  n_ref=200)
+    assert p2["outcome"] == json.loads(json.dumps(direct2["outcome"])) and p2["p1_input"]["class"] == p1["outcome"]["cls"]
+
+
+def test_cli_analyze_exit_codes_sealed_not_ready_and_final_technical_fail(monkeypatch, tmp_path):
+    cli, cfg, root, entries = _cli(monkeypatch, tmp_path)
+    scores, samples = _manifest_world(entries, seed=22, dogs=False)
+    _write_outputs(root, _drop(scores, "S3"), samples)
+    (root / "UNSEAL.json").unlink()
+    assert cli.cmd_analyze(cfg, "p1") == cli.FINAL  # sealed
+    (root / "UNSEAL.json").write_text(json.dumps({"prereg_tag": cli.PREREG_TAG, "prereg_commit": "synthetic-test"}))
+    assert cli.cmd_analyze(cfg, "p1") == cli.FINAL and not (root / "analysis").exists()  # S3 missing: not ready
+    assert cli.cmd_analyze(cfg, "p1", final=True) == cli.FINAL  # recorded TECHNICAL_FAIL
+    p1 = json.loads((root / "analysis" / "p1_analysis.json").read_text())
+    assert p1["outcome"]["cls"] == "TECHNICAL_FAIL" and "S3" in p1["technical_fail"]
 
 
 def test_cli_analyze_seeds45_after_a_triggered_p1(monkeypatch, tmp_path):
@@ -379,5 +493,15 @@ def test_cli_analyze_seeds45_after_a_triggered_p1(monkeypatch, tmp_path):
     assert cli.cmd_analyze(cfg, "p1-seeds45") == 0
     out = json.loads((root / "analysis" / "p1_seeds45_analysis.json").read_text())
     assert out["stage1_class"] == "ONE_SEED_ONLY" and out["stage2"]["confirmatory"] == ["4", "5"]
-    assert out["final_outcome"]["cls"] in {"CAT_RESIDUAL_CONFIRMED_ON_REPLICATION", "ONE_SEED_ONLY"}
+    stage2 = out["stage2"]
+    assert all(stage2["families"]["primary"]["seeds"][s]["p"]["C3"] <= 0.025 for s in "45")  # C3 passes in 4 and 5
+    # with this seed the exact-vs-sampled check of N4 fails by chance (per-arm alpha, open decision R6): the
+    # replication pair is then INSTRUMENT_FAIL and the cat claim stays unresolved
+    expected = ("ONE_SEED_ONLY" if stage2["outcome"]["cls"] == "INSTRUMENT_FAIL"
+                else "CAT_RESIDUAL_CONFIRMED_ON_REPLICATION")
+    assert out["final_outcome"]["cls"] == expected
+    v1 = json.loads((ROOT / cfg["contract"]["path"] / "seed1_v1_profile.json").read_text())["profile"]
+    direct = analysis.analyze_p1_seeds45(scores, samples, entries, v1, p1=_p1_stored(SPLIT), integrity_ok=True,
+                                         sample_k=K, n_boot=19, n_ref=200)
+    assert out["final_outcome"] == json.loads(json.dumps(direct["final_outcome"]))
     assert cli.cmd_analyze(cfg, "p1-seeds45") == cli.FINAL

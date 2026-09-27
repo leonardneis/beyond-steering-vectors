@@ -10,7 +10,8 @@ Commands:
   tv-project     projection and resource cap from the TV reports (decision D5)
   analyze        sealed until UNSEAL.json names the frozen preregistration; --stage p1 (default), p2 (after p1;
                  reads the stored P1 C2 decision and instrument result) or p1-seeds45 (only if the stored p1
-                 result fired the fresh-seed trigger); each result is written once to <out>/analysis/
+                 result fired the fresh-seed trigger); each result is written once to <out>/analysis/; refuses
+                 (nothing written) while the stage's plans or outputs are incomplete, unless --final
 
 Exit codes: 0 ok; 86 final (identity, integrity, contract); 1 infrastructure.
 """
@@ -216,21 +217,24 @@ def cmd_tv_project(cfg: dict) -> int:
 PREREG_TAG = "prereg/phenotype-anchor-v1"
 
 
-def cmd_analyze(cfg: dict, stage: str) -> int:
+def cmd_analyze(cfg: dict, stage: str, final: bool = False) -> int:
+    """Exit 0 with a written result; FINAL (86) when sealed, out of order, not ready (nothing written; ``--final``
+    records the TECHNICAL_FAIL instead) or when the written class is a TECHNICAL_FAIL."""
     from slgeo.phenotype import analysis
 
     root = out_root(cfg, False)
     v1 = json.loads((ROOT / cfg["contract"]["path"] / "seed1_v1_profile.json").read_text())["profile"]
     try:
         result = analysis.run_stage(root, stage, entries=entries(cfg), v1=v1, sample_k=int(cfg["sampling"]["k"]),
-                                    expected_tag=PREREG_TAG)
+                                    expected_tag=PREREG_TAG, final=final)
         target = analysis.write_stage(root, stage, result)
-    except analysis.StageOrderError as exc:
+    except (analysis.SealedError, analysis.StageOrderError) as exc:
         print(exc, file=sys.stderr)
         return FINAL
     outcome = result["final_outcome"] if stage == "p1-seeds45" else result["outcome"]
     print(f"{stage}: {outcome['cls']} -> {target}")
-    return 0
+    failed = (result["stage2"] if stage == "p1-seeds45" else result).get("technical_fail")
+    return FINAL if failed else 0
 
 
 def main() -> int:
@@ -248,6 +252,8 @@ def main() -> int:
     sub.add_parser("tv-project")
     a = sub.add_parser("analyze")
     a.add_argument("--stage", choices=("p1", "p2", "p1-seeds45"), default="p1")
+    a.add_argument("--final", action="store_true",
+                   help="record a TECHNICAL_FAIL for missing outputs instead of refusing (write-once)")
     args = parser.parse_args()
     cfg = config()
     if args.command == "pin-adapters":
@@ -262,7 +268,7 @@ def main() -> int:
         return cmd_tv(cfg, args.name)
     if args.command == "tv-project":
         return cmd_tv_project(cfg)
-    return cmd_analyze(cfg, args.stage)
+    return cmd_analyze(cfg, args.stage, args.final)
 
 
 if __name__ == "__main__":

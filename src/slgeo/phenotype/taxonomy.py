@@ -115,9 +115,11 @@ def classify_p1_two_stage(stage1: Outcome, stage2: Outcome | None) -> Outcome:
         return Outcome(stage1.cls, stage1.modifiers, stage1.confirmed, per_seed, stage1.notes + (note,) + stage2.notes)
     if stage2.confirmed.get("C3"):
         modifiers = ("CAT_DOMINANT_ON_REPLICATION",) if stage2.cls == "CAT_DOMINANT" else ()
+        kept = tuple(n for n in stage1.notes if not n.startswith("cat residual at most"))  # superseded seed-2/3 bound
         return Outcome("CAT_RESIDUAL_CONFIRMED_ON_REPLICATION", modifiers, {**stage1.confirmed, "C3": True}, per_seed,
-                       stage1.notes + (f"C3 confirmed in seeds 4 and 5 (stage-2 class {stage2.cls})",
-                                       TWO_STAGE_BOUND_NOTE))
+                       kept + (f"C3 confirmed in seeds 4 and 5 (stage-2 class {stage2.cls}); seed-2/3 class "
+                               f"{stage1.cls}, seed-2/3 C2 decision {stage1.confirmed.get('C2')}",
+                               TWO_STAGE_BOUND_NOTE))
     return Outcome(stage1.cls, stage1.modifiers, stage1.confirmed, per_seed,
                    stage1.notes + (f"seeds 4/5 did not confirm C3 (stage-2 class {stage2.cls})", TWO_STAGE_BOUND_NOTE))
 
@@ -126,6 +128,19 @@ def two_stage_cat_claim(stage1: Outcome, stage2: Outcome | None) -> bool:
     """P1 cat claim under the fresh-seed rule: confirmed in seeds 2 and 3, or (trigger fired and) confirmed in seeds
     4 and 5 (class CAT_RESIDUAL_CONFIRMED_ON_REPLICATION). Worst-case false-claim bound 2 alpha."""
     return bool(classify_p1_two_stage(stage1, stage2).confirmed.get("C3"))
+
+
+P2B_ENTROPY_TOLERANCE = 0.05  # nats (PREREGISTRATION §9.4)
+
+
+def p2b_trigger(k3_confirmed: bool, dog_entropy: float | None, neutral_entropy: float | None) -> bool | None:
+    """P2b (§9.4): train an entropy-matched neutral teacher iff K3 is confirmed and the dog-teacher data entropy is
+    not within 0.05 nats of the neutral value. None when K3 is confirmed but the CPU entropy record is missing."""
+    if not k3_confirmed:
+        return False
+    if dog_entropy is None or neutral_entropy is None:
+        return None
+    return bool(abs(float(dog_entropy) - float(neutral_entropy)) > P2B_ENTROPY_TOLERANCE)
 
 
 def classify_p2(

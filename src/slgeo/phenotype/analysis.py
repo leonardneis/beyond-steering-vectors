@@ -10,8 +10,12 @@ Stages (``STAGE_FILES``, each result written once under ``<out>/analysis/``):
               the final two-stage P1 outcome (``taxonomy.classify_p1_two_stage``, decision R2).
   p2          P2 on seeds 1-3 (never re-run with seeds 4/5); reads the P1 C2 decision and the P1 instrument result
               from the stored p1 result.
-Any missing required arm, seed, cell or sample, an incomplete plan or a degenerate statistic gives a TECHNICAL_FAIL
-result with its reason instead of an exception.
+Integrity and data per stage (``STAGE_PLANS``): p1 reads ``plan.json``; p2 also ``plan_p2.json`` (D1-D3); p1-seeds45
+also ``plan_p1-seeds45.json`` (N4, S4, N5, S5); only the shards of those plans are loaded. A stage whose plans are
+absent or incomplete, or whose required arms, seeds, cells or samples are missing, is refused without writing
+(``StageNotReady``) unless ``final=True``, which records the documented TECHNICAL_FAIL instead; a degenerate
+confirmatory statistic is a TECHNICAL_FAIL; a degenerate descriptive statistic is recorded as ``{"error": ...}`` and
+never changes a class.
 """
 
 from __future__ import annotations
@@ -38,6 +42,9 @@ TEACHER_CELL = ("persona", ("r0", "r1", "r2"))
 FIXED_MARGINS = (0.05, 0.10, 0.15, 0.20, 0.30)
 COVERAGE_LIMIT = 0.05
 STAGE_FILES = {"p1": "p1_analysis.json", "p1-seeds45": "p1_seeds45_analysis.json", "p2": "p2_analysis.json"}
+STAGE_PLANS = {"p1": ("plan.json",), "p2": ("plan.json", "plan_p2.json"),
+               "p1-seeds45": ("plan.json", "plan_p1-seeds45.json")}
+DATA_ENTROPY_FILE = "p2_data_entropy.json"  # {"dog": nats, "neutral": nats}: the CPU number-entropy record (§9.1)
 
 
 class SealedError(RuntimeError):
@@ -47,6 +54,11 @@ class SealedError(RuntimeError):
 class StageOrderError(RuntimeError):
     """A stage requested out of the preregistered order: p2 or p1-seeds45 without a stored p1 result, p1-seeds45
     without the fresh-seed trigger, or a stage result that already exists (write-once)."""
+
+
+class StageNotReady(StageOrderError):
+    """The stage's plans are absent or incomplete, or required outputs are missing; nothing is written (rerun when
+    the outputs exist, or record the TECHNICAL_FAIL deliberately with ``final=True``)."""
 
 
 def require_unsealed(out_root: Path, *, expected_tag: str) -> dict:
@@ -59,26 +71,47 @@ def require_unsealed(out_root: Path, *, expected_tag: str) -> dict:
     return data
 
 
-def plan_complete(out_root: Path) -> bool:
-    """Integrity: every shard of ``plan.json`` has its COMPLETE marker."""
-    plan = json.loads((out_root / "plan.json").read_text(encoding="utf-8"))
-    return all((out_root / "raw" / s["shard_id"] / "COMPLETE").exists() for s in plan["shards"])
+def stage_shards(out_root: Path, stage: str) -> list[str] | None:
+    """Shard ids of every plan the stage reads (``STAGE_PLANS``); None if one of those plans does not exist."""
+    shards = []
+    for name in STAGE_PLANS[stage]:
+        path = out_root / name
+        if not path.is_file():
+            return None
+        shards += [s["shard_id"] for s in json.loads(path.read_text(encoding="utf-8"))["shards"]]
+    return shards
 
 
-def load_samples(out_root: Path) -> list[dict]:
-    return [json.loads(line) for f in sorted((out_root / "raw").glob("*.sample.*/samples.jsonl"))
-            for line in f.read_text(encoding="utf-8").splitlines() if line.strip()]
+def plan_complete(out_root: Path, stage: str = "p1") -> bool:
+    """Integrity: the stage's plans exist and every shard of them has its COMPLETE marker."""
+    shards = stage_shards(out_root, stage)
+    return shards is not None and all((out_root / "raw" / s / "COMPLETE").exists() for s in shards)
 
 
-def load_scores(out_root: Path) -> dict[str, dict[str, np.ndarray]]:
-    """context_id -> {word_logp, decoration_mass, emoji_mass, ...} from every complete score shard."""
+def _shard_dirs(out_root: Path, kind: str, shard_ids: Sequence[str] | None) -> list[Path]:
+    if shard_ids is None:
+        return sorted((out_root / "raw").glob(f"*.{kind}.*"))
+    return [out_root / "raw" / s for s in shard_ids if f".{kind}." in s]
+
+
+def load_samples(out_root: Path, shard_ids: Sequence[str] | None = None) -> list[dict]:
+    """Sample rows of the given shards (default: every sample shard)."""
+    return [json.loads(line) for d in _shard_dirs(out_root, "sample", shard_ids)
+            for line in (d / "samples.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def load_scores(out_root: Path, shard_ids: Sequence[str] | None = None) -> dict[str, dict[str, np.ndarray]]:
+    """context_id -> {word_logp, decoration_mass, emoji_mass, ...} from the given complete score shards (default:
+    every score shard). A context id in two shards is an integrity error."""
     out: dict[str, dict[str, np.ndarray]] = {}
-    for shard in sorted((out_root / "raw").glob("*.score.*")):
+    for shard in _shard_dirs(out_root, "score", shard_ids):
         if not (shard / "COMPLETE").exists():
             raise stats.PhenotypeStatsError(f"Incomplete shard {shard.name}")
         with np.load(shard / "scores.npz") as npz:
             data = {k: npz[k] for k in npz.files}  # each array read once (NpzFile re-reads on every access)
         for i, cid in enumerate(data["context_ids"]):
+            if str(cid) in out:
+                raise stats.PhenotypeStatsError(f"Context {cid} scored twice (shard {shard.name})")
             out[str(cid)] = {k: v[i] for k, v in data.items() if k != "context_ids"}
     return out
 
@@ -106,6 +139,15 @@ def _seeds(logq: Mapping[str, np.ndarray], prefix: str) -> list[str]:
 
 def _rl(result: stats.RunLevel) -> dict:
     return dataclasses.asdict(result)
+
+
+def _descriptive(fn):
+    """A descriptive quantity: its value, or {"error": reason} when it is undefined (no class, modifier, trigger or
+    branch depends on it, so it never fails a stage)."""
+    try:
+        return fn()
+    except stats.PhenotypeStatsError as exc:
+        return {"error": str(exc)}
 
 
 class _Tests:
@@ -172,14 +214,31 @@ def p1_family(logq: Mapping[str, np.ndarray], v1: Mapping[str, float], families:
 
     lam_hat = tests.lam(None)
     c3_pair = stats.target_stat(t)
-    m_run = stats.run_noise_margin(lambda a, b: c3_pair(a, b, base, 1.0, tests.w), _arrays(logq, tests.within))
+    m_run = _descriptive(lambda: stats.run_noise_margin(lambda a, b: c3_pair(a, b, base, 1.0, tests.w),
+                                                        _arrays(logq, tests.within)))
     teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in _seeds(logq, "N")))
+    direct = np.array([f == "direct" for f in families])
+    mm_stat = stats.mass_matched_stat(t, controls)
+
+    def c1_block(y, x):
+        c1 = stats.omnibus(y, x, n_flip=min(n_boot, stats.N_FLIP), seed=seed, stem_w=tests.w)
+        gate = stats.run_level_gate(lambda a, b: stats.omnibus(a, b, n_flip=1, stem_w=tests.w).statistic, (y, x),
+                                    _arrays(logq, tests.within))
+        return {"T": c1.statistic, "p_stem": c1.p, "gate_v1": gate.passed}
+
+    def direct_block(y, x, c3_all, c3mm_all):
+        """Direct-stem stratum (§3): point estimates at lambda-hat and their sign agreement with all stems."""
+        if not direct.any():
+            raise stats.PhenotypeStatsError("No direct-family stems")
+        d = {"C3": c3_pair(y[direct], x[direct], base[direct], lam_hat),
+             "C3mm": mm_stat(y[direct], x[direct], base[direct], lam_hat)}
+        d["same_sign_as_all_stems"] = bool(np.sign(d["C3"]) == np.sign(c3_all)
+                                           and np.sign(d["C3mm"]) == np.sign(c3mm_all))
+        return d
+
     seeds = {}
     for s in tests.treated:
         y, x = logq[f"S{s}"], logq[f"N{s}"]
-        c1 = stats.omnibus(y, x, n_flip=min(n_boot, stats.N_FLIP), seed=seed, stem_w=tests.w)
-        c1_gate = stats.run_level_gate(lambda a, b: stats.omnibus(a, b, n_flip=1, stem_w=tests.w).statistic, (y, x),
-                                       _arrays(logq, tests.within))
         dom_p = {w: r[s].p for w, r in dominance.items()}
         seeds[s] = {
             "p": {"C2": c2[s].p, "C3": stats.robust_p(c3[s], c3mm[s])},
@@ -190,13 +249,15 @@ def p1_family(logq: Mapping[str, np.ndarray], v1: Mapping[str, float], families:
             "descriptive": {
                 "beta": float(np.exp(-c2[s].estimate)),
                 "C3_delta_prob": stats.wmean(np.exp(y[:, t]) - np.exp(x[:, t]), tests.w),
-                "C1_T": c1.statistic, "C1_p_stem": c1.p, "C1_gate_v1": c1_gate.passed,
-                "C4": dataclasses.asdict(stats.shadow_concordance(logq["T_cat"], base, teacher_ref, y, x, t,
-                                                                  lam=lam_hat, stem_w=tests.w)),
-                "C5": dataclasses.asdict(stats.profile_replication(v1, PANEL, y, x, base, t, lam=lam_hat,
-                                                                   stem_w=tests.w)),
-                "c3_equivalent_fixed": {str(m): c3[s].equivalent(m) for m in FIXED_MARGINS},
-                "c3_equivalent_m_run": c3[s].equivalent(m_run),
+                "C1": _descriptive(lambda: c1_block(y, x)),
+                "C4": _descriptive(lambda: dataclasses.asdict(stats.shadow_concordance(
+                    logq["T_cat"], base, teacher_ref, y, x, t, lam=lam_hat, stem_w=tests.w))),
+                "C5": _descriptive(lambda: dataclasses.asdict(stats.profile_replication(
+                    v1, PANEL, y, x, base, t, lam=lam_hat, stem_w=tests.w))),
+                "direct_stratum": _descriptive(lambda: direct_block(y, x, c3[s].estimate, c3mm[s].estimate)),
+                # TOST tables of the noise-benchmark layer: no claim may be read from them (decision R1)
+                "c3_tost_fixed_margins_descriptive": {str(m): c3[s].equivalent(m) for m in FIXED_MARGINS},
+                "c3_tost_m_run_descriptive": (c3[s].equivalent(m_run) if isinstance(m_run, float) else None),
             },
         }
     pooled = {"C3": _rl(c3["pooled"]), "C3mm": _rl(c3mm["pooled"]), "C2": _rl(c2["pooled"])}
@@ -213,12 +274,12 @@ def p1_outcome(family: Mapping[str, Any], *, integrity_ok: bool, instrument_ok: 
 
 
 def replicate_beta(scores, arm_y: str, arm_x: str, stems: Sequence[str], families: Sequence[str],
-                   lam: float) -> float:
-    """Descriptive: mean over the prefix replicates of the Deming beta fitted on single-replicate conditionals.
-    Its gap to the prefix-averaged beta separates mixture flattening (probability-scale averaging of prefix-
-    inconsistent answers) from a tempering of each conditional."""
-    t = PANEL.index(TARGET)
-    words = np.array([w for w in range(len(PANEL)) if w != t])
+                   lam: float, targets: Sequence[int] = (PANEL.index(TARGET),)) -> float:
+    """Descriptive: mean over the prefix replicates of the Deming beta fitted on single-replicate conditionals
+    (``targets`` out of fit, as in the contrast: cat for C2, cat and dog for K3). Its gap to the prefix-averaged beta
+    separates mixture flattening (probability-scale averaging of prefix-inconsistent answers) from a tempering of each
+    conditional (decision R5)."""
+    words = np.array([w for w in range(len(PANEL)) if w not in targets])
     w = stats.family_weights(families)
     betas = []
     for r in PRIMARY[1]:
@@ -275,15 +336,18 @@ def _missing_samples(samples, arms: Sequence[str], stems: Sequence[str], k: int)
     return out
 
 
-def _technical_fail(reason: str, **extra) -> dict:
-    return {"outcome": taxonomy.technical_fail(reason).__dict__, "technical_fail": reason, **extra}
+def _technical_fail(reason: str, kind: str, **extra) -> dict:
+    """``kind``: "integrity" (plan incomplete), "missing" (required outputs), "statistics" (degenerate confirmatory
+    statistic) or "p1" (P2 input); ``run_stage`` refuses the first two unless final."""
+    return {"outcome": taxonomy.technical_fail(reason).__dict__, "technical_fail": reason,
+            "technical_fail_kind": kind, **extra}
 
 
 def _p1_stage(scores, samples, entries, v1, *, seeds, confirmatory, checked_arms, instrument_arms, integrity_ok,
               sample_k, n_boot, n_ref, engine) -> dict:
     """One P1 stage: primary and secondary cell families on the given seeds, instrument check, P1 outcome."""
     if not integrity_ok:
-        return _technical_fail("integrity: a planned shard is incomplete")
+        return _technical_fail("integrity: a planned shard is incomplete or a plan is missing", "integrity")
     res = [e for e in entries if e["set"] == "RES"]
     res_stems, families = [e["stem_id"] for e in res], [e["family"] for e in res]
     sampled_stems = [e["stem_id"] for e in entries if e["set"] in {"REF50", "RES"}]
@@ -293,23 +357,25 @@ def _p1_stage(scores, samples, entries, v1, *, seeds, confirmatory, checked_arms
                                 + [(a, sampled_stems, _sampled_cell(a)) for a in checked_arms])
     missing += _missing_samples(samples, checked_arms, sampled_stems, sample_k)
     if missing:
-        return _technical_fail("missing required outputs: " + "; ".join(missing))
+        return _technical_fail("missing required outputs: " + "; ".join(missing), "missing")
+
+    def family(cell, teacher_cell):
+        logq = {a: arm_logq(scores, a, res_stems, cell) for a in arms}
+        logq["T_cat"] = arm_logq(scores, "T_cat", res_stems, teacher_cell)
+        return p1_family(logq, v1, families, n_boot=n_boot, n_ref=n_ref, confirmatory=confirmatory, engine=engine)
+
     try:
-        result: dict[str, Any] = {}
-        for label, cell in (("primary", PRIMARY), ("secondary", SECONDARY)):
-            logq = {a: arm_logq(scores, a, res_stems, cell) for a in arms}
-            logq["T_cat"] = arm_logq(scores, "T_cat", res_stems,
-                                     TEACHER_CELL if label == "primary" else ("persona", ("none",)))
-            result[label] = p1_family(logq, v1, families, n_boot=n_boot, n_ref=n_ref, confirmatory=confirmatory,
-                                      engine=engine)
-        for s, block in result["primary"]["seeds"].items():
-            block["descriptive"]["beta_per_replicate"] = replicate_beta(scores, f"S{s}", f"N{s}", res_stems,
-                                                                        families, result["primary"]["lambda"])
+        result: dict[str, Any] = {"primary": family(PRIMARY, TEACHER_CELL)}
         instrument = instrument_check(scores, samples, checked_arms, sampled_stems, sample_k)
     except stats.PhenotypeStatsError as exc:
-        return _technical_fail(f"statistics: {exc}")
+        return _technical_fail(f"statistics: {exc}", "statistics")
+    result["secondary"] = _descriptive(lambda: family(SECONDARY, ("persona", ("none",))))  # Q+none, descriptive
+    for s, block in result["primary"]["seeds"].items():
+        block["descriptive"]["beta_per_replicate"] = _descriptive(lambda: replicate_beta(
+            scores, f"S{s}", f"N{s}", res_stems, families, result["primary"]["lambda"]))
     instrument_ok = all(instrument[a]["ok"] for a in instrument_arms)
-    secondary = p1_outcome(result["secondary"], integrity_ok=True, instrument_ok=instrument_ok).cls
+    secondary = ("unavailable: " + result["secondary"]["error"] if "error" in result["secondary"] else
+                 p1_outcome(result["secondary"], integrity_ok=True, instrument_ok=instrument_ok).cls)
     outcome = p1_outcome(result["primary"], integrity_ok=True, instrument_ok=instrument_ok)
     return {"outcome": outcome.__dict__, "secondary_class_descriptive": secondary, "instrument": instrument,
             "instrument_arms": list(instrument_arms), "families": result, "development_seed": "1",
@@ -386,8 +452,8 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
     has_teachers = "T_cat" in logq and "T_dog" in logq
     if has_teachers:
         teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in _seeds(logq, "N")))
-        teacher_diff = (_profile(logq["T_cat"], base, teacher_ref, (cat, dog), cols, np.inf, sd.w)
-                        - _profile(logq["T_dog"], base, teacher_ref, (cat, dog), cols, np.inf, sd.w))
+        teacher_diff = _descriptive(lambda: _profile(logq["T_cat"], base, teacher_ref, (cat, dog), cols, np.inf, sd.w)
+                                    - _profile(logq["T_dog"], base, teacher_ref, (cat, dog), cols, np.inf, sd.w))
     seeds = {}
     for s in sd.treated:
         other_n = next(logq[f"N{k}"] for k in _seeds(logq, "N") if k != s)
@@ -395,13 +461,14 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
         label_p = {w: r[s].p for w, r in label.items()}
         descriptive = {
             "beta_DN": float(np.exp(-k3[s].estimate)), "beta_SD": float(np.exp(-k5[s].estimate)),
-            "K4": dataclasses.asdict(stats.shared_movers(logq[f"S{s}"], logq[f"N{s}"], logq[f"D{s}"], other_n, base,
-                                                         (cat, dog), stem_ids, lam_s=lam_sn, lam_d=lam_dn,
-                                                         families=families)),
+            "K4": _descriptive(lambda: dataclasses.asdict(stats.shared_movers(
+                logq[f"S{s}"], logq[f"N{s}"], logq[f"D{s}"], other_n, base, (cat, dog), stem_ids, lam_s=lam_sn,
+                lam_d=lam_dn, families=families))),
         }
         if has_teachers:
-            profile = _profile(logq[f"S{s}"], logq[f"D{s}"], base, (cat, dog), cols, sd.lam(None), sd.w)
-            descriptive["shadow_SD_rho"] = stats.spearman(teacher_diff, profile)
+            descriptive["shadow_SD_rho"] = (teacher_diff if isinstance(teacher_diff, dict) else _descriptive(
+                lambda: stats.spearman(teacher_diff, _profile(logq[f"S{s}"], logq[f"D{s}"], base, (cat, dog), cols,
+                                                              sd.lam(None), sd.w))))
         seeds[s] = {
             "p": {"K1": stats.robust_p(k1[s], k1mm[s]), "K2": stats.robust_p(k2[s], k2mm[s]), "K3": k3[s].p},
             "label": bool(all(p <= stats.ALPHA for p in label_p.values())),
@@ -433,18 +500,21 @@ def p2_outcome(family: Mapping[str, Any], *, c2_confirmed: bool, integrity_ok: b
 
 
 def analyze_p2(scores, samples, entries: Sequence[Mapping[str, Any]], *, p1: Mapping[str, Any], integrity_ok: bool,
-               sample_k: int, n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF, engine: str = "reference") -> dict:
+               sample_k: int, n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF, engine: str = "reference",
+               data_entropy: Mapping[str, float] | None = None) -> dict:
     """Stage p2 on seeds 1-3. ``p1``: the stored stage-p1 result; it supplies the C2 decision and the P1 instrument
     result. A P1 TECHNICAL_FAIL makes P2 a TECHNICAL_FAIL (its C2 input and shared arms are unavailable); a P1
     INSTRUMENT_FAIL, or a coverage / agreement failure of D2, D3 or T_dog, makes P2 an INSTRUMENT_FAIL (D1 is checked
-    and reported)."""
+    and reported). ``data_entropy``: the CPU number-entropy record {"dog", "neutral"} for the P2b trigger (§9.4);
+    without it the trigger is recorded as undetermined."""
     p1_out = p1["outcome"]
     p1_input = {"class": p1_out["cls"], "C2_confirmed": bool(p1_out["confirmed"].get("C2", False)),
                 "instrument_ok": p1_out["cls"] != "INSTRUMENT_FAIL"}
     if not integrity_ok:
-        return _technical_fail("integrity: a planned shard is incomplete", p1_input=p1_input)
+        return _technical_fail("integrity: a planned shard is incomplete or a plan is missing", "integrity",
+                               p1_input=p1_input)
     if p1_out["cls"] == "TECHNICAL_FAIL":
-        return _technical_fail("the P1 analysis is a TECHNICAL_FAIL (no C2 decision, shared arms unavailable)",
+        return _technical_fail("the P1 analysis is a TECHNICAL_FAIL (no C2 decision, shared arms unavailable)", "p1",
                                p1_input=p1_input)
     res = [e for e in entries if e["set"] == "RES"]
     stems, families = [e["stem_id"] for e in res], [e["family"] for e in res]
@@ -456,27 +526,38 @@ def analyze_p2(scores, samples, entries: Sequence[Mapping[str, Any]], *, p1: Map
                                 + [(a, sampled_stems, _sampled_cell(a)) for a in checked])
     missing += _missing_samples(samples, checked, sampled_stems, sample_k)
     if missing:
-        return _technical_fail("missing required outputs: " + "; ".join(missing), p1_input=p1_input)
+        return _technical_fail("missing required outputs: " + "; ".join(missing), "missing", p1_input=p1_input)
     try:
         logq = {a: arm_logq(scores, a, stems, PRIMARY) for a in arms}
         logq["T_cat"] = arm_logq(scores, "T_cat", stems, TEACHER_CELL)
         logq["T_dog"] = arm_logq(scores, "T_dog", stems, TEACHER_CELL)
         family = p2_family(logq, stems, families, n_boot=n_boot, n_ref=n_ref, engine=engine)
-        cat, dog = PANEL.index(TARGET), PANEL.index("dog")
-        w = stats.family_weights(families)
-        teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in ALL_SEEDS))
-        cols = np.array([i for i in range(len(PANEL)) if i not in (cat, dog)])
-        teacher_rho = stats.spearman(_profile(logq["T_cat"], logq["base"], teacher_ref, (cat, dog), cols, np.inf, w),
-                                     _profile(logq["T_dog"], logq["base"], teacher_ref, (cat, dog), cols, np.inf, w))
         instrument = instrument_check(scores, samples, checked, sampled_stems, sample_k)
     except stats.PhenotypeStatsError as exc:
-        return _technical_fail(f"statistics: {exc}", p1_input=p1_input)
+        return _technical_fail(f"statistics: {exc}", "statistics", p1_input=p1_input)
+    cat, dog = PANEL.index(TARGET), PANEL.index("dog")
+    w = stats.family_weights(families)
+    teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in ALL_SEEDS))
+    cols = np.array([i for i in range(len(PANEL)) if i not in (cat, dog)])
+    teacher_rho = _descriptive(lambda: stats.spearman(
+        _profile(logq["T_cat"], logq["base"], teacher_ref, (cat, dog), cols, np.inf, w),
+        _profile(logq["T_dog"], logq["base"], teacher_ref, (cat, dog), cols, np.inf, w)))
+    lam_dn = _descriptive(lambda: stats.lambda_of(_arrays(logq, _pairs(logq, "D")), _arrays(logq, _pairs(logq, "N")),
+                                                  logq["base"], (cat, dog), w)(None))
+    for s, block in family["seeds"].items():  # per-replicate beta next to K3 (decision R5)
+        block["descriptive"]["beta_DN_per_replicate"] = (lam_dn if isinstance(lam_dn, dict) else _descriptive(
+            lambda: replicate_beta(scores, f"D{s}", f"N{s}", stems, families, lam_dn, (cat, dog))))
     instrument_arms = [f"D{s}" for s in CONFIRMATORY_SEEDS] + ["T_dog"]
     instrument_ok = p1_input["instrument_ok"] and all(instrument[a]["ok"] for a in instrument_arms)
     outcome = p2_outcome(family, c2_confirmed=p1_input["C2_confirmed"], integrity_ok=True,
                          instrument_ok=instrument_ok)
+    entropy = data_entropy or {}
+    p2b = {"value": taxonomy.p2b_trigger(bool(outcome.confirmed.get("K3")), entropy.get("dog"),
+                                         entropy.get("neutral")),
+           "K3_confirmed": bool(outcome.confirmed.get("K3")), "dog_entropy": entropy.get("dog"),
+           "neutral_entropy": entropy.get("neutral")}
     return {"outcome": outcome.__dict__, "family": family, "teacher_profile_rho": teacher_rho,
-            "instrument": instrument, "instrument_arms": instrument_arms, "p1_input": p1_input}
+            "instrument": instrument, "instrument_arms": instrument_arms, "p1_input": p1_input, "p2b_trigger": p2b}
 
 
 def _profile(y, x, ref, targets, cols, lam, w) -> np.ndarray:
@@ -512,10 +593,12 @@ def write_stage(out_root: Path, stage: str, result: Mapping[str, Any]) -> Path:
 
 def run_stage(out_root: Path, stage: str, *, entries: Sequence[Mapping[str, Any]], v1: Mapping[str, float],
               sample_k: int, expected_tag: str, n_boot: int | None = None, n_ref: int | None = None,
-              engine: str = "reference") -> dict:
-    """One analysis stage on stored outputs: unseal check, stage order, integrity (``plan.json``), scores and samples,
-    then ``analyze_p1`` / ``analyze_p1_seeds45`` / ``analyze_p2``. ``n_boot`` / ``n_ref`` default to the
-    preregistered ``stats.N_BOOT`` / ``stats.N_REF``. The result is returned, not written (``write_stage``)."""
+              engine: str = "reference", final: bool = False) -> dict:
+    """One analysis stage on stored outputs: unseal check, stage order, the stage's plans (``STAGE_PLANS``) and their
+    shards only, then ``analyze_p1`` / ``analyze_p1_seeds45`` / ``analyze_p2``. ``n_boot`` / ``n_ref`` default to the
+    preregistered ``stats.N_BOOT`` / ``stats.N_REF``. Absent or incomplete plans and missing required outputs raise
+    ``StageNotReady`` (nothing to write) unless ``final``, which returns the documented TECHNICAL_FAIL. The result is
+    returned, not written (``write_stage``)."""
     if stage not in STAGE_FILES:
         raise ValueError(f"Unknown stage {stage!r}")
     require_unsealed(out_root, expected_tag=expected_tag)
@@ -526,11 +609,20 @@ def run_stage(out_root: Path, stage: str, *, entries: Sequence[Mapping[str, Any]
         raise StageOrderError("The stored P1 result did not fire the fresh-seed trigger; seeds 4/5 are not analysed")
     kw = dict(n_boot=stats.N_BOOT if n_boot is None else n_boot, n_ref=stats.N_REF if n_ref is None else n_ref,
               engine=engine)
-    integrity_ok = plan_complete(out_root)
-    scores, samples = (load_scores(out_root), load_samples(out_root)) if integrity_ok else ({}, [])
+    shards = stage_shards(out_root, stage)
+    integrity_ok = plan_complete(out_root, stage)
+    scores, samples = (load_scores(out_root, shards), load_samples(out_root, shards)) if integrity_ok else ({}, [])
     if stage == "p1":
-        return analyze_p1(scores, samples, entries, v1, integrity_ok=integrity_ok, sample_k=sample_k, **kw)
-    if stage == "p1-seeds45":
-        return analyze_p1_seeds45(scores, samples, entries, v1, p1=p1, integrity_ok=integrity_ok, sample_k=sample_k,
-                                  **kw)
-    return analyze_p2(scores, samples, entries, p1=p1, integrity_ok=integrity_ok, sample_k=sample_k, **kw)
+        result = analyze_p1(scores, samples, entries, v1, integrity_ok=integrity_ok, sample_k=sample_k, **kw)
+    elif stage == "p1-seeds45":
+        result = analyze_p1_seeds45(scores, samples, entries, v1, p1=p1, integrity_ok=integrity_ok,
+                                    sample_k=sample_k, **kw)
+    else:
+        entropy_file = out_root / DATA_ENTROPY_FILE
+        entropy = json.loads(entropy_file.read_text(encoding="utf-8")) if entropy_file.is_file() else None
+        result = analyze_p2(scores, samples, entries, p1=p1, integrity_ok=integrity_ok, sample_k=sample_k,
+                            data_entropy=entropy, **kw)
+    failed = result["stage2"] if stage == "p1-seeds45" else result
+    if not final and failed.get("technical_fail_kind") in ("integrity", "missing"):
+        raise StageNotReady(f"{stage} not ready: {failed['technical_fail']}")
+    return result
