@@ -200,6 +200,47 @@ def test_p1_instrument_coverage_on_the_deciding_arms(flat_world, flat_p1, arm, f
     assert out["fresh_seed_trigger"] is (False if fails else out["fresh_seed_trigger"])
 
 
+def test_instrument_gate_is_bonferroni_over_the_deciding_arms(monkeypatch, flat_world, flat_p1):
+    """Decision R6: each checked arm at alpha / m, m = the stage's deciding arms (P1 6, P2 3); diagnostic arms (seed 1,
+    D1) at the same level and not counted."""
+    assert flat_p1["instrument_level"] == {"family_alpha": 0.05, "m": 6, "per_arm_alpha": 0.05 / 6,
+                                           "deciding_arms": ["base", "T_cat", "N2", "N3", "S2", "S3"]}
+    assert set(flat_p1["instrument"]) - set(flat_p1["instrument_level"]["deciding_arms"]) == {"N1", "S1"}
+    seen = []
+    real = stats.instrument_agreement
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs["alpha"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(stats, "instrument_agreement", spy)
+    scores, samples = flat_world
+    out = _p2(scores, samples, flat_p1)
+    assert out["instrument_level"]["m"] == 3 and out["instrument_level"]["deciding_arms"] == ["D2", "D3", "T_dog"]
+    assert seen == [0.05 / 3] * 4  # D1, D2, D3, T_dog
+
+
+def _exact_arm(rng, stems=224):
+    z = MU[None, :] + 2.0 * rng.standard_t(3, (stems, W)) / np.sqrt(3.0)
+    prob = np.exp(z - np.log(np.exp(z).sum(1, keepdims=True)) - 0.5)
+    counts = rng.multinomial(K, np.column_stack([prob, 1 - prob.sum(1)]))[:, :-1]
+    return prob, counts
+
+
+def test_instrument_gate_family_wise_false_fail_rate_under_exact_sampling():
+    """A perfect instrument (exact multinomial draws, independent arms): the stage's false INSTRUMENT_FAIL rate is
+    <= alpha under the Bonferroni gate, and about 1 - 0.954^6 = 0.25 with the uncorrected per-arm alpha (R6)."""
+    rng = np.random.default_rng(20260927)
+    n, m = 300, 6
+    corrected = uncorrected = 0
+    for _ in range(n):
+        draws = [_exact_arm(rng) for _ in range(m)]
+        corrected += not all(stats.instrument_agreement(p, c, K, alpha=0.05 / m).passed for p, c in draws)
+        uncorrected += not all(stats.instrument_agreement(p, c, K, alpha=0.05).passed for p, c in draws)
+    assert corrected / n <= 0.05 + 3 * np.sqrt(0.05 * 0.95 / n)
+    assert uncorrected / n > 0.12
+
+
 def test_seeds45_instrument_failure_leaves_the_claim_unresolved(five_seed_world):
     scores, samples = five_seed_world
     out = analysis.analyze_p1_seeds45(_decorated(scores, "N5"), samples, ENTRIES, V1, p1=_p1_stored(SPLIT),
@@ -275,6 +316,7 @@ def test_seeds45_stage_confirms_on_replication(five_seed_world):
     stage2 = out["stage2"]
     assert stage2["confirmatory"] == ["4", "5"] and stage2["seeds"] == ["1", "2", "3", "4", "5"]
     assert stage2["instrument_arms"] == ["base", "T_cat", "N4", "N5", "S4", "S5"]
+    assert stage2["instrument_level"]["m"] == 6 and stage2["instrument_level"]["per_arm_alpha"] == 0.05 / 6
     assert set(stage2["families"]["primary"]["seeds"]) == {"1", "2", "3", "4", "5"}
     assert out["final_outcome"]["cls"] == "CAT_RESIDUAL_CONFIRMED_ON_REPLICATION"
     assert out["final_outcome"]["confirmed"]["C3"] and out["stage1_class"] == "ONE_SEED_ONLY"
@@ -487,7 +529,7 @@ def test_cli_analyze_exit_codes_sealed_not_ready_and_final_technical_fail(monkey
 
 def test_cli_analyze_seeds45_after_a_triggered_p1(monkeypatch, tmp_path):
     cli, cfg, root, entries = _cli(monkeypatch, tmp_path)
-    scores, samples = _manifest_world(entries, seeds="12345", cat_bump=0.6, dogs=False, seed=23)
+    scores, samples = _manifest_world(entries, seeds="12345", cat_bump=0.6, dogs=False, seed=24)
     _write_outputs(root, scores, samples)
     analysis.write_stage(root, "p1", _p1_stored(SPLIT))  # a stored stage-p1 result that fired the trigger
     assert cli.cmd_analyze(cfg, "p1-seeds45") == 0
@@ -495,11 +537,8 @@ def test_cli_analyze_seeds45_after_a_triggered_p1(monkeypatch, tmp_path):
     assert out["stage1_class"] == "ONE_SEED_ONLY" and out["stage2"]["confirmatory"] == ["4", "5"]
     stage2 = out["stage2"]
     assert all(stage2["families"]["primary"]["seeds"][s]["p"]["C3"] <= 0.025 for s in "45")  # C3 passes in 4 and 5
-    # with this seed the exact-vs-sampled check of N4 fails by chance (per-arm alpha, open decision R6): the
-    # replication pair is then INSTRUMENT_FAIL and the cat claim stays unresolved
-    expected = ("ONE_SEED_ONLY" if stage2["outcome"]["cls"] == "INSTRUMENT_FAIL"
-                else "CAT_RESIDUAL_CONFIRMED_ON_REPLICATION")
-    assert out["final_outcome"]["cls"] == expected
+    assert stage2["outcome"]["cls"] != "INSTRUMENT_FAIL"  # per-arm alpha / 6 (decision R6)
+    assert out["final_outcome"]["cls"] == "CAT_RESIDUAL_CONFIRMED_ON_REPLICATION"
     v1 = json.loads((ROOT / cfg["contract"]["path"] / "seed1_v1_profile.json").read_text())["profile"]
     direct = analysis.analyze_p1_seeds45(scores, samples, entries, v1, p1=_p1_stored(SPLIT), integrity_ok=True,
                                          sample_k=K, n_boot=19, n_ref=200)

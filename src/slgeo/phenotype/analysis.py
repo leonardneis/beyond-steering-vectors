@@ -16,6 +16,10 @@ absent or incomplete, or whose required arms, seeds, cells or samples are missin
 (``StageNotReady``) unless ``final=True``, which records the documented TECHNICAL_FAIL instead; a degenerate
 confirmatory statistic is a TECHNICAL_FAIL; a degenerate descriptive statistic is recorded as ``{"error": ...}`` and
 never changes a class.
+
+Instrument gate (decision R6): the agreement check of every checked arm runs at alpha / m, m = the number of arms
+whose check decides the stage's INSTRUMENT_FAIL (``instrument_level``); diagnostic arms (seed 1, D1) are checked at
+the same level, reported and not counted in m.
 """
 
 from __future__ import annotations
@@ -290,8 +294,17 @@ def replicate_beta(scores, arm_y: str, arm_x: str, stems: Sequence[str], familie
     return float(np.mean(betas))
 
 
-def instrument_check(scores, samples: Sequence[Mapping[str, Any]], arms: Sequence[str], stems: Sequence[str], k: int) -> dict:
-    """Exact vs sampled agreement on the sampled cell (Q+r0 or persona+r0) and the coverage diagnostic."""
+def instrument_level(deciding_arms: Sequence[str], alpha: float = stats.ALPHA) -> dict:
+    """Decision R6: family-wise alpha over the arms that decide a stage's INSTRUMENT_FAIL (Bonferroni); every checked
+    arm's pooled per-word test runs at the per-arm level (itself Bonferroni over its words)."""
+    m = len(deciding_arms)
+    return {"family_alpha": alpha, "m": m, "per_arm_alpha": alpha / m, "deciding_arms": list(deciding_arms)}
+
+
+def instrument_check(scores, samples: Sequence[Mapping[str, Any]], arms: Sequence[str], stems: Sequence[str], k: int,
+                     *, alpha: float) -> dict:
+    """Exact vs sampled agreement on the sampled cell (Q+r0 or persona+r0) at the per-arm level ``alpha``, and the
+    coverage diagnostic."""
     out = {}
     for arm in arms:
         cell = "persona+r0" if arm.startswith("T_") else "Q+r0"
@@ -303,7 +316,7 @@ def instrument_check(scores, samples: Sequence[Mapping[str, Any]], arms: Sequenc
             j = index.get(row["context_id"])
             if j is not None and row["cls"] == "PANEL":
                 counts[j, PANEL.index(row["lemma"])] += 1
-        agreement = stats.instrument_agreement(prob, counts, k)
+        agreement = stats.instrument_agreement(prob, counts, k, alpha=alpha)
         coverage = max(float(np.mean([scores[i]["decoration_mass"] for i in ids])),
                        float(np.mean([scores[i]["emoji_mass"] for i in ids])))
         out[arm] = {"agreement": agreement.__dict__, "coverage": coverage,
@@ -367,7 +380,9 @@ def _p1_stage(scores, samples, entries, v1, *, seeds, confirmatory, checked_arms
 
     try:
         result: dict[str, Any] = {"primary": family(PRIMARY, TEACHER_CELL)}
-        instrument = instrument_check(scores, samples, checked_arms, sampled_stems, sample_k)
+        level = instrument_level(instrument_arms)
+        instrument = instrument_check(scores, samples, checked_arms, sampled_stems, sample_k,
+                                      alpha=level["per_arm_alpha"])
     except stats.PhenotypeStatsError as exc:
         return _technical_fail(f"statistics: {exc}", "statistics")
     result["secondary"] = _descriptive(lambda: family(SECONDARY, ("persona", ("none",))))  # Q+none, descriptive
@@ -379,7 +394,8 @@ def _p1_stage(scores, samples, entries, v1, *, seeds, confirmatory, checked_arms
                  p1_outcome(result["secondary"], integrity_ok=True, instrument_ok=instrument_ok).cls)
     outcome = p1_outcome(result["primary"], integrity_ok=True, instrument_ok=instrument_ok)
     return {"outcome": outcome.__dict__, "secondary_class_descriptive": secondary, "instrument": instrument,
-            "instrument_arms": list(instrument_arms), "families": result, "development_seed": "1",
+            "instrument_arms": list(instrument_arms), "instrument_level": level, "families": result,
+            "development_seed": "1",
             "seeds": list(seeds), "confirmatory": list(confirmatory)}
 
 
@@ -533,7 +549,9 @@ def analyze_p2(scores, samples, entries: Sequence[Mapping[str, Any]], *, p1: Map
         logq["T_cat"] = arm_logq(scores, "T_cat", stems, TEACHER_CELL)
         logq["T_dog"] = arm_logq(scores, "T_dog", stems, TEACHER_CELL)
         family = p2_family(logq, stems, families, n_boot=n_boot, n_ref=n_ref, engine=engine)
-        instrument = instrument_check(scores, samples, checked, sampled_stems, sample_k)
+        level = instrument_level([f"D{s}" for s in CONFIRMATORY_SEEDS] + ["T_dog"])
+        instrument = instrument_check(scores, samples, checked, sampled_stems, sample_k,
+                                      alpha=level["per_arm_alpha"])
     except stats.PhenotypeStatsError as exc:
         return _technical_fail(f"statistics: {exc}", "statistics", p1_input=p1_input)
     cat, dog = PANEL.index(TARGET), PANEL.index("dog")
@@ -548,7 +566,7 @@ def analyze_p2(scores, samples, entries: Sequence[Mapping[str, Any]], *, p1: Map
     for s, block in family["seeds"].items():  # per-replicate beta next to K3 (decision R5)
         block["descriptive"]["beta_DN_per_replicate"] = (lam_dn if isinstance(lam_dn, dict) else _descriptive(
             lambda: replicate_beta(scores, f"D{s}", f"N{s}", stems, families, lam_dn, (cat, dog))))
-    instrument_arms = [f"D{s}" for s in CONFIRMATORY_SEEDS] + ["T_dog"]
+    instrument_arms = level["deciding_arms"]
     instrument_ok = p1_input["instrument_ok"] and all(instrument[a]["ok"] for a in instrument_arms)
     outcome = p2_outcome(family, c2_confirmed=p1_input["C2_confirmed"], integrity_ok=True,
                          instrument_ok=instrument_ok)
@@ -558,7 +576,8 @@ def analyze_p2(scores, samples, entries: Sequence[Mapping[str, Any]], *, p1: Map
            "K3_confirmed": bool(outcome.confirmed.get("K3")), "dog_entropy": entropy.get("dog"),
            "neutral_entropy": entropy.get("neutral")}
     return {"outcome": outcome.__dict__, "family": family, "teacher_profile_rho": teacher_rho,
-            "instrument": instrument, "instrument_arms": instrument_arms, "p1_input": p1_input, "p2b_trigger": p2b}
+            "instrument": instrument, "instrument_arms": instrument_arms, "instrument_level": level,
+            "p1_input": p1_input, "p2b_trigger": p2b}
 
 
 def _profile(y, x, ref, targets, cols, lam, w) -> np.ndarray:
