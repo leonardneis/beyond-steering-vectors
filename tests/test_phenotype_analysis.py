@@ -7,6 +7,7 @@ command on the real prompt manifest's stem ids."""
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from slgeo.phenotype import analysis, panel, stats, taxonomy
+from slgeo.phenotype import analysis, p2 as p2data, panel, stats, taxonomy
 
 ROOT = Path(__file__).resolve().parents[1]
 W = len(panel.PANEL)
@@ -362,8 +363,15 @@ def _plan_of(arm):
     return "plan.json"
 
 
-def _write_outputs(root: Path, scores, samples):
-    """Score and sample shards (one per arm), the stage plans and UNSEAL.json: the layout ``run_stage`` reads."""
+ENTROPY = {"schema": 1, "definition": "slgeo.phenotype.p2.number_entropy", "commit": None, "dog": 6.61,
+           "neutral": 6.498, "inputs": {n: {"path": f"data/{n}.jsonl", "sha256": "0" * 64, "entropy_nats": v,
+                                            "numbers": 1000, "distinct": 100, "rows": 100}
+                                        for n, v in (("dog", 6.61), ("neutral", 6.498))}}
+
+
+def _write_outputs(root: Path, scores, samples, *, entropy=True):
+    """Score and sample shards (one per arm), the stage plans, UNSEAL.json and (``entropy``) a valid P2 entropy
+    record: the layout ``run_stage`` reads."""
     raw = root / "raw"
     by_arm: dict[str, list[str]] = {}
     for cid in scores:
@@ -387,6 +395,8 @@ def _write_outputs(root: Path, scores, samples):
         (root / name).write_text(json.dumps({"shards": [{"shard_id": s} for s in shards]}))
     (root / "UNSEAL.json").write_text(json.dumps({"prereg_tag": "prereg/phenotype-anchor-v1",
                                                   "prereg_commit": "synthetic-test"}))
+    if entropy:
+        (root / analysis.DATA_ENTROPY_FILE).write_text(json.dumps(ENTROPY))
 
 
 KW = dict(entries=ENTRIES, v1=V1, sample_k=K, expected_tag="prereg/phenotype-anchor-v1", n_boot=19, n_ref=200,
@@ -408,7 +418,13 @@ def test_stage_chain_on_disk(tmp_path, flat_world):
         analysis.run_stage(tmp_path, "p1-seeds45", **KW)  # no trigger
     p2 = analysis.run_stage(tmp_path, "p2", **KW)
     assert p2["p1_input"]["C2_confirmed"] == bool(p1["outcome"]["confirmed"]["C2"])
-    direct = analysis.analyze_p2(scores, samples, ENTRIES, p1=p1, integrity_ok=True, sample_k=K, n_boot=19, n_ref=200)
+    assert p2["p2b_trigger"]["entropy_record"] == "valid" and p2["p2b_trigger"]["entropy_record_sha256"] == (
+        hashlib.sha256((tmp_path / analysis.DATA_ENTROPY_FILE).read_bytes()).hexdigest())
+    assert p2["provenance"]["plans"] == {n: hashlib.sha256((tmp_path / n).read_bytes()).hexdigest()
+                                         for n in ("plan.json", "plan_p2.json")}
+    assert p2["provenance"]["adapter_locks"] == {"adapters.lock.json": None, "adapters_p2.lock.json": None}
+    direct = analysis.analyze_p2(scores, samples, ENTRIES, p1=p1, integrity_ok=True, sample_k=K, n_boot=19, n_ref=200,
+                                 data_entropy=ENTROPY)
     assert p2["outcome"] == direct["outcome"] and p2["p2b_trigger"]["value"] == direct["p2b_trigger"]["value"]
     analysis.write_stage(tmp_path, "p2", p2)
     assert analysis.plan_complete(tmp_path, "p2")
@@ -426,6 +442,24 @@ def test_stages_refuse_until_their_outputs_exist(tmp_path, flat_world):
     assert not (tmp_path / "analysis" / "p2_analysis.json").exists()
     out = analysis.run_stage(tmp_path, "p2", final=True, **KW)  # deliberate, documented TECHNICAL_FAIL
     assert out["outcome"]["cls"] == "TECHNICAL_FAIL" and out["technical_fail_kind"] == "integrity"
+
+
+@pytest.mark.parametrize("record, status", [(None, "missing"), ({"dog": 6.6, "neutral": 6.5}, "invalid"),
+                                            (dict(ENTROPY, dog=float("nan")), "invalid")])
+def test_p2_refuses_without_a_valid_entropy_record_and_final_leaves_p2b_undetermined(tmp_path, flat_world, record,
+                                                                                     status):
+    scores, samples = flat_world
+    _write_outputs(tmp_path, scores, samples, entropy=False)
+    if record is not None:
+        (tmp_path / analysis.DATA_ENTROPY_FILE).write_text(json.dumps(record))
+    analysis.write_stage(tmp_path, "p1", analysis.run_stage(tmp_path, "p1", **KW))
+    with pytest.raises(analysis.StageNotReady, match=f"entropy record p2_data_entropy.json {status}"):
+        analysis.run_stage(tmp_path, "p2", **KW)
+    out = analysis.run_stage(tmp_path, "p2", final=True, **KW)  # classes unaffected, P2b undetermined
+    assert out["outcome"]["cls"] not in ("TECHNICAL_FAIL", "INSTRUMENT_FAIL")
+    assert out["p2b_trigger"]["entropy_record"].startswith(status) and out["p2b_trigger"]["dog_entropy"] is None
+    assert out["p2b_trigger"]["value"] is (None if out["outcome"]["confirmed"]["K3"] else False)
+    assert p2data.data_entropy_problem(ENTROPY) is None
 
 
 def test_stage_loads_only_its_planned_shards_and_rejects_duplicates(tmp_path, flat_world):

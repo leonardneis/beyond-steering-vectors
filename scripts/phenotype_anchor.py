@@ -1,10 +1,13 @@
 """Phenotype Anchor v1 command line (cluster and local).
 
-Commands:
-  pin-adapters   read-only tree digests of every adapter; fill the never-pinned ones, verify the pinned ones;
-                 writes <out>/adapters.lock.json once (before any forward)
-  plan           deterministic plan.json from the prompt manifest and the execution manifest
-  run --shard    execute one shard (scientific runs refuse a draft contract or placeholder identity)
+Commands (``--stage`` p1 (default), p2 or p1-seeds45; file names in ``slgeo.phenotype.stages``):
+  data-entropy   CPU number-entropy record of the P2 teacher data (§9.1 / §9.4), written once to
+                 <out>/p2_data_entropy.json with every input's SHA-256; required before ``pin-adapters --stage p2``
+  pin-adapters   read-only tree digests of the stage's adapters; fill the never-pinned ones, verify the pinned ones;
+                 writes the stage's lock (<out>/adapters.lock.json for p1) once, before any forward of the stage
+  plan           the stage's deterministic plan (<out>/plan.json for p1) from the prompt and execution manifests
+  run --shard    execute one shard of any stage's plan (scientific runs refuse a draft contract, placeholder
+                 identity or a missing stage lock)
   tv-cpu         CPU technical validation (manifest reproduction, panel, plan, statistics self-tests)
   tv --name      GPU technical validation (outcome-blind; see slgeo.phenotype.tv)
   tv-project     projection and resource cap from the TV reports (decision D5)
@@ -30,7 +33,7 @@ ROOT = bootstrap()
 
 import yaml  # noqa: E402
 
-from slgeo.phenotype import models, plan as planning  # noqa: E402
+from slgeo.phenotype import models, plan as planning, stages  # noqa: E402
 
 CONFIG = ROOT / "configs" / "validation" / "phenotype_anchor_v1.yaml"
 FINAL = 86
@@ -57,26 +60,69 @@ def entries(cfg: dict) -> list[dict]:
     return planning.load_prompt_manifest(ROOT / cfg["contract"]["prompt_manifest"], cfg["contract"]["prompt_manifest_sha256"])
 
 
-def cmd_pin_adapters(cfg: dict) -> int:
-    lock = out_root(cfg, False) / "adapters.lock.json"
+def cmd_data_entropy(cfg: dict) -> int:
+    """Write the P2 entropy record once (frozen contract only); an existing record must match a recomputation."""
+    from slgeo.phenotype import p2
+
+    if cfg["contract"]["status"] != "frozen":
+        print("The contract is not frozen; the entropy record is written under the frozen program only", file=sys.stderr)
+        return FINAL
+    target = out_root(cfg, False) / stages.DATA_ENTROPY
+    try:
+        record = p2.data_entropy_record(cfg["p2_data_entropy"], ROOT, commit=os.environ.get("SLGEO_EXECUTION_GIT_COMMIT"))
+    except (OSError, ValueError) as exc:
+        print(f"Entropy record not written: {exc}", file=sys.stderr)
+        return FINAL
+    if target.exists():
+        existing = json.loads(target.read_text(encoding="utf-8"))
+        if existing.get("inputs") != record["inputs"]:
+            print(f"{target.name} exists and differs from the inputs on disk", file=sys.stderr)
+            return FINAL
+        return 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "x", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(record, indent=1, sort_keys=True))
+    return 0
+
+
+def cmd_pin_adapters(cfg: dict, stage: str = "p1") -> int:
+    """Pin the stage's adapters into its lock (once, before any forward of the stage). p2 first requires a valid
+    entropy record (the dog-teacher data entropy is measured before any dog student is read); its SHA-256 enters
+    the p2 lock."""
+    root = out_root(cfg, False)
+    lock = root / stages.LOCK[stages.check(stage)]
+    names = planning.stage_adapters(cfg, stage)
+    record = {"stage": stage, "definition": "run_confirmatory_manifest.tree_digest",
+              "paths": {name: cfg["adapters"][name]["path"] for name in names}}
+    if stage == "p2":
+        from slgeo.phenotype import analysis
+
+        entropy, status, digest = analysis.read_data_entropy(root)
+        if entropy is None:
+            print(f"The entropy record {stages.DATA_ENTROPY} is {status}; run data-entropy first", file=sys.stderr)
+            return FINAL
+        record["p2_data_entropy_sha256"] = digest
     observed = {}
-    for name, spec in cfg["adapters"].items():
+    for name in names:
+        spec = cfg["adapters"][name]
         digest = models.adapter_tree_digest(shared_root() / spec["path"])
         if spec["digest"] not in ("PIN_AT_FIRST_READ", digest):
             print(f"Adapter {name}: digest {digest} != pinned {spec['digest']}", file=sys.stderr)
             return FINAL
         observed[name] = digest
     if lock.exists():
-        if json.loads(lock.read_text())["digests"] != observed:
-            print("adapters.lock.json differs from the adapters on disk", file=sys.stderr)
+        existing = json.loads(lock.read_text())
+        if existing["digests"] != observed or existing.get("p2_data_entropy_sha256") != record.get("p2_data_entropy_sha256"):
+            print(f"{lock.name} differs from the adapters (or entropy record) on disk", file=sys.stderr)
             return FINAL
         return 0
     lock.parent.mkdir(parents=True, exist_ok=True)
-    lock.write_text(json.dumps({"digests": observed, "definition": "run_confirmatory_manifest.tree_digest"}, indent=1))
+    with open(lock, "x", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps({**record, "digests": observed}, indent=1))
     return 0
 
 
-def cmd_plan(cfg: dict, technical: bool) -> int:
+def cmd_plan(cfg: dict, technical: bool, stage: str = "p1") -> int:
     root = out_root(cfg, technical)
     projection = root / "tv_projection.json" if not technical else None  # written by tv-project into the SCI root
     seconds, factors = dict(planning.PLACEHOLDER_SECONDS), {}
@@ -84,28 +130,32 @@ def cmd_plan(cfg: dict, technical: bool) -> int:
         p = json.loads(projection.read_text())
         seconds.update(p["seconds_per_unit"])
         factors = p["arm_factor"]
-    plan = planning.build_plan(cfg, entries(cfg), seconds=seconds, arm_factor=factors)
+    plan = planning.build_plan(cfg, entries(cfg), stage=stage, seconds=seconds, arm_factor=factors)
     root.mkdir(parents=True, exist_ok=True)
-    target = root / "plan.json"
+    target = root / stages.PLAN[stage]
     text = json.dumps(plan, indent=1, sort_keys=True)
     if target.exists() and target.read_text() != text:
-        print("plan.json exists with different content", file=sys.stderr)
+        print(f"{target.name} exists with different content", file=sys.stderr)
         return FINAL
     target.write_text(text)
     return 0
 
 
-def _require_scientific(cfg: dict) -> None:
+def _require_scientific(cfg: dict, stage: str) -> None:
+    """Frozen contract, no placeholder identity, and the stage's lock covering exactly its adapters whenever one of
+    them was never pinned in the manifest."""
     if cfg["contract"]["status"] != "frozen":
         raise SystemExit(FINAL)
     if PLACEHOLDER in json.dumps(cfg["execution"]):
         raise SystemExit(FINAL)
-    for name, spec in cfg["adapters"].items():
-        if spec["digest"] == "PIN_AT_FIRST_READ" and not (out_root(cfg, False) / "adapters.lock.json").exists():
+    names = planning.stage_adapters(cfg, stage)
+    if any(cfg["adapters"][n]["digest"] == "PIN_AT_FIRST_READ" for n in names):
+        lock = out_root(cfg, False) / stages.LOCK[stage]
+        if not lock.exists() or set(json.loads(lock.read_text())["digests"]) != set(names):
             raise SystemExit(FINAL)
 
 
-def _load(cfg: dict, adapters: list[str]):
+def _load(cfg: dict, adapters: list[str], stage: str = "p1"):
     from slgeo.cts_stage0.checks import cjk_ids_by_rule
     from slgeo.cts_stage0.modeling import load_tokenizer, snapshot_directory, verify_snapshot
     from slgeo.cts_stage0.package import FrozenPackage
@@ -120,7 +170,7 @@ def _load(cfg: dict, adapters: list[str]):
     base = models.load_base(snapshot, yaml.safe_load((ROOT / cfg["model"]["model_config"]).read_text()))
     peft_model = None
     if adapters:
-        lock_path = out_root(cfg, False) / "adapters.lock.json"
+        lock_path = out_root(cfg, False) / stages.LOCK[stage]
         if lock_path.exists():
             lock = json.loads(lock_path.read_text())["digests"]
         else:  # TV before pin-adapters: only adapters pinned in the manifest may be used
@@ -137,13 +187,18 @@ def cmd_run(cfg: dict, shard_id: str, technical: bool) -> int:
     from slgeo.phenotype import execute
     from slgeo.phenotype.runner import Context
 
+    stage = planning.stage_of_arm(cfg, shard_id.rsplit(".", 2)[0])  # shard ids are "<arm>.<kind>.<index>"
     if not technical:
-        _require_scientific(cfg)
+        _require_scientific(cfg, stage)
     root = out_root(cfg, technical)
-    plan = json.loads((root / "plan.json").read_text())
-    shard = next(s for s in plan["shards"] if s["shard_id"] == shard_id)
+    plan = json.loads((root / stages.PLAN[stage]).read_text())
+    shard = next((s for s in plan["shards"] if s["shard_id"] == shard_id), None)
+    if shard is None or plan.get("stage") != stage:
+        print(f"Shard {shard_id} is not in the {stage} plan", file=sys.stderr)
+        return FINAL
     contexts = {cid: Context(**c) for cid, c in plan["contexts"].items()}
-    tokenizer, package, base, peft_model, boundary, cjk = _load(cfg, [shard["adapter"]] if shard["adapter"] else [])
+    tokenizer, package, base, peft_model, boundary, cjk = _load(cfg, [shard["adapter"]] if shard["adapter"] else [],
+                                                                stage)
     number_prompts = {}
     if shard["kind"] == "numcap":
         lo, hi = cfg["number_capture"]["rows"]
@@ -152,7 +207,7 @@ def cmd_run(cfg: dict, shard_id: str, technical: bool) -> int:
                 if lo <= row < hi:
                     number_prompts[f"num{row:05d}"] = json.loads(line)["prompt"]
     provenance = {"commit": os.environ.get("SLGEO_EXECUTION_GIT_COMMIT"), "run_tag": os.environ.get("SLGEO_RUN_TAG"),
-                  "prompt_manifest_sha256": cfg["contract"]["prompt_manifest_sha256"]}
+                  "prompt_manifest_sha256": cfg["contract"]["prompt_manifest_sha256"], "stage": stage}
     execute.run_shard(shard, contexts, out_root=root, tokenizer=tokenizer, base_model=base, peft_model=peft_model,
                       package=package, boundary_ids=boundary, cjk_ids=cjk, sampling=cfg["sampling"],
                       capture_cells=cfg["cells"]["capture"], number_prompts=number_prompts, provenance=provenance)
@@ -170,7 +225,8 @@ def cmd_tv_cpu(cfg: dict) -> int:
     for command in checks:
         if subprocess.run(command, cwd=ROOT).returncode != 0:
             return FINAL
-    planning.build_plan(cfg, entries(cfg))
+    for stage in stages.STAGES:
+        planning.build_plan(cfg, entries(cfg), stage=stage)
     return 0
 
 
@@ -202,9 +258,10 @@ def cmd_tv_project(cfg: dict) -> int:
         return FINAL
     summary = tv.overhead_and_factors(reports)
     seconds = dict(planning.PLACEHOLDER_SECONDS, score=summary["base_score_s"])
-    factors = {arm: summary["arm_factor"].get("S1", 1.0) for arm in ("S1", "S2", "S3")}
-    factors.update({arm: summary["arm_factor"].get("N1", 1.0) for arm in ("N1", "N2", "N3")})
-    plan = planning.build_plan(cfg, entries(cfg), seconds=seconds, arm_factor=factors)
+    # every adapter arm takes the measured LoRA slowdown of its kind (neutral: N1; cat and dog students: S1)
+    factors = {arm: summary["arm_factor"].get("N1" if arm.startswith("N") else "S1", 1.0)
+               for arm, (adapter, _context) in cfg["arms"].items() if adapter is not None}
+    plan = planning.build_plan(cfg, entries(cfg), seconds=seconds, arm_factor=factors)  # the p1 projection
     overhead = 1.25  # replaced by the dry-shard end-to-end factor when available
     projection = planning.projection_a100_h(plan, overhead)
     cap = planning.cap_a100_h(projection, summary["throughput_cv"])
@@ -240,8 +297,11 @@ def cmd_analyze(cfg: dict, stage: str, final: bool = False) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("pin-adapters")
+    sub.add_parser("data-entropy")
+    pin = sub.add_parser("pin-adapters")
+    pin.add_argument("--stage", choices=stages.STAGES, default="p1")
     p = sub.add_parser("plan")
+    p.add_argument("--stage", choices=stages.STAGES, default="p1")
     p.add_argument("--technical-validation", action="store_true")
     r = sub.add_parser("run")
     r.add_argument("--shard", required=True)
@@ -251,15 +311,17 @@ def main() -> int:
     t.add_argument("--name", required=True)
     sub.add_parser("tv-project")
     a = sub.add_parser("analyze")
-    a.add_argument("--stage", choices=("p1", "p2", "p1-seeds45"), default="p1")
+    a.add_argument("--stage", choices=stages.STAGES, default="p1")
     a.add_argument("--final", action="store_true",
                    help="record a TECHNICAL_FAIL for missing outputs instead of refusing (write-once)")
     args = parser.parse_args()
     cfg = config()
+    if args.command == "data-entropy":
+        return cmd_data_entropy(cfg)
     if args.command == "pin-adapters":
-        return cmd_pin_adapters(cfg)
+        return cmd_pin_adapters(cfg, args.stage)
     if args.command == "plan":
-        return cmd_plan(cfg, args.technical_validation)
+        return cmd_plan(cfg, args.technical_validation, args.stage)
     if args.command == "run":
         return cmd_run(cfg, args.shard, args.technical_validation)
     if args.command == "tv-cpu":

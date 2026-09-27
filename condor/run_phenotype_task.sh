@@ -32,8 +32,9 @@ trap terminate_child TERM INT
 trap 'rm -rf "$LOCAL_STAGE"' EXIT
 
 case "$COMMAND" in
-  pin-adapters) args=(pin-adapters) ;;
-  plan) args=(plan) ;;
+  data-entropy) args=(data-entropy) ;;
+  pin-adapters) args=(pin-adapters --stage "$TARGET") ;;
+  plan) args=(plan --stage "$TARGET") ;;
   run) args=(run --shard "$TARGET") ;;
   tv-cpu) args=(tv-cpu) ;;
   tv) args=(tv --name "$TARGET") ;;

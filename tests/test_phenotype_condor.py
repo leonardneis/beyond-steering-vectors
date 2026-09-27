@@ -21,12 +21,13 @@ for path in (ROOT / "src", ROOT / "scripts"):
 import generate_phenotype_dag as gen  # noqa: E402
 import phenotype_budget as cli  # noqa: E402
 from slgeo.cts_stage0 import budget  # noqa: E402
+from slgeo.phenotype import stages  # noqa: E402
 
 CONFIG_PATH = ROOT / "configs" / "validation" / "phenotype_anchor_v1.yaml"
 CONFIG = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 COMMIT = "a" * 40
 TOPIC = "https://ntfy.example.org/secret-topic-for-tests"
-PLAN = {"shards": [
+PLAN = {"stage": "p1", "shards": [
     {"shard_id": "base.score.000", "arm": "base", "kind": "score", "adapter": None, "context_ids": ["c1"], "projected_seconds": 1500.0},
     {"shard_id": "S1.sample.000", "arm": "S1", "kind": "sample", "adapter": "S1", "context_ids": ["c2"], "projected_seconds": 1200.0},
     {"shard_id": "L_cat_T2.numcap.001", "arm": "L_cat_T2", "kind": "numcap", "adapter": None, "context_ids": ["c3"], "projected_seconds": 900.0},
@@ -61,6 +62,22 @@ def test_plan_dag_nodes_dependencies_and_no_analysis(plan_dag):
     assert len(re.findall(r"^PARENT ", plan_dag, flags=re.M)) == 1
     assert 'BsvCommand="pin-adapters"' in plan_dag and 'BsvTarget="base.score.000"' in plan_dag
     assert "analysis" not in plan_dag.lower().replace("no analysis node", "")
+    pin = re.search(r'^VARS pin_adapters (.*)$', plan_dag, flags=re.M).group(1)
+    assert 'BsvTarget="p1"' in pin  # the wrapper runs pin-adapters --stage p1
+
+
+def test_stage_dags_pin_their_own_stage_and_refuse_a_plan_without_one():
+    for stage in ("p2", "p1-seeds45"):
+        arm = "D2" if stage == "p2" else "S4"
+        plan = {"stage": stage, "shards": [{"shard_id": f"{arm}.score.000", "arm": arm, "kind": "score",
+                                            "adapter": arm, "context_ids": ["c"], "projected_seconds": 100.0}]}
+        dag = gen.plan_dag(plan, f"/o/{stages.PLAN[stage]}", COMMIT, "/r", "/s", stages.RUN_TAG[stage], "/o",
+                           f"/o/accounting/{stages.CAP[stage]}", "575.51.03")
+        pin = re.search(r'^VARS pin_adapters (.*)$', dag, flags=re.M).group(1)
+        assert f'BsvTarget="{stage}"' in pin and f"stage {stage}" in dag
+        assert f"--plan /o/{stages.PLAN[stage]}" in dag and f'BsvRunTag="{stages.RUN_TAG[stage]}"' in dag
+    with pytest.raises(ValueError, match="no known stage"):
+        gen.plan_dag({"shards": PLAN["shards"]}, "/p", COMMIT, "/r", "/s", "sci-p1", "/o", "/c", "575.51.03")
 
 
 def test_every_node_has_budget_gate_retry_and_abort(plan_dag, tv_dag):
@@ -155,7 +172,8 @@ def test_submit_files():
 def test_wrapper_command_mapping_and_exit_policy():
     text = (ROOT / "condor" / "run_phenotype_task.sh").read_text(encoding="utf-8")
     mapping = dict(re.findall(r"^\s+([a-z-]+)\) args=\((.*)\) ;;$", text, flags=re.M))
-    assert mapping == {"pin-adapters": "pin-adapters", "plan": "plan", "run": 'run --shard "$TARGET"', "tv-cpu": "tv-cpu",
+    assert mapping == {"data-entropy": "data-entropy", "pin-adapters": 'pin-adapters --stage "$TARGET"',
+                       "plan": 'plan --stage "$TARGET"', "run": 'run --shard "$TARGET"', "tv-cpu": "tv-cpu",
                        "tv": 'tv --name "$TARGET"', "tv-project": "tv-project"}
     assert 'python -u scripts/phenotype_anchor.py "${args[@]}"' in text
     assert 'SLGEO_EXECUTION_GIT_COMMIT" == "UNFROZEN"' in text and "exit 86" in text
@@ -171,7 +189,7 @@ def test_submit_script_guards():
     assert "git status --porcelain --untracked-files=all" in text and "git branch -r --contains HEAD" in text
     assert 'manifest_value contract.status)" != "frozen"' in text
     assert "for field in execution.nvidia_driver execution.packages" in text and "PLACEHOLDER=FILL_FROM_TV" in text
-    assert "SCIENTIFIC_EXECUTION_AUTHORIZATION.json" in text and "write-cap" in text
+    assert "SCIENTIFIC_EXECUTION_AUTHORIZATION$STAGE_SUFFIX.json" in text and "write-cap" in text
     assert "--driver is accepted for the technical validation only" in text
     assert '--nvidia-driver "$DRIVER" --driver-source "$DRIVER_SOURCE"' in text
     assert "TV_MAX_ATTEMPTS=3" in text and "prereg/phenotype-anchor-v1" in text
@@ -181,6 +199,27 @@ def test_submit_script_guards():
     assert text.index("maintenance blackout") < first_generation
     assert text.index("contract.status") < text.index("--plan \"$PLAN\"")
     assert text.index('if [[ "$SUBMIT" -ne 1 ]]; then echo "READY: scientific DAG') < text.rindex("write_cap\n")
+
+
+def test_submit_script_stage_files_follow_the_stage_layout():
+    """--stage selects the plan, authorization, cap record and run tag named in ``slgeo.phenotype.stages``; the
+    authorization records (committed after the tag) are the only files that may differ from the tag."""
+    text = (ROOT / "condor" / "submit_phenotype.sh").read_text(encoding="utf-8")
+    suffix = {"p1": "", "p2": "_p2", "p1-seeds45": "_p1-seeds45"}
+    assert 'p1) STAGE_SUFFIX="" ;;' in text and 'p2|p1-seeds45) STAGE_SUFFIX="_$STAGE" ;;' in text
+    for stage in stages.STAGES:
+        assert stages.PLAN[stage] == f"plan{suffix[stage]}.json" and stages.CAP[stage] == f"cap{suffix[stage]}.json"
+        assert stages.AUTHORIZATION[stage] == f"SCIENTIFIC_EXECUTION_AUTHORIZATION{suffix[stage]}.json"
+        assert stages.RUN_TAG[stage] == f"sci-{stage}"
+    assert 'PLAN="$SCI_ROOT/plan$STAGE_SUFFIX.json"' in text and 'CAP_FILE="$ACCOUNTING_ROOT/cap$STAGE_SUFFIX.json"' in text
+    assert "SCIENTIFIC_EXECUTION_AUTHORIZATION$STAGE_SUFFIX.json" in text and 'RUN_TAG="sci-$STAGE"' in text
+    assert "--stage \"$STAGE\"" in text and 'BsvTarget=$STAGE' in text
+    assert "':(exclude)research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION*.json'" in text
+    assert 'BsvCommand=data-entropy' in text and '"$SCI_ROOT/p2_data_entropy.json"' in text
+    assert stages.DATA_ENTROPY == "p2_data_entropy.json"
+    # the entropy job and every scientific mode come after the frozen-contract and tag checks
+    assert text.index("contract.status") < text.index('if [[ "$MODE" == entropy ]]')
+    assert text.index("prereg/phenotype-anchor-v1^{commit}") < text.index('if [[ "$MODE" == entropy ]]')
 
 
 def test_manifest_reader_sees_the_draft_and_placeholders():
@@ -299,6 +338,9 @@ def test_write_cap_is_write_once(tmp_path):
     assert cli.read_cap(tmp_path / "accounting" / "cap.json")["cap_a100_h"] == 16.0
     assert cli.cmd_write_cap(SimpleNamespace(**{**vars(args), "cap": 20.0})) == 2
     assert cli.cmd_write_cap(SimpleNamespace(projection=str(projection), cap=5.0, accounting_root=str(tmp_path / "b"))) == 2
+    assert cli.cmd_write_cap(SimpleNamespace(**{**vars(args), "cap": 12.0, "stage": "p2"})) == 0  # its own record
+    assert cli.read_cap(tmp_path / "accounting" / "cap_p2.json")["cap_a100_h"] == 12.0
+    assert cli.read_cap(tmp_path / "accounting" / "cap.json")["cap_a100_h"] == 16.0
 
 
 def test_submit_host_scripts_are_standard_library_only():

@@ -3,24 +3,38 @@
 #   --technical-validation [--driver X]  TV-P1 DAG (new attempt directory per run tag; at most 3 attempts, 4 A100-h).
 #                                        The NVIDIA driver comes from the manifest (execution.nvidia_driver) or, while
 #                                        that is still FILL_FROM_TV, from --driver X; the attempt record stores it.
+#   --data-entropy                       P2 entropy record job (CPU; frozen contract; before any P2 forward)
 #   --scientific-plan                    scientific plan job (refused unless authorized and the contract is frozen)
 #   --scientific                         scientific DAG from the plan (refused unless authorized; budget gate on every node)
+#   --stage p1|p2|p1-seeds45             stage of --scientific-plan / --scientific (default p1): its plan, lock, run tag,
+#                                        authorization and cap record (slgeo.phenotype.stages)
 #   --submit                             actually submit (otherwise validate only)
 set -euo pipefail
 MODE=""
 SUBMIT=0
 DRIVER_ARG=""
+STAGE=p1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --technical-validation) MODE=techval; shift ;;
     --scientific-plan) MODE=sciplan; shift ;;
     --scientific) MODE=scientific; shift ;;
+    --data-entropy) MODE=entropy; shift ;;
+    --stage) STAGE=${2:?--stage needs p1, p2 or p1-seeds45}; shift 2 ;;
     --driver) DRIVER_ARG=${2:?--driver needs a version}; shift 2 ;;
     --submit) SUBMIT=1; shift ;;
-    *) echo "Usage: $0 --technical-validation [--driver X]|--scientific-plan|--scientific [--submit]" >&2; exit 2 ;;
+    *) echo "Usage: $0 --technical-validation [--driver X]|--data-entropy|--scientific-plan|--scientific [--stage S] [--submit]" >&2; exit 2 ;;
   esac
 done
-[[ -n "$MODE" ]] || { echo "Choose --technical-validation, --scientific-plan or --scientific" >&2; exit 2; }
+[[ -n "$MODE" ]] || { echo "Choose --technical-validation, --data-entropy, --scientific-plan or --scientific" >&2; exit 2; }
+case "$STAGE" in
+  p1) STAGE_SUFFIX="" ;;
+  p2|p1-seeds45) STAGE_SUFFIX="_$STAGE" ;;
+  *) echo "Unknown stage $STAGE (p1, p2 or p1-seeds45)" >&2; exit 2 ;;
+esac
+if [[ "$STAGE" != p1 && "$MODE" != sciplan && "$MODE" != scientific ]]; then
+  echo "--stage applies to --scientific-plan and --scientific only." >&2; exit 2
+fi
 if [[ -n "$DRIVER_ARG" && "$MODE" != techval ]]; then
   echo "--driver is accepted for the technical validation only; scientific runs use the manifest value." >&2; exit 2
 fi
@@ -147,10 +161,20 @@ done
 if ! git rev-parse -q --verify 'prereg/phenotype-anchor-v1^{commit}' >/dev/null; then
   echo "Preregistration tag prereg/phenotype-anchor-v1 missing." >&2; exit 2
 fi
-if [[ -n "$(git diff --name-only 'prereg/phenotype-anchor-v1' HEAD -- research/phenotype_anchor_v1)" ]]; then
+# The authorization records are committed after the tag (they hold the TV-derived caps); nothing else may differ.
+if [[ -n "$(git diff --name-only 'prereg/phenotype-anchor-v1' HEAD -- research/phenotype_anchor_v1 \
+      ':(exclude)research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION*.json')" ]]; then
   echo "The preregistration package differs from its tag." >&2; exit 2
 fi
-AUTH=research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION.json
+if [[ "$MODE" == entropy ]]; then
+  if [[ "$SUBMIT" -ne 1 ]]; then echo "READY: entropy record job validated; nothing submitted."; exit 0; fi
+  condor_submit "BsvTaskId=phenotype_data_entropy" "BsvCommand=data-entropy" "BsvTarget=none" "BsvRepoRoot=$REPO_ROOT" \
+    "BsvSharedRoot=$SHARED_ROOT" "BsvRequestCpus=2" "BsvRequestMemoryMB=16384" "BsvExecutionGitCommit=$EXECUTION_COMMIT" \
+    "BsvMachineRequirement=True" "BsvDockerImage=$IMAGE" "BsvRunTag=sci-p2" "BsvBudgetCategory=SCI" \
+    "BsvNvidiaDriver=$DRIVER" condor/phenotype_task_cpu.sub
+  exit 0
+fi
+AUTH=research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION$STAGE_SUFFIX.json
 if [[ ! -f "$AUTH" ]]; then
   echo "Scientific execution is not authorized (no committed $AUTH)." >&2; exit 2
 fi
@@ -163,23 +187,28 @@ PY
 # The cap record is written once at the first authorized submission; later calls verify it (an extension of the cap
 # is a researcher decision). A dry run writes nothing.
 write_cap() {
-  python3 -B scripts/phenotype_budget.py write-cap --projection "$PROJECTION" --cap "$AUTH_CAP" --accounting-root "$ACCOUNTING_ROOT"
+  python3 -B scripts/phenotype_budget.py write-cap --projection "$PROJECTION" --cap "$AUTH_CAP" --accounting-root "$ACCOUNTING_ROOT" \
+    --stage "$STAGE"
 }
-RUN_TAG="sci-p1"
+RUN_TAG="sci-$STAGE"
+CAP_FILE="$ACCOUNTING_ROOT/cap$STAGE_SUFFIX.json"
 
 if [[ "$MODE" == sciplan ]]; then
   if [[ "$SUBMIT" -ne 1 ]]; then echo "READY: scientific plan job validated; nothing submitted."; exit 0; fi
   write_cap
-  condor_submit "BsvTaskId=phenotype_plan" "BsvCommand=plan" "BsvTarget=none" "BsvRepoRoot=$REPO_ROOT" \
+  condor_submit "BsvTaskId=phenotype_plan$STAGE_SUFFIX" "BsvCommand=plan" "BsvTarget=$STAGE" "BsvRepoRoot=$REPO_ROOT" \
     "BsvSharedRoot=$SHARED_ROOT" "BsvRequestCpus=2" "BsvRequestMemoryMB=8192" "BsvExecutionGitCommit=$EXECUTION_COMMIT" \
     "BsvMachineRequirement=True" "BsvDockerImage=$IMAGE" "BsvRunTag=$RUN_TAG" "BsvBudgetCategory=SCI" \
     "BsvNvidiaDriver=$DRIVER" condor/phenotype_task_cpu.sub
   exit 0
 fi
 
-PLAN="$SCI_ROOT/plan.json"
-[[ -f "$PLAN" ]] || { echo "No scientific plan at $PLAN; run --scientific-plan first." >&2; exit 2; }
-RUNTIME_DAG=condor/runtime/phenotype_anchor_v1_scientific.dag
+PLAN="$SCI_ROOT/plan$STAGE_SUFFIX.json"
+[[ -f "$PLAN" ]] || { echo "No scientific plan at $PLAN; run --scientific-plan --stage $STAGE first." >&2; exit 2; }
+if [[ "$STAGE" == p2 && ! -f "$SCI_ROOT/p2_data_entropy.json" ]]; then
+  echo "No P2 entropy record; run --data-entropy first (pin-adapters --stage p2 refuses without it)." >&2; exit 2
+fi
+RUNTIME_DAG=condor/runtime/phenotype_anchor_v1_scientific$STAGE_SUFFIX.dag
 generator=(python3 -B scripts/generate_phenotype_dag.py --plan "$PLAN" --output "$RUNTIME_DAG"
   --execution-git-commit "$EXECUTION_COMMIT" --repo-root "$REPO_ROOT" --shared-root "$SHARED_ROOT"
   --run-tag "$RUN_TAG" --out-root "$SCI_ROOT" --cap-file "$CAP_FILE" --nvidia-driver "$DRIVER" --start-epoch "$(date +%s)")

@@ -4,18 +4,19 @@ Scientific outputs are sealed. ``run_stage`` refuses unless an unseal record exi
 tag and commit (written only after the freeze; decision D4 order: freeze -> gate files -> P1 run -> unseal).
 Confirmatory statistics use the RES stems; REF50 and NONANIMAL are reported separately (development, descriptive).
 
-Stages (``STAGE_FILES``, each result written once under ``<out>/analysis/``):
+Stages (``stages.RESULT``, each result written once under ``<out>/analysis/``):
   p1          P1 on seeds 1-3 (1 development, 2 and 3 confirmatory); reports the fresh-seed trigger.
   p1-seeds45  only if the stored p1 result fired the trigger: P1 on seeds 1-5 with seeds 4 and 5 confirmatory, and
               the final two-stage P1 outcome (``taxonomy.classify_p1_two_stage``, decision R2).
   p2          P2 on seeds 1-3 (never re-run with seeds 4/5); reads the P1 C2 decision and the P1 instrument result
               from the stored p1 result.
-Integrity and data per stage (``STAGE_PLANS``): p1 reads ``plan.json``; p2 also ``plan_p2.json`` (D1-D3); p1-seeds45
-also ``plan_p1-seeds45.json`` (N4, S4, N5, S5); only the shards of those plans are loaded. A stage whose plans are
-absent or incomplete, or whose required arms, seeds, cells or samples are missing, is refused without writing
-(``StageNotReady``) unless ``final=True``, which records the documented TECHNICAL_FAIL instead; a degenerate
-confirmatory statistic is a TECHNICAL_FAIL; a degenerate descriptive statistic is recorded as ``{"error": ...}`` and
-never changes a class.
+Integrity and data per stage (``stages.READS``): p1 reads ``plan.json``; p2 also ``plan_p2.json`` (D1-D3);
+p1-seeds45 also ``plan_p1-seeds45.json`` (N4, S4, N5, S5); only the shards of those plans are loaded. A stage whose
+plans are absent or incomplete, or whose required arms, seeds, cells or samples are missing, is refused without
+writing (``StageNotReady``) unless ``final=True``, which records the documented TECHNICAL_FAIL instead; p2 is also
+refused while the entropy record ``p2_data_entropy.json`` is missing or invalid (with ``final=True`` it is analysed
+and the P2b trigger is recorded as undetermined). A degenerate confirmatory statistic is a TECHNICAL_FAIL; a
+degenerate descriptive statistic is recorded as ``{"error": ...}`` and never changes a class.
 
 Instrument gate (decision R6): the agreement check of every checked arm runs at alpha / m, m = the number of arms
 whose check decides the stage's INSTRUMENT_FAIL (``instrument_level``); diagnostic arms (seed 1, D1) are checked at
@@ -34,7 +35,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from . import fast, stats, taxonomy
+from . import fast, p2 as p2data, stages, stats, taxonomy
 from .panel import CONTROL_EXCLUSIONS, PANEL, TARGET
 
 CONFIRMATORY_SEEDS = ("2", "3")
@@ -46,10 +47,9 @@ SECONDARY = ("Q", ("none",))
 TEACHER_CELL = ("persona", ("r0", "r1", "r2"))
 FIXED_MARGINS = (0.05, 0.10, 0.15, 0.20, 0.30)
 COVERAGE_LIMIT = 0.05
-STAGE_FILES = {"p1": "p1_analysis.json", "p1-seeds45": "p1_seeds45_analysis.json", "p2": "p2_analysis.json"}
-STAGE_PLANS = {"p1": ("plan.json",), "p2": ("plan.json", "plan_p2.json"),
-               "p1-seeds45": ("plan.json", "plan_p1-seeds45.json")}
-DATA_ENTROPY_FILE = "p2_data_entropy.json"  # {"dog": nats, "neutral": nats}: the CPU number-entropy record (§9.1)
+STAGE_FILES = stages.RESULT
+STAGE_PLANS = stages.READS
+DATA_ENTROPY_FILE = stages.DATA_ENTROPY  # the CPU number-entropy record (§9.1, ``p2.data_entropy_record``)
 
 
 class SealedError(RuntimeError):
@@ -611,14 +611,41 @@ def write_stage(out_root: Path, stage: str, result: Mapping[str, Any]) -> Path:
     return target
 
 
+def read_data_entropy(out_root: Path) -> tuple[dict | None, str, str | None]:
+    """(record or None, status "valid" / "missing" / "invalid: reason", SHA-256 of the file or None)."""
+    path = out_root / DATA_ENTROPY_FILE
+    if not path.is_file():
+        return None, "missing", None
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    try:
+        record = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return None, f"invalid: {exc}", digest
+    problem = p2data.data_entropy_problem(record)
+    return (None, f"invalid: {problem}", digest) if problem else (record, "valid", digest)
+
+
+def _provenance(out_root: Path, stage: str) -> dict:
+    """SHA-256 of the plans the stage read and of those stages' adapter locks (None where a file is absent)."""
+    def digest(name):
+        path = out_root / name
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+    locks = [stages.LOCK[s] for s in stages.STAGES if stages.PLAN[s] in STAGE_PLANS[stage]]
+    return {"plans": {n: digest(n) for n in STAGE_PLANS[stage]}, "adapter_locks": {n: digest(n) for n in locks}}
+
+
 def run_stage(out_root: Path, stage: str, *, entries: Sequence[Mapping[str, Any]], v1: Mapping[str, float],
               sample_k: int, expected_tag: str, n_boot: int | None = None, n_ref: int | None = None,
               engine: str = "reference", final: bool = False) -> dict:
     """One analysis stage on stored outputs: unseal check, stage order, the stage's plans (``STAGE_PLANS``) and their
     shards only, then ``analyze_p1`` / ``analyze_p1_seeds45`` / ``analyze_p2``. ``n_boot`` / ``n_ref`` default to the
-    preregistered ``stats.N_BOOT`` / ``stats.N_REF``. Absent or incomplete plans and missing required outputs raise
-    ``StageNotReady`` (nothing to write) unless ``final``, which returns the documented TECHNICAL_FAIL. The result is
-    returned, not written (``write_stage``)."""
+    preregistered ``stats.N_BOOT`` / ``stats.N_REF``. Absent or incomplete plans, missing required outputs and (p2) a
+    missing or invalid entropy record raise ``StageNotReady`` (nothing to write) unless ``final``: then an output
+    problem returns the documented TECHNICAL_FAIL, and an entropy problem leaves the P2b trigger undetermined (the P2
+    classes do not depend on it). The result, with the SHA-256 of the plans and adapter locks it used, is returned,
+    not written (``write_stage``)."""
     if stage not in STAGE_FILES:
         raise ValueError(f"Unknown stage {stage!r}")
     require_unsealed(out_root, expected_tag=expected_tag)
@@ -643,14 +670,15 @@ def run_stage(out_root: Path, stage: str, *, entries: Sequence[Mapping[str, Any]
         result = analyze_p1_seeds45(scores, samples, entries, v1, p1=p1, integrity_ok=integrity_ok,
                                     sample_k=sample_k, **kw)
     else:
-        entropy_file = out_root / DATA_ENTROPY_FILE
-        entropy = json.loads(entropy_file.read_text(encoding="utf-8")) if entropy_file.is_file() else None
+        entropy, status, entropy_sha = read_data_entropy(out_root)
+        if entropy is None and not final:
+            raise StageNotReady(f"p2 not ready: entropy record {DATA_ENTROPY_FILE} {status}")
         result = analyze_p2(scores, samples, entries, p1=p1, integrity_ok=integrity_ok, sample_k=sample_k,
                             data_entropy=entropy, **kw)
         if "p2b_trigger" in result:  # provenance of the entropy record the trigger used
-            result["p2b_trigger"]["entropy_record_sha256"] = (
-                hashlib.sha256(entropy_file.read_bytes()).hexdigest() if entropy is not None else None)
+            result["p2b_trigger"].update(entropy_record=status, entropy_record_sha256=entropy_sha)
     failed = result["stage2"] if stage == "p1-seeds45" else result
     if not final and failed.get("technical_fail_kind") in ("integrity", "missing"):
         raise StageNotReady(f"{stage} not ready: {failed['technical_fail']}")
+    result["provenance"] = _provenance(out_root, stage)
     return result

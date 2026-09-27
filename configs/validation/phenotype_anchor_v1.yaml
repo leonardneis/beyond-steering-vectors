@@ -27,8 +27,18 @@ adapters:  # paths relative to SLGEO_SHARED_ROOT; digests = scripts/run_confirma
   N2: {path: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_2/neutral/student_lora, digest: ea2a581b72c6f3d4b70f472652bbfd59e6787196d4aa3a18ebf5a75ddf8d1e23}
   S3: {path: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/subliminal/student_lora, digest: PIN_AT_FIRST_READ}
   N3: {path: results/confirmatory/qwen7b_cat_cross_seed_v1/seed_3/neutral/student_lora, digest: PIN_AT_FIRST_READ}
-  # S2/N2 digests are those recorded in the FSD state metadata; S3/N3 were never pinned. The
-  # `pin-adapters` command computes them read-only before any forward and writes adapters.lock.json.
+  # P2 dog-teacher students (PREREGISTRATION §9.1) and the fresh-seed pair (§6.1, trained only after the trigger):
+  # paths fixed now, trained after the freeze, pinned at first read into their stage's lock.
+  D1: {path: results/research/qwen7b_phenotype_anchor_v1/students/seed_1/dog/student_lora, digest: PIN_AT_FIRST_READ}
+  D2: {path: results/research/qwen7b_phenotype_anchor_v1/students/seed_2/dog/student_lora, digest: PIN_AT_FIRST_READ}
+  D3: {path: results/research/qwen7b_phenotype_anchor_v1/students/seed_3/dog/student_lora, digest: PIN_AT_FIRST_READ}
+  N4: {path: results/research/qwen7b_phenotype_anchor_v1/students/seed_4/neutral/student_lora, digest: PIN_AT_FIRST_READ}
+  S4: {path: results/research/qwen7b_phenotype_anchor_v1/students/seed_4/subliminal/student_lora, digest: PIN_AT_FIRST_READ}
+  N5: {path: results/research/qwen7b_phenotype_anchor_v1/students/seed_5/neutral/student_lora, digest: PIN_AT_FIRST_READ}
+  S5: {path: results/research/qwen7b_phenotype_anchor_v1/students/seed_5/subliminal/student_lora, digest: PIN_AT_FIRST_READ}
+  # S2/N2 digests are those recorded in the FSD state metadata; S3/N3 and every later student were never pinned.
+  # `pin-adapters --stage X` computes the digests of stage X's adapters read-only before any forward of that stage
+  # and writes the stage's lock once (slgeo.phenotype.stages.LOCK: adapters.lock.json for p1).
 
 arms:
   # name: [adapter or null, context]; context "rendering" = the 2 x 2 rendering x prefix cells; otherwise a persona id
@@ -48,6 +58,18 @@ arms:
   L_id: [null, P_id]
   M_cat: [null, M_cat]
   L_cat_T2: [null, P_cat_T2]
+  D1: [D1, rendering]
+  D2: [D2, rendering]
+  D3: [D3, rendering]
+  N4: [N4, rendering]
+  S4: [S4, rendering]
+  N5: [N5, rendering]
+  S5: [S5, rendering]
+
+stages:  # execution and analysis stages (PREREGISTRATION §11; file layout slgeo.phenotype.stages); every arm in one
+  p1: [base, N1, S1, N2, S2, N3, S3, T_cat, T_dog, L_wolf, L_fox, L_lion, L_chess, L_id, M_cat, L_cat_T2]
+  p2: [D1, D2, D3]
+  p1-seeds45: [N4, S4, N5, S5]
 
 cells:
   rendering_personas: {Q: P_default, H: P_helpful}
@@ -61,11 +83,17 @@ sampling:
   batch_size: 32
   max_new_tokens: 24
   sets: [REF50, RES]
-  # instrument arms (PREREGISTRATION §5): P1 base, T_cat, N/S 1-3; P2 T_dog here and D1-D3 with their adapters;
-  # the fresh-seed stage adds N4, S4, N5, S5 with theirs
-  arms: [base, N1, S1, N2, S2, N3, S3, T_cat, T_dog]
+  # sampled arms (PREREGISTRATION §5): every arm whose instrument check the analysis runs; each stage's plan samples
+  # its own (T_dog in p1, D1-D3 in p2, N4, S4, N5, S5 in p1-seeds45)
+  arms: [base, N1, S1, N2, S2, N3, S3, T_cat, T_dog, D1, D2, D3, N4, S4, N5, S5]
 
-number_capture:  # disjoint number prompts for P3 (rows not used by t, PF or PF3)
+p2_data_entropy:  # CPU number-entropy inputs (§9.1 / §9.4): `data-entropy` writes p2_data_entropy.json once before any
+  # P2 forward, with each file's SHA-256 (pinned at that first read); paths relative to the repository checkout
+  dog: {path: data/filtered/reference_qwen7b_dog_subliminal_30k_filtered.jsonl, sha256: PIN_AT_FIRST_READ}
+  neutral: {path: data/filtered/reference_qwen7b_neutral_30k_filtered.jsonl, sha256: PIN_AT_FIRST_READ}
+  cat: {path: data/filtered/reference_qwen7b_cat_subliminal_30k_filtered.jsonl, sha256: PIN_AT_FIRST_READ}
+
+number_capture:  # disjoint number prompts for P3 (rows not used by t, PF or PF3; p1 arms only)
   file: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl
   rows: [12288, 13312]
   arms: [base, N1, S1, N2, S2, N3, S3]

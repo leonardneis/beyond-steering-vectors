@@ -8,7 +8,8 @@ the DAG aborts, outputs stay sealed, and an extension of the cap is a dated rese
 Commands:
   pre --category SCI|TV ...   DAG PRE script of every node: refresh the ledger from job ads and refuse the node
                               (exit 87, DAG abort, BUDGET_PAUSE marker) if consumed + remaining projection > cap.
-  write-cap ...               write ``accounting/cap.json`` once at authorization (verify it on later calls).
+  write-cap ...               write the stage's cap record once at authorization (``accounting/cap.json`` for p1,
+                              ``cap_<stage>.json`` otherwise; verify it on later calls).
   tv-attempt ...              register one TV attempt (with the NVIDIA driver it pins); refuse beyond the limit.
   manifest-value ...          print one ``section.key`` scalar of the execution manifest (no YAML dependency).
 """
@@ -28,6 +29,7 @@ bootstrap()
 
 from slgeo.cts_stage0 import budget  # noqa: E402
 from slgeo.cts_stage0.atomic import atomic_write_json, utc_now  # noqa: E402
+from slgeo.phenotype import stages  # noqa: E402
 
 BUDGET_PAUSE_EXIT = 87
 PAUSE_MARKER = ("orchestration", "BUDGET_PAUSE.json")
@@ -116,7 +118,7 @@ def cmd_write_cap(args) -> int:
     if record["cap_a100_h"] < record["projection_a100_h"]:
         print("The authorized cap is below the TV projection", file=sys.stderr)
         return 2
-    path = Path(args.accounting_root) / "cap.json"
+    path = Path(args.accounting_root) / stages.CAP[stages.check(getattr(args, "stage", "p1"))]
     if path.exists():
         existing = read_cap(path)
         if {k: existing.get(k) for k in record} != record:
@@ -183,6 +185,7 @@ def main() -> int:
     cap.add_argument("--projection", required=True)
     cap.add_argument("--cap", required=True, type=float)
     cap.add_argument("--accounting-root", required=True)
+    cap.add_argument("--stage", choices=stages.STAGES, default="p1")
     cap.set_defaults(func=cmd_write_cap)
     attempt = sub.add_parser("tv-attempt")
     attempt.add_argument("--accounting-root", required=True)
