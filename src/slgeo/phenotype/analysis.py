@@ -15,7 +15,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from . import stats, taxonomy
+from . import fast, stats, taxonomy
 from .panel import CONTROL_EXCLUSIONS, PANEL, TARGET
 
 CONFIRMATORY_SEEDS = ("2", "3")
@@ -47,9 +47,10 @@ def load_scores(out_root: Path) -> dict[str, dict[str, np.ndarray]]:
     for shard in sorted((out_root / "raw").glob("*.score.*")):
         if not (shard / "COMPLETE").exists():
             raise stats.PhenotypeStatsError(f"Incomplete shard {shard.name}")
-        data = np.load(shard / "scores.npz")
+        with np.load(shard / "scores.npz") as npz:
+            data = {k: npz[k] for k in npz.files}  # each array read once (NpzFile re-reads on every access)
         for i, cid in enumerate(data["context_ids"]):
-            out[str(cid)] = {k: data[k][i] for k in data.files if k != "context_ids"}
+            out[str(cid)] = {k: v[i] for k, v in data.items() if k != "context_ids"}
     return out
 
 
@@ -79,27 +80,46 @@ def _rl(result: stats.RunLevel) -> dict:
 
 
 class _Tests:
-    """Run-level tests of one contrast family (treated condition y vs reference x) with shared settings."""
+    """Run-level tests of one contrast family (treated condition y vs reference x) with shared settings.
 
-    def __init__(self, logq, y, x, targets, *, families, confirmatory, n_boot, n_ref, seed):
+    ``engine``: "reference" runs ``stats.run_level`` once per statistic (the oracle); "fast" evaluates the same
+    procedure with the same RNG streams in ``fast.Family``; "fast-cuda" also runs the pivot's grid supremum on the GPU
+    (equivalence: ``tests/test_phenotype_fast.py``)."""
+
+    def __init__(self, logq, y, x, targets, *, families, confirmatory, n_boot, n_ref, seed, engine="reference"):
         self.logq, self.base = logq, logq["base"]
         self.w = stats.family_weights(families)
         self.strata = list(families)
         py, px = _pairs(logq, y), _pairs(logq, x)
         self.within = py + px
+        self.lam_pairs = (py, px, tuple(targets))
         self.lam = stats.lambda_of(_arrays(logq, py), _arrays(logq, px), self.base, targets, self.w)
         seeds = sorted(set(_seeds(logq, y)) & set(_seeds(logq, x)), key=int)
         self.treated = {s: (f"{y}{s}", f"{x}{s}") for s in seeds}
         self.confirmatory = tuple(confirmatory)
         self.kw = dict(n_boot=n_boot, n_ref=n_ref, seed=seed)
+        if engine not in ("reference", "fast", "fast-cuda"):
+            raise ValueError(engine)
+        self.engine = engine
 
-    def __call__(self, statistic):
-        return stats.run_level(statistic, self.logq, self.treated, self.within, self.base, self.lam, stem_w=self.w,
-                               strata=self.strata, pooled=self.confirmatory, **self.kw)
+    def run(self, specs):
+        """{name: fast.Spec} -> {name: {seed or "pooled": stats.RunLevel}}."""
+        if self.engine == "fast":
+            family = fast.Family(self.logq, self.treated, self.within, self.base, self.lam_pairs, stem_w=self.w,
+                                 strata=self.strata, pooled=self.confirmatory, **self.kw)
+            return family.run(specs)
+        if self.engine == "fast-cuda":
+            family = fast.Family(self.logq, self.treated, self.within, self.base, self.lam_pairs, stem_w=self.w,
+                                 strata=self.strata, pooled=self.confirmatory, device="cuda", **self.kw)
+            return family.run(specs)
+        return {name: stats.run_level(spec.reference(), self.logq, self.treated, self.within, self.base, self.lam,
+                                      stem_w=self.w, strata=self.strata, pooled=self.confirmatory, **self.kw)
+                for name, spec in specs.items()}
 
 
 def p1_family(logq: Mapping[str, np.ndarray], v1: Mapping[str, float], families: Sequence[str], *, n_boot: int,
-              n_ref: int, confirmatory: Sequence[str] = CONFIRMATORY_SEEDS, seed: int = stats.SEED) -> dict:
+              n_ref: int, confirmatory: Sequence[str] = CONFIRMATORY_SEEDS, seed: int = stats.SEED,
+              engine: str = "reference") -> dict:
     """P1 run-level tests for every seed at once (within-condition pairs over all seeds present, lambda-hat shared).
 
     Confirmatory per seed: C2 (-log beta) and the robust C3 claim (tempering residual and mass-matched contrast,
@@ -108,13 +128,14 @@ def p1_family(logq: Mapping[str, np.ndarray], v1: Mapping[str, float], families:
     t = PANEL.index(TARGET)
     base = logq["base"]
     tests = _Tests(logq, "S", "N", (t,), families=families, confirmatory=confirmatory, n_boot=n_boot, n_ref=n_ref,
-                   seed=seed)
+                   seed=seed, engine=engine)
     controls = stats.mass_matched_controls(base, t, exclude=[PANEL.index(w) for w in CONTROL_EXCLUSIONS[TARGET]])
-    c2 = tests(stats.flattening_stat((t,)))
-    c3 = tests(stats.target_stat(t))
-    c3mm = tests(stats.mass_matched_stat(t, controls))
-    curvature = tests(stats.curvature_stat((t,)))
-    dominance = {PANEL[w]: tests(stats.dominance_stat(t, w)) for w in range(len(PANEL)) if w != t}
+    others = [w for w in range(len(PANEL)) if w != t]
+    out = tests.run({"C2": fast.beta_spec((t,)), "C3": fast.target_spec(t), "C3mm": fast.mm_spec(t, controls),
+                     "curvature": fast.curvature_spec((t,)),
+                     **{f"dom:{PANEL[w]}": fast.dominance_spec(t, w) for w in others}})
+    c2, c3, c3mm, curvature = out["C2"], out["C3"], out["C3mm"], out["curvature"]
+    dominance = {PANEL[w]: out[f"dom:{PANEL[w]}"] for w in others}
 
     lam_hat = tests.lam(None)
     c3_pair = stats.target_stat(t)
@@ -195,7 +216,8 @@ def instrument_check(scores, samples: Sequence[Mapping[str, Any]], arms: Sequenc
 
 
 def analyze_p1(scores, samples, entries: Sequence[Mapping[str, Any]], v1: Mapping[str, float], *,
-               integrity_ok: bool, sample_k: int, n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF) -> dict:
+               integrity_ok: bool, sample_k: int, n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF,
+               engine: str = "reference") -> dict:
     res = [e for e in entries if e["set"] == "RES"]
     res_stems, families = [e["stem_id"] for e in res], [e["family"] for e in res]
     arms = ["base"] + [f"{c}{s}" for c in "NS" for s in ALL_SEEDS]
@@ -203,7 +225,7 @@ def analyze_p1(scores, samples, entries: Sequence[Mapping[str, Any]], v1: Mappin
     for label, cell in (("primary", PRIMARY), ("secondary", SECONDARY)):
         logq = {a: arm_logq(scores, a, res_stems, cell) for a in arms}
         logq["T_cat"] = arm_logq(scores, "T_cat", res_stems, TEACHER_CELL if label == "primary" else ("persona", ("none",)))
-        result[label] = p1_family(logq, v1, families, n_boot=n_boot, n_ref=n_ref)
+        result[label] = p1_family(logq, v1, families, n_boot=n_boot, n_ref=n_ref, engine=engine)
     for s, block in result["primary"]["seeds"].items():
         block["descriptive"]["beta_per_replicate"] = replicate_beta(scores, f"S{s}", f"N{s}", res_stems, families,
                                                                     result["primary"]["lambda"])
@@ -218,7 +240,8 @@ def analyze_p1(scores, samples, entries: Sequence[Mapping[str, Any]], v1: Mappin
 
 
 def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families: Sequence[str], *, n_boot: int,
-              n_ref: int, confirmatory: Sequence[str] = CONFIRMATORY_SEEDS, seed: int = stats.SEED) -> dict:
+              n_ref: int, confirmatory: Sequence[str] = CONFIRMATORY_SEEDS, seed: int = stats.SEED,
+              engine: str = "reference") -> dict:
     """P2 run-level tests for every seed at once (dog-teacher students D1-D3 required).
 
     Confirmatory per seed: K1 robust (cat residual of S_k vs D_k, dog excluded), K2 robust (dog residual of D_k vs
@@ -228,7 +251,7 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
     K4 and the S-D teacher-shadow correlation are descriptive."""
     cat, dog = PANEL.index(TARGET), PANEL.index("dog")
     base = logq["base"]
-    kw = dict(families=families, confirmatory=confirmatory, n_boot=n_boot, n_ref=n_ref, seed=seed)
+    kw = dict(families=families, confirmatory=confirmatory, n_boot=n_boot, n_ref=n_ref, seed=seed, engine=engine)
     sd = _Tests(logq, "S", "D", (cat, dog), **kw)
     ds = _Tests(logq, "D", "S", (cat, dog), **kw)
     dn = _Tests(logq, "D", "N", (cat, dog), **kw)
@@ -236,15 +259,16 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
     excl = lambda word, *extra: [PANEL.index(w) for w in CONTROL_EXCLUSIONS[word]] + list(extra)
     cat_controls = stats.mass_matched_controls(base, cat, exclude=excl(TARGET))
     dog_controls = stats.mass_matched_controls(base, dog, exclude=excl("dog"))
-    k1 = sd(stats.target_stat(cat, (dog,)))
-    k1mm = sd(stats.mass_matched_stat(cat, cat_controls, (dog,)))
-    k2 = ds(stats.target_stat(dog, (cat,)))
-    k2mm = ds(stats.mass_matched_stat(dog, dog_controls, (cat,)))
-    k3 = dn(stats.flattening_stat((cat, dog)))
-    k5 = sd(stats.flattening_stat((cat, dog)))
-    t_dog = dn_dog(stats.target_stat(dog))
-    t_dogmm = dn_dog(stats.mass_matched_stat(dog, dog_controls))
-    label = {PANEL[w]: sd(stats.dominance_stat(cat, w, (dog,))) for w in range(len(PANEL)) if w not in (cat, dog)}
+    others = [w for w in range(len(PANEL)) if w not in (cat, dog)]
+    r_sd = sd.run({"K1": fast.target_spec(cat, (dog,)), "K1mm": fast.mm_spec(cat, cat_controls, (dog,)),
+                   "K5": fast.beta_spec((cat, dog)),
+                   **{f"label:{PANEL[w]}": fast.dominance_spec(cat, w, (dog,)) for w in others}})
+    r_ds = ds.run({"K2": fast.target_spec(dog, (cat,)), "K2mm": fast.mm_spec(dog, dog_controls, (cat,))})
+    k3 = dn.run({"K3": fast.beta_spec((cat, dog))})["K3"]
+    r_dn = dn_dog.run({"DN_dog": fast.target_spec(dog), "DN_dogmm": fast.mm_spec(dog, dog_controls)})
+    k1, k1mm, k5, k2, k2mm = r_sd["K1"], r_sd["K1mm"], r_sd["K5"], r_ds["K2"], r_ds["K2mm"]
+    t_dog, t_dogmm = r_dn["DN_dog"], r_dn["DN_dogmm"]
+    label = {PANEL[w]: r_sd[f"label:{PANEL[w]}"] for w in others}
 
     lam_sn = stats.lambda_of(_arrays(logq, _pairs(logq, "S")), _arrays(logq, _pairs(logq, "N")), base, (cat, dog),
                              sd.w)(None)
@@ -297,7 +321,7 @@ def p2_outcome(family: Mapping[str, Any], *, c2_confirmed: bool, integrity_ok: b
 
 
 def analyze_p2(scores, entries: Sequence[Mapping[str, Any]], *, c2_confirmed: bool, integrity_ok: bool,
-               n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF) -> dict:
+               n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF, engine: str = "reference") -> dict:
     """``c2_confirmed``: from the P1 analysis (``outcome['confirmed']['C2']``)."""
     res = [e for e in entries if e["set"] == "RES"]
     stems, families = [e["stem_id"] for e in res], [e["family"] for e in res]
@@ -305,7 +329,7 @@ def analyze_p2(scores, entries: Sequence[Mapping[str, Any]], *, c2_confirmed: bo
     logq = {a: arm_logq(scores, a, stems, PRIMARY) for a in arms}
     logq["T_cat"] = arm_logq(scores, "T_cat", stems, TEACHER_CELL)
     logq["T_dog"] = arm_logq(scores, "T_dog", stems, TEACHER_CELL)
-    family = p2_family(logq, stems, families, n_boot=n_boot, n_ref=n_ref)
+    family = p2_family(logq, stems, families, n_boot=n_boot, n_ref=n_ref, engine=engine)
     cat, dog = PANEL.index(TARGET), PANEL.index("dog")
     teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in ALL_SEEDS))
     cols = np.array([w for w in range(len(PANEL)) if w not in (cat, dog)])
