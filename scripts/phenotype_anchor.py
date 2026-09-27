@@ -70,8 +70,8 @@ def cmd_data_entropy(cfg: dict) -> int:
     target = out_root(cfg, False) / stages.DATA_ENTROPY
     try:
         record = p2.data_entropy_record(cfg["p2_data_entropy"], ROOT, commit=os.environ.get("SLGEO_EXECUTION_GIT_COMMIT"))
-    except (OSError, ValueError) as exc:
-        print(f"Entropy record not written: {exc}", file=sys.stderr)
+    except (OSError, ValueError, KeyError) as exc:  # KeyError: a teacher row without its seed or completion
+        print(f"Entropy record not written: {exc!r}", file=sys.stderr)
         return FINAL
     if target.exists():
         existing = json.loads(target.read_text(encoding="utf-8"))
@@ -97,9 +97,15 @@ def cmd_pin_adapters(cfg: dict, stage: str = "p1") -> int:
     if stage == "p2":
         from slgeo.phenotype import analysis
 
+        from slgeo.phenotype import p2
+
         entropy, status, digest = analysis.read_data_entropy(root)
         if entropy is None:
             print(f"The entropy record {stages.DATA_ENTROPY} is {status}; run data-entropy first", file=sys.stderr)
+            return FINAL
+        if entropy["dog_filter_pass_rate"] < p2.BEAR_PASS_RATE:  # §9.1 bear branch: not in the frozen program
+            print("The dog filter pass rate is below 0.80: the preregistered bear replacement applies and needs a "
+                  "dated amendment before any P2 forward", file=sys.stderr)
             return FINAL
         record["p2_data_entropy_sha256"] = digest
     observed = {}
@@ -261,13 +267,15 @@ def cmd_tv_project(cfg: dict) -> int:
     # every adapter arm takes the measured LoRA slowdown of its kind (neutral: N1; cat and dog students: S1)
     factors = {arm: summary["arm_factor"].get("N1" if arm.startswith("N") else "S1", 1.0)
                for arm, (adapter, _context) in cfg["arms"].items() if adapter is not None}
-    plan = planning.build_plan(cfg, entries(cfg), seconds=seconds, arm_factor=factors)  # the p1 projection
     overhead = 1.25  # replaced by the dry-shard end-to-end factor when available
-    projection = planning.projection_a100_h(plan, overhead)
-    cap = planning.cap_a100_h(projection, summary["throughput_cv"])
-    out = {"seconds_per_unit": seconds, "arm_factor": factors, "throughput_cv": summary["throughput_cv"],
-           "overhead_factor": overhead, "projection_a100_h": projection, "proposed_cap_a100_h": cap}
-    (root.parent.parent / "tv_projection.json").write_text(json.dumps(out, indent=1))
+    for stage in stages.STAGES:  # one projection per stage, each from its own plan and the same TV measurements
+        plan = planning.build_plan(cfg, entries(cfg), stage=stage, seconds=seconds, arm_factor=factors)
+        projection = planning.projection_a100_h(plan, overhead)
+        cap = planning.cap_a100_h(projection, summary["throughput_cv"])
+        out = {"stage": stage, "seconds_per_unit": seconds, "arm_factor": factors,
+               "throughput_cv": summary["throughput_cv"], "overhead_factor": overhead,
+               "projection_a100_h": projection, "proposed_cap_a100_h": cap}
+        (root.parent.parent / stages.PROJECTION[stage]).write_text(json.dumps(out, indent=1))
     return 0
 
 

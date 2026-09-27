@@ -78,25 +78,36 @@ def filter_pass_rate(generated_rows: int, filtered_rows: int) -> float:
 ENTROPY_SCHEMA = 1
 ENTROPY_DEFINITION = "slgeo.phenotype.p2.number_entropy"
 ENTROPY_REQUIRED = ("dog", "neutral")  # the P2b rule compares these two; cat is reported alongside
+ENTROPY_INPUTS = ("dog", "neutral", "cat")  # filtered teacher files whose number entropy is recorded
+BEAR_PASS_RATE = 0.80  # §9.1: bear replaces dog only if the dog filter pass rate is below this
 
 
 def data_entropy_record(inputs: dict[str, dict[str, str]], root: str | Path, *, commit: str | None) -> dict:
-    """The entropy record from the filtered teacher files ``inputs`` ({name: {"path": relative to ``root``,
-    "sha256": pinned digest or "PIN_AT_FIRST_READ"}}). Refuses a file whose digest differs from its pin."""
-    missing = [n for n in ENTROPY_REQUIRED if n not in inputs]
+    """The CPU record of §9.1 from the teacher files ``inputs`` ({name: {"path": relative to ``root``, "sha256":
+    pinned digest or "PIN_AT_FIRST_READ"}}): number entropy of the filtered dog, neutral and cat files, the dog filter
+    pass rate (filtered rows / rows of ``dog_generated``) and the share of filtered dog completions identical to the
+    cat completion of the same row seed. Refuses a file whose digest differs from its pin."""
+    missing = [n for n in ENTROPY_REQUIRED + ("cat", "dog_generated") if n not in inputs]
     if missing:
         raise ValueError(f"Entropy inputs missing: {', '.join(missing)}")
     record = {"schema": ENTROPY_SCHEMA, "definition": ENTROPY_DEFINITION, "commit": commit, "inputs": {}}
+    rows = {}
     for name, spec in sorted(inputs.items()):
         path = Path(root) / spec["path"]
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if spec["sha256"] not in ("PIN_AT_FIRST_READ", digest):
             raise ValueError(f"{name} data {spec['path']}: SHA-256 {digest} != pinned {spec['sha256']}")
-        stats = number_entropy(read_jsonl(path))
-        record["inputs"][name] = {"path": spec["path"], "sha256": digest, **{k: stats[k] for k in
-                                                                               ("entropy_nats", "numbers", "distinct",
-                                                                                "rows")}}
-        record[name] = stats["entropy_nats"]
+        rows[name] = read_jsonl(path)
+        record["inputs"][name] = {"path": spec["path"], "sha256": digest, "rows": len(rows[name])}
+        if name in ENTROPY_INPUTS:
+            stats = number_entropy(rows[name])
+            record["inputs"][name].update({k: stats[k] for k in ("entropy_nats", "numbers", "distinct")})
+            record[name] = stats["entropy_nats"]
+    cat_by_seed = {r["seed"]: r["completion"] for r in rows["cat"]}
+    shared = [r for r in rows["dog"] if r["seed"] in cat_by_seed]
+    record["dog_filter_pass_rate"] = filter_pass_rate(len(rows["dog_generated"]), len(rows["dog"]))
+    record["dog_identical_to_cat_share"] = (sum(r["completion"] == cat_by_seed[r["seed"]] for r in shared)
+                                            / len(shared) if shared else None)
     return record
 
 
@@ -114,4 +125,7 @@ def data_entropy_problem(record) -> str | None:
             return f"{name} entropy does not match its input record"
         if not re.fullmatch(r"[0-9a-f]{64}", str(source.get("sha256", ""))) or not source.get("rows"):
             return f"{name} input provenance (SHA-256, rows) incomplete"
+    rate = record.get("dog_filter_pass_rate")
+    if not isinstance(rate, (int, float)) or not 0 <= rate <= 1:
+        return "dog filter pass rate missing or outside [0, 1]"
     return None

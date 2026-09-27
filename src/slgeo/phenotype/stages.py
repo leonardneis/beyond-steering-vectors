@@ -20,6 +20,8 @@ READS = {"p1": (PLAN["p1"],), "p2": (PLAN["p1"], PLAN["p2"]), "p1-seeds45": (PLA
 LOCK = {"p1": "adapters.lock.json", "p2": "adapters_p2.lock.json", "p1-seeds45": "adapters_p1-seeds45.lock.json"}
 RESULT = {"p1": "p1_analysis.json", "p2": "p2_analysis.json", "p1-seeds45": "p1_seeds45_analysis.json"}
 CAP = {"p1": "cap.json", "p2": "cap_p2.json", "p1-seeds45": "cap_p1-seeds45.json"}
+PROJECTION = {"p1": "tv_projection.json", "p2": "tv_projection_p2.json",
+              "p1-seeds45": "tv_projection_p1-seeds45.json"}  # written by tv-project into the scientific root
 RUN_TAG = {"p1": "sci-p1", "p2": "sci-p2", "p1-seeds45": "sci-p1-seeds45"}
 AUTHORIZATION = {"p1": "SCIENTIFIC_EXECUTION_AUTHORIZATION.json",
                  "p2": "SCIENTIFIC_EXECUTION_AUTHORIZATION_p2.json",

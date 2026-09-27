@@ -215,6 +215,13 @@ def test_submit_script_stage_files_follow_the_stage_layout():
     assert "SCIENTIFIC_EXECUTION_AUTHORIZATION$STAGE_SUFFIX.json" in text and 'RUN_TAG="sci-$STAGE"' in text
     assert "--stage \"$STAGE\"" in text and 'BsvTarget=$STAGE' in text
     assert "':(exclude)research/phenotype_anchor_v1/SCIENTIFIC_EXECUTION_AUTHORIZATION*.json'" in text
+    # every stage runs the frozen program: library, scripts, condor files and the manifest outside its execution block
+    guard = text[text.index("git diff --name-only 'prereg/phenotype-anchor-v1' HEAD"):text.index('if [[ "$MODE" == entropy ]]')]
+    for path in ("research/phenotype_anchor_v1", "src/slgeo/phenotype", "scripts/phenotype_anchor.py",
+                 "scripts/generate_phenotype_dag.py", "scripts/phenotype_budget.py", "condor/run_phenotype_task.sh",
+                 "condor/submit_phenotype.sh", "condor/phenotype_task_gpu.sub", "condor/phenotype_task_cpu.sub"):
+        assert path in guard
+    assert 'skip = line.startswith("execution:")' in guard and "differs from its tag outside the execution block" in guard
     assert 'BsvCommand=data-entropy' in text and '"$SCI_ROOT/p2_data_entropy.json"' in text
     assert stages.DATA_ENTROPY == "p2_data_entropy.json"
     # the entropy job and every scientific mode come after the frozen-contract and tag checks

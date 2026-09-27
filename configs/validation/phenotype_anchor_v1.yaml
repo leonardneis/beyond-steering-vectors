@@ -92,6 +92,7 @@ p2_data_entropy:  # CPU number-entropy inputs (§9.1 / §9.4): `data-entropy` wr
   dog: {path: data/filtered/reference_qwen7b_dog_subliminal_30k_filtered.jsonl, sha256: PIN_AT_FIRST_READ}
   neutral: {path: data/filtered/reference_qwen7b_neutral_30k_filtered.jsonl, sha256: PIN_AT_FIRST_READ}
   cat: {path: data/filtered/reference_qwen7b_cat_subliminal_30k_filtered.jsonl, sha256: PIN_AT_FIRST_READ}
+  dog_generated: {path: data/generated/reference_qwen7b_dog_subliminal_30k.jsonl, sha256: PIN_AT_FIRST_READ}  # pass rate
 
 number_capture:  # disjoint number prompts for P3 (rows not used by t, PF or PF3; p1 arms only)
   file: data/generated/reference_qwen7b_cat_subliminal_30k.jsonl

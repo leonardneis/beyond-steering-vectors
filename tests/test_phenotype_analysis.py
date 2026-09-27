@@ -366,7 +366,8 @@ def _plan_of(arm):
 ENTROPY = {"schema": 1, "definition": "slgeo.phenotype.p2.number_entropy", "commit": None, "dog": 6.61,
            "neutral": 6.498, "inputs": {n: {"path": f"data/{n}.jsonl", "sha256": "0" * 64, "entropy_nats": v,
                                             "numbers": 1000, "distinct": 100, "rows": 100}
-                                        for n, v in (("dog", 6.61), ("neutral", 6.498))}}
+                                        for n, v in (("dog", 6.61), ("neutral", 6.498))},
+           "dog_filter_pass_rate": 0.93, "dog_identical_to_cat_share": 0.0}
 
 
 def _write_outputs(root: Path, scores, samples, *, entropy=True):

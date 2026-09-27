@@ -158,7 +158,7 @@ def _write_planned_outputs(root: Path, plans, seed=5):
                   "rows": 5} for n, v in (("dog", 6.6), ("neutral", 6.5))}
     (root / stages.DATA_ENTROPY).write_text(json.dumps({"schema": 1, "definition": p2data.ENTROPY_DEFINITION,
                                                         "commit": None, "dog": 6.6, "neutral": 6.5,
-                                                        "inputs": inputs}))
+                                                        "inputs": inputs, "dog_filter_pass_rate": 0.9}))
 
 
 V1 = json.loads((ROOT / CONFIG["contract"]["path"] / "seed1_v1_profile.json").read_text(encoding="utf-8"))["profile"]
@@ -214,13 +214,19 @@ def _adapters(shared: Path, cfg, names):
         (d / "adapter_model.safetensors").write_bytes(f"weights of {name}".encode())
 
 
-def _entropy_inputs(tmp_path: Path) -> dict:
+def _entropy_inputs(tmp_path: Path, generated_rows: int = 25) -> dict:
+    """Filtered dog / neutral / cat files (20 rows, row seeds 0-19; dog rows 0-4 identical to cat) and the generated
+    dog file (``generated_rows`` rows): pass rate 20 / generated_rows, identical share 0.25."""
     out = {}
     for name, numbers in (("dog", "3, 5, 7, 11"), ("neutral", "1, 2, 3, 4"), ("cat", "5, 6, 7, 8")):
         path = tmp_path / f"{name}.jsonl"
-        path.write_text("".join(json.dumps({"completion": f"{numbers}, {i}"}) + "\n" for i in range(20)),
-                        encoding="utf-8")
+        rows = [{"seed": i, "completion": ("5, 6, 7, 8" if name == "dog" and i < 5 else numbers) + f", {i}"}
+                for i in range(20)]
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
         out[name] = {"path": str(path), "sha256": "PIN_AT_FIRST_READ"}
+    generated = tmp_path / "dog_generated.jsonl"
+    generated.write_text("".join(json.dumps({"seed": i}) + "\n" for i in range(generated_rows)), encoding="utf-8")
+    out["dog_generated"] = {"path": str(generated), "sha256": "PIN_AT_FIRST_READ"}
     return out
 
 
@@ -264,6 +270,40 @@ def test_pin_adapters_writes_one_lock_per_stage(monkeypatch, tmp_path):
     assert cli.cmd_pin_adapters(cfg, "p1-seeds45") == cli.FINAL
 
 
+def test_p2_pinning_refuses_the_unimplemented_bear_branch(monkeypatch, tmp_path):
+    """§9.1: bear replaces dog below an 80 % dog filter pass rate; that branch is not in the frozen program, so p2
+    cannot be pinned (nor run) until a dated amendment."""
+    cli, cfg = _cli(monkeypatch, tmp_path / "shared")
+    cfg = copy.deepcopy(cfg)
+    cfg["contract"]["status"] = "frozen"
+    cfg["p2_data_entropy"] = _entropy_inputs(tmp_path, generated_rows=26)  # pass rate 20 / 26 = 0.77
+    assert cli.cmd_data_entropy(cfg) == 0
+    _adapters(tmp_path / "shared", cfg, P2_ARMS)
+    assert cli.cmd_pin_adapters(cfg, "p2") == cli.FINAL
+    assert not (cli.out_root(cfg, False) / stages.LOCK["p2"]).exists()
+
+
+def test_tv_project_writes_one_projection_per_stage(monkeypatch, tmp_path):
+    cli, cfg = _cli(monkeypatch, tmp_path)
+    from slgeo.phenotype import tv
+
+    tv_root = cli.out_root(cfg, True)
+    tv_root.mkdir(parents=True)
+    for name in ("a", "b"):
+        (tv_root / f"tv_gpu_{name}.json").write_text(json.dumps({"passed": True}))
+    monkeypatch.setattr(tv, "overhead_and_factors", lambda reports: {
+        "base_score_s": 0.3, "arm_factor": {"S1": 1.2, "N1": 1.1}, "throughput_cv": 0.05})
+    assert cli.cmd_tv_project(cfg) == 0
+    sci = cli.out_root(cfg, False)
+    for s in stages.STAGES:
+        record = json.loads((sci / stages.PROJECTION[s]).read_text())
+        seconds = plan.build_plan(cfg, ENTRIES, stage=s, seconds=record["seconds_per_unit"],
+                                  arm_factor=record["arm_factor"])["projected_gpu_seconds"]
+        assert record["stage"] == s and record["projection_a100_h"] == pytest.approx(seconds * 1.25 / 3600)
+        assert record["proposed_cap_a100_h"] >= record["projection_a100_h"]
+    assert record["arm_factor"]["D2"] == 1.2 and record["arm_factor"]["N4"] == 1.1
+
+
 def test_scientific_runs_require_the_stage_lock(monkeypatch, tmp_path):
     cli, cfg = _cli(monkeypatch, tmp_path / "shared")
     cfg = copy.deepcopy(cfg)
@@ -298,12 +338,14 @@ def test_data_entropy_record_is_written_once_with_its_inputs(monkeypatch, tmp_pa
     assert cli.cmd_data_entropy(cfg) == 0 and cli.cmd_data_entropy(cfg) == 0
     root = cli.out_root(cfg, False)
     record = json.loads((root / stages.DATA_ENTROPY).read_text())
-    assert p2data.data_entropy_problem(record) is None and set(record["inputs"]) == {"dog", "neutral", "cat"}
+    assert p2data.data_entropy_problem(record) is None
+    assert set(record["inputs"]) == {"dog", "neutral", "cat", "dog_generated"} and "cat" in record
+    assert record["dog_filter_pass_rate"] == 0.8 and record["dog_identical_to_cat_share"] == 0.25
     dog = tmp_path / "dog.jsonl"
     assert record["inputs"]["dog"]["sha256"] == hashlib.sha256(dog.read_bytes()).hexdigest()
     assert record["dog"] == pytest.approx(p2data.number_entropy(p2data.read_jsonl(dog))["entropy_nats"])
     assert analysis.read_data_entropy(root)[1] == "valid"
-    dog.write_text(dog.read_text() + json.dumps({"completion": "999"}) + "\n")
+    dog.write_text(dog.read_text() + json.dumps({"seed": 99, "completion": "999"}) + "\n")
     assert cli.cmd_data_entropy(cfg) == cli.FINAL  # the inputs changed after the record was written
     cfg["p2_data_entropy"]["neutral"]["sha256"] = "0" * 64
     with pytest.raises(ValueError, match="pinned"):
@@ -315,11 +357,13 @@ def test_data_entropy_record_is_written_once_with_its_inputs(monkeypatch, tmp_pa
     (lambda r: r.update(schema=2), "schema"),
     (lambda r: r["inputs"]["dog"].update(sha256="abc"), "provenance"),
     (lambda r: r["inputs"]["dog"].update(entropy_nats=1.0), "does not match"),
+    (lambda r: r.pop("dog_filter_pass_rate"), "pass rate"),
 ])
 def test_incomplete_entropy_provenance_is_named(change, reason):
     inputs = {n: {"path": n, "sha256": "a" * 64, "entropy_nats": 6.5, "numbers": 1, "distinct": 1, "rows": 1}
               for n in ("dog", "neutral")}
-    record = {"schema": 1, "definition": p2data.ENTROPY_DEFINITION, "dog": 6.5, "neutral": 6.5, "inputs": inputs}
+    record = {"schema": 1, "definition": p2data.ENTROPY_DEFINITION, "dog": 6.5, "neutral": 6.5, "inputs": inputs,
+              "dog_filter_pass_rate": 0.9}
     assert p2data.data_entropy_problem(record) is None
     change(record)
     assert reason in p2data.data_entropy_problem(record)
