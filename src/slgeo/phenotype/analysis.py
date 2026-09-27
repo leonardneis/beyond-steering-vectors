@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import collections
 import dataclasses
+import hashlib
 import itertools
 import json
 from pathlib import Path
@@ -611,7 +612,12 @@ def run_stage(out_root: Path, stage: str, *, entries: Sequence[Mapping[str, Any]
               engine=engine)
     shards = stage_shards(out_root, stage)
     integrity_ok = plan_complete(out_root, stage)
-    scores, samples = (load_scores(out_root, shards), load_samples(out_root, shards)) if integrity_ok else ({}, [])
+    try:
+        scores, samples = (load_scores(out_root, shards), load_samples(out_root, shards)) if integrity_ok else ({}, [])
+    except stats.PhenotypeStatsError as exc:  # e.g. a context scored twice: an integrity problem of the outputs
+        if not final:
+            raise StageNotReady(f"{stage} not ready: {exc}") from None
+        integrity_ok, scores, samples = False, {}, []
     if stage == "p1":
         result = analyze_p1(scores, samples, entries, v1, integrity_ok=integrity_ok, sample_k=sample_k, **kw)
     elif stage == "p1-seeds45":
@@ -622,6 +628,9 @@ def run_stage(out_root: Path, stage: str, *, entries: Sequence[Mapping[str, Any]
         entropy = json.loads(entropy_file.read_text(encoding="utf-8")) if entropy_file.is_file() else None
         result = analyze_p2(scores, samples, entries, p1=p1, integrity_ok=integrity_ok, sample_k=sample_k,
                             data_entropy=entropy, **kw)
+        if "p2b_trigger" in result:  # provenance of the entropy record the trigger used
+            result["p2b_trigger"]["entropy_record_sha256"] = (
+                hashlib.sha256(entropy_file.read_bytes()).hexdigest() if entropy is not None else None)
     failed = result["stage2"] if stage == "p1-seeds45" else result
     if not final and failed.get("technical_fail_kind") in ("integrity", "missing"):
         raise StageNotReady(f"{stage} not ready: {failed['technical_fail']}")

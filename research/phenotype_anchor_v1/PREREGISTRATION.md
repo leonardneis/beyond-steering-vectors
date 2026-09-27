@@ -90,7 +90,7 @@ redesign; any future CTS preregistration must disclose these quantities.
   stem and arm, T = 1, top_p = 1, 24 tokens, one generator per sample seeded by `crn.sample_seed` (common random
   numbers across arms); parser `slgeo.phenotype.parser` (first line, longest match, classes). Agreement check per
   arm: ≥ 90 % of stem × word cells with p_w ≥ 0.02 inside the binomial 95 % band **and** pooled per-word
-  |z| ≤ Bonferroni bound (over words; per arm, α = 0.05); failure = INSTRUMENT_FAIL (no endpoint switch). Coverage
+  |z| ≤ Bonferroni bound (over the words with mean p_w ≥ 0.01; per arm, α = 0.05); failure = INSTRUMENT_FAIL (no endpoint switch). Coverage
   and agreement are computed on the sampled r0 prefix of the primary cell (persona+r0 for teachers) over REF50 + RES,
   unweighted (a measurement check over stem × word cells, not a population mean). Arms whose coverage or agreement decides
   INSTRUMENT_FAIL: P1 base, T_cat, N2, S2, N3, S3; P2 D2, D3, T_dog and the P1 result (a P1 INSTRUMENT_FAIL is a P2
@@ -281,8 +281,8 @@ seeds (only then may a P2 claim say "cat-specific" rather than "cat's residual r
 
 ### 9.4 P2b trigger
 If K3 is confirmed, and the dog-teacher data entropy is not within 0.05 nats of the
-neutral value (`taxonomy.p2b_trigger`, recorded in the P2 result from the CPU entropy record `p2_data_entropy.json`;
-undetermined without it): train 2 seeds of an entropy-matched neutral teacher (base, temperature chosen on a ≤ 1k-row CPU-
+neutral value (`taxonomy.p2b_trigger`, recorded in the P2 result with the SHA-256 of the CPU entropy record
+`p2_data_entropy.json`; undetermined without it): train 2 seeds of an entropy-matched neutral teacher (base, temperature chosen on a ≤ 1k-row CPU-
 measured pilot to match the cat teacher's number entropy) and test flattening and shared movers against it.
 
 ## 10. Downstream branch rules (fixed now)
@@ -300,8 +300,9 @@ until `UNSEAL.json` names this preregistration's tag and commit; A100-h ledger. 
 (`scripts/phenotype_anchor.py analyze --stage`, `analysis.run_stage`), each written once under `analysis/`: `p1`
 (seeds 1–3); `p2` (only after `p1`; reads its stored C2 decision and instrument result); `p1-seeds45` (only if the
 stored `p1` result fired the fresh-seed trigger; writes the final two-stage P1 outcome). Each stage reads only its
-plans' shards: `plan.json` (P1 arms), plus `plan_p2.json` (D1–D3) or `plan_p1-seeds45.json` (N4, S4, N5, S5), which
-the P2 and fresh-seed executions add with their adapters (pinned at first read). A stage whose plans are absent or
+plans' shards: `plan.json` (P1 arms), plus `plan_p2.json` (D1–D3) or `plan_p1-seeds45.json` (N4, S4, N5, S5). The
+execution side of those two stages (their arms and adapters in the execution manifest, per-stage plan, adapter lock
+and run) is **not implemented yet** (open item before the freeze). A stage whose plans are absent or
 incomplete, or whose required arms, seeds, cells or samples are missing, is refused without writing; `--final`
 records the documented TECHNICAL_FAIL instead. TV-P1 is outcome-blind: students run
 only on TV-authored non-animal prompts and TV artifacts hold digests, timings and flags only.
