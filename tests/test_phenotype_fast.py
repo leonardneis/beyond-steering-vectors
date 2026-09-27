@@ -65,8 +65,8 @@ def test_fast_engine_reproduces_the_reference_decisions_p_values_and_estimates(r
         assert (outcome(ref_fam, integrity_ok=True, instrument_ok=True).__dict__
                 == outcome(opt_fam, integrity_ok=True, instrument_ok=True).__dict__)
     c2 = analysis.p1_outcome(reference[0], integrity_ok=True, instrument_ok=True).confirmed["C2"]
-    assert (analysis.p2_outcome(reference[1], c2_confirmed=c2, integrity_ok=True).__dict__
-            == analysis.p2_outcome(fast_cpu[1], c2_confirmed=c2, integrity_ok=True).__dict__)
+    assert (analysis.p2_outcome(reference[1], c2_confirmed=c2, integrity_ok=True, instrument_ok=True).__dict__
+            == analysis.p2_outcome(fast_cpu[1], c2_confirmed=c2, integrity_ok=True, instrument_ok=True).__dict__)
 
 
 @pytest.mark.skipif(not __import__("torch").cuda.is_available(), reason="no CUDA device")

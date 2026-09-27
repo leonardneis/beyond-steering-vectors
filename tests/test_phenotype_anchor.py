@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -285,6 +286,61 @@ def test_family_weights_give_equal_weight_per_family():
     assert w.mean() == pytest.approx(1.0) and w[:3].sum() == pytest.approx(w[3])
 
 
+def _unbalanced_families(n):
+    return np.array(["a"] * (n // 2) + ["b"] * (n // 3) + ["c"] * (n - n // 2 - n // 3))
+
+
+def test_mass_matched_controls_use_the_family_weighted_base_mass():
+    base = np.zeros((6, 5))
+    base[:, 0] = -1.0                       # target
+    base[:, 1] = [-1.05] * 4 + [-2.2] * 2   # close in the large family a, far in b
+    base[:, 2] = [-1.6] * 4 + [-1.4] * 2    # moderately close in both
+    base[:, 3:] = -6.0
+    families = ["a"] * 4 + ["b"] * 2
+    assert stats.mass_matched_controls(base, 0, k=1).tolist() == [1]  # unweighted mean -1.433 vs -1.533
+    w = stats.family_weights(families)
+    assert stats.mass_matched_controls(base, 0, k=1, stem_w=w).tolist() == [2]  # equal families: -1.625 vs -1.5
+    mean = stats.wmean_columns(base, w)
+    assert mean[1] == pytest.approx(-1.625) and mean[2] == pytest.approx(-1.5)
+
+
+def test_weighted_descriptive_statistics_reduce_to_the_unweighted_ones_at_equal_weights():
+    lat = _latent(301)
+    s, n, base, teacher = _model(lat, 302, beta=0.7), _model(lat, 303), _model(lat, 304), _model(lat, 305, bump=2.0)
+    ones = np.ones(S_STEMS)
+    a, b = stats.omnibus(s, n, n_flip=199), stats.omnibus(s, n, n_flip=199, stem_w=ones)
+    assert np.allclose(a.t, b.t, rtol=1e-12) and a.p == b.p
+    for fn in (lambda **kw: stats.shadow_concordance(teacher, base, n, s, n, 0, lam=1.2, **kw),
+               lambda **kw: stats.profile_replication({w: float(i) for i, w in enumerate(panel.PANEL[1:19])},
+                                                      panel.PANEL, s, n, base, 0, lam=1.2, **kw)):
+        x, y = fn(), fn(stem_w=ones)
+        assert np.allclose(dataclasses.astuple(x), dataclasses.astuple(y), rtol=1e-12)
+
+
+def test_weighted_descriptive_statistics_follow_the_family_weights():
+    lat = _latent(311)
+    s, n, base = _model(lat, 312, beta=0.7), _model(lat, 313), _model(lat, 314)
+    fam = _unbalanced_families(S_STEMS)
+    w = stats.family_weights(fam)
+    # C1: weighted mean change and its sandwich standard error
+    out = stats.omnibus(s, n, n_flip=99, stem_w=w)
+    delta = stats.clr(s) - stats.clr(n)
+    mean = (w[:, None] * delta).sum(0) / w.sum()
+    se = np.sqrt((w[:, None] ** 2 * (delta - mean) ** 2).sum(0) / (S_STEMS * (S_STEMS - 1)))
+    assert np.allclose(out.t, mean / se, rtol=1e-10)
+    # K4: each fold gives every family equal weight
+    ids = [f"stem{i}" for i in range(S_STEMS)]
+    folds = stats.fold_of(ids)
+    got = stats.shared_movers(s, n, s, n, base, (0,), ids, families=fam)
+    cols = np.arange(1, W)
+    w0, w1 = stats.family_weights(fam[folds == 0]), stats.family_weights(fam[folds == 1])
+    p0 = stats.wmean_columns(stats.residuals(s[folds == 0], n[folds == 0], base[folds == 0], (0,), 1.0, w0)[0][:, cols],
+                             w0)
+    p1 = stats.wmean_columns(stats.residuals(s[folds == 1], n[folds == 1], base[folds == 1], (0,), 1.0, w1)[0][:, cols],
+                             w1)
+    assert got.rho == pytest.approx(stats.spearman(p0, p1))
+
+
 def test_run_level_without_run_offsets_reduces_to_the_stem_bootstrap_and_detects_an_effect():
     arms = _runs(7, tau=0.0, effect=0.5, sigma=0.3)
     out = stats.run_level(_mean_stat, arms, _TREATED, _WITHIN, np.zeros((120, 2)), lambda idx: 1.0,
@@ -492,12 +548,51 @@ def test_p1_holm_within_seed():
     assert _p1().modifiers == ()
 
 
+def _stage2(**kw):
+    return taxonomy.classify_p1({"4": _seed(**kw), "5": _seed(**kw)}, integrity_ok=True, instrument_ok=True)
+
+
+def test_two_stage_rule_classes_and_bound():
+    split = taxonomy.classify_p1({"2": _seed(), "3": _seed(p={h: 0.6 for h in _GOOD})},
+                                 integrity_ok=True, instrument_ok=True)
+    # no trigger: stage 1 is final, a stage-2 result is a protocol violation
+    both = _p1(label=True)
+    assert taxonomy.classify_p1_two_stage(both, None) is both and taxonomy.two_stage_cat_claim(both, None)
+    with pytest.raises(ValueError):
+        taxonomy.classify_p1_two_stage(both, _stage2())
+    # trigger fired: pending, confirmed on replication (with / without the label), not confirmed, failed stage 2
+    pending = taxonomy.classify_p1_two_stage(split, None)
+    assert pending.cls == "ONE_SEED_ONLY" and "unresolved" in pending.notes[-1]
+    final = taxonomy.classify_p1_two_stage(split, _stage2(label=True))
+    assert final.cls == "CAT_RESIDUAL_CONFIRMED_ON_REPLICATION"
+    assert final.modifiers == ("CAT_DOMINANT_ON_REPLICATION",) and final.confirmed["C3"]
+    assert set(final.per_seed) == {"2", "3", "4", "5"} and "2 alpha" in final.notes[-1]
+    assert final.confirmed["C2"] == split.confirmed["C2"]  # C2 stays the stage-1 decision
+    plain = taxonomy.classify_p1_two_stage(split, _stage2())
+    assert plain.cls == "CAT_RESIDUAL_CONFIRMED_ON_REPLICATION" and plain.modifiers == ()
+    miss = taxonomy.classify_p1_two_stage(split, _stage2(p={"C2": 0.001, "C3": 0.6}))
+    assert miss.cls == "ONE_SEED_ONLY" and not miss.confirmed["C3"]
+    assert not taxonomy.two_stage_cat_claim(split, _stage2(p={"C2": 0.001, "C3": 0.6}))
+    # one of seeds 4/5 only: not confirmed (conjunction over the replication pair)
+    half = taxonomy.classify_p1({"4": _seed(), "5": _seed(p={"C2": 0.001, "C3": 0.6})}, integrity_ok=True,
+                                instrument_ok=True)
+    assert not taxonomy.two_stage_cat_claim(split, half)
+    for fail in (taxonomy.technical_fail("missing S5"),
+                 taxonomy.classify_p1({}, integrity_ok=True, instrument_ok=False)):
+        out = taxonomy.classify_p1_two_stage(split, fail)
+        assert out.cls == "ONE_SEED_ONLY" and not out.confirmed["C3"] and any("unresolved" in n for n in out.notes)
+    # round trip of a stored outcome
+    assert taxonomy.outcome_from_dict(json.loads(json.dumps(final.__dict__))) == final
+
+
 def test_p2_taxonomy():
-    def run(p, transfer=True, c2=True, label=False):
+    def run(p, transfer=True, c2=True, label=False, instrument=True):
         out = taxonomy.classify_p2({"2": p, "3": p}, label={"2": label, "3": label},
-                                   dog_transfer={"2": transfer, "3": transfer}, c2_confirmed=c2, integrity_ok=True)
+                                   dog_transfer={"2": transfer, "3": transfer}, c2_confirmed=c2, integrity_ok=True,
+                                   instrument_ok=instrument)
         return out.cls, out.modifiers
     base = {"K1": 0.6, "K2": 0.6, "K3": 0.6}
+    assert run(dict(base, K1=0.001, K2=0.001), instrument=False) == ("INSTRUMENT_FAIL", ())
     assert run(dict(base, K1=0.001, K2=0.001)) == ("DOUBLE_DISSOCIATION", ())
     assert run(dict(base, K1=0.001), label=True) == ("CAT_ONLY_SPECIFIC", ("CAT_WORD_DOMINANT",))
     assert run(dict(base, K2=0.001))[0] == "DOG_ONLY_SPECIFIC"

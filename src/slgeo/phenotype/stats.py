@@ -186,6 +186,14 @@ def wmean(values: np.ndarray, stem_w=None) -> float:
     return float((w * values).sum() / w.sum())
 
 
+def wmean_columns(values: np.ndarray, stem_w=None) -> np.ndarray:
+    """Stem-weighted mean over axis 0 of a [S, W] per-stem matrix (one value per column)."""
+    if stem_w is None:
+        return values.mean(axis=0)
+    w = _stem_weights(stem_w, values.shape[0])
+    return (w[:, None] * values).sum(axis=0) / w.sum()
+
+
 def fit_beta(
     logq_y: np.ndarray, logq_x: np.ndarray, words: np.ndarray, logq_ref: np.ndarray, lam: float = 1.0, stem_w=None,
 ) -> float:
@@ -261,32 +269,45 @@ class Omnibus:
     t: np.ndarray  # per-word t of the mean clr change
 
 
-def _t(delta: np.ndarray) -> np.ndarray:
+def _t(delta: np.ndarray, w: np.ndarray | None = None) -> np.ndarray:
+    """Per-word t of the mean over stems (axis -2); ``w``: stem weights normalized to mean 1 (weighted mean, its
+    sandwich standard error; equal to the ordinary t when all weights are 1)."""
     n = delta.shape[-2]
-    mean = delta.mean(axis=-2)
-    sd = delta.std(axis=-2, ddof=1)
-    if np.any(sd == 0):
+    if w is None:
+        mean = delta.mean(axis=-2)
+        sd = delta.std(axis=-2, ddof=1)
+        if np.any(sd == 0):
+            raise PhenotypeStatsError("Zero variance across stems")
+        return mean / (sd / np.sqrt(n))
+    w = w[:, None]
+    mean = (w * delta).sum(axis=-2) / n
+    var = (w ** 2 * (delta - mean[..., None, :]) ** 2).sum(axis=-2) / (n * (n - 1))
+    if np.any(var == 0):
         raise PhenotypeStatsError("Zero variance across stems")
-    return mean / (sd / np.sqrt(n))
+    return mean / np.sqrt(var)
 
 
-def _flip_t_stat(delta: np.ndarray, n_flip: int, seed: int, reduce) -> np.ndarray:
+def _flip_t_stat(delta: np.ndarray, n_flip: int, seed: int, reduce, w: np.ndarray | None = None) -> np.ndarray:
     """reduce(t) for each sign-flip draw, computed in chunks to bound memory."""
     signs = _signs(delta.shape[0], n_flip, seed)
     out = np.empty(n_flip)
     for start in range(0, n_flip, _CHUNK):
         block = signs[start:start + _CHUNK][:, :, None] * delta[None]
-        out[start:start + _CHUNK] = reduce(_t(block))
+        out[start:start + _CHUNK] = reduce(_t(block, w))
     return out
 
 
-def omnibus(logq_a: np.ndarray, logq_b: np.ndarray, *, n_flip: int = N_FLIP, seed: int = SEED) -> Omnibus:
-    """C1: T = sum_w t_w^2 of the per-stem clr change (a - b); null flips each stem's whole change vector.
-    Detects word-consistent shifts; a tempering whose head words differ between stems is C2's job."""
+def omnibus(
+    logq_a: np.ndarray, logq_b: np.ndarray, *, n_flip: int = N_FLIP, seed: int = SEED, stem_w=None,
+) -> Omnibus:
+    """C1 (descriptive): T = sum_w t_w^2 of the stem-weighted mean per-stem clr change (a - b); null flips each
+    stem's whole change vector. Detects word-consistent shifts; a tempering whose head words differ between stems is
+    C2's job."""
     delta = clr(_finite(logq_a, "a")) - clr(_finite(logq_b, "b"))
-    t = _t(delta)
+    w = None if stem_w is None else _stem_weights(stem_w, delta.shape[0])
+    t = _t(delta, w)
     observed = float((t ** 2).sum())
-    null = _flip_t_stat(delta, n_flip, seed, lambda t: (t ** 2).sum(axis=1))
+    null = _flip_t_stat(delta, n_flip, seed, lambda t: (t ** 2).sum(axis=1), w)
     return Omnibus(observed, _p_upper(null, observed), t)
 
 
@@ -351,39 +372,16 @@ def target_residual(
     )
 
 
-def mass_matched_controls(logq_ref: np.ndarray, target: int, k: int = MASS_MATCHED_K, exclude: Sequence[int] = ()):
-    """The k words whose mean reference log q is closest to the target's (fixed by the reference arm), never the
-    target or an ``exclude`` word (the other trait word, taxonomic neighbours)."""
-    mean = _finite(logq_ref, "ref").mean(axis=0)
+def mass_matched_controls(
+    logq_ref: np.ndarray, target: int, k: int = MASS_MATCHED_K, exclude: Sequence[int] = (), stem_w=None,
+):
+    """The k words whose mean reference log q (stem-weighted by ``stem_w``, the equal-family weights of the
+    contrast) is closest to the target's (fixed by the reference arm), never the target or an ``exclude`` word (the
+    other trait word, taxonomic neighbours)."""
+    mean = wmean_columns(_finite(logq_ref, "ref"), stem_w)
     candidates = _nontarget(mean.size, (target, *exclude))
     order = np.argsort(np.abs(mean[candidates] - mean[target]), kind="stable")
     return candidates[order[:k]]
-
-
-def mass_matched_contrast(
-    logq_y, logq_x, logq_ref, target: int, *, k: int = MASS_MATCHED_K, lam: float = 1.0, n_boot: int = N_BOOT,
-    seed: int = SEED,
-) -> TargetResidual:
-    """Secondary to C3: per stem r_target - mean(r_controls) with the k mass-matched control words; target and
-    controls all out of fit. Robust to frequency-dependent misfit of the tempering model."""
-    logq_y, logq_x, logq_ref = _finite(logq_y, "y"), _finite(logq_x, "x"), _finite(logq_ref, "ref")
-    controls = mass_matched_controls(logq_ref, target, k)
-    targets = (target, *controls.tolist())
-
-    def stat(idx):
-        r, _ = residuals(logq_y[idx], logq_x[idx], logq_ref[idx], targets, lam)
-        return float((r[:, target] - r[:, controls].mean(axis=1)).mean())
-
-    r, beta = residuals(logq_y, logq_x, logq_ref, targets, lam)
-    boots = _bootstrap(stat, logq_y.shape[0], n_boot, seed)
-    return TargetResidual(
-        float((r[:, target] - r[:, controls].mean(axis=1)).mean()),
-        (float(np.quantile(boots, 0.025)), float(np.quantile(boots, 0.975))),
-        (float(np.quantile(boots, 0.05)), float(np.quantile(boots, 0.95))),
-        float((1 + np.count_nonzero(boots <= 0.0)) / (1 + n_boot)),
-        beta,
-        float((np.exp(logq_y[:, target]) - np.exp(logq_x[:, target])).mean()),
-    )
 
 
 # --- mass-matched and dominance contrast statistics (scalar, larger = stronger effect) -----------------------
@@ -472,8 +470,8 @@ def _partial(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
     return float((rab - rac * rbc) / denom)
 
 
-def _profile(logq_y, logq_x, logq_ref, targets, cols, lam) -> np.ndarray:
-    return residuals(logq_y, logq_x, logq_ref, targets, lam)[0][:, cols].mean(axis=0)
+def _profile(logq_y, logq_x, logq_ref, targets, cols, lam, stem_w=None) -> np.ndarray:
+    return wmean_columns(residuals(logq_y, logq_x, logq_ref, targets, lam, stem_w)[0][:, cols], stem_w)
 
 
 def _profile_rho(reference: np.ndarray, observed: np.ndarray, mass: np.ndarray) -> ProfileRho:
@@ -481,17 +479,17 @@ def _profile_rho(reference: np.ndarray, observed: np.ndarray, mass: np.ndarray) 
 
 
 def shadow_concordance(
-    logq_teacher, logq_base, logq_teacher_ref, logq_s, logq_n, target: int, *, lam: float = 1.0,
+    logq_teacher, logq_base, logq_teacher_ref, logq_s, logq_n, target: int, *, lam: float = 1.0, stem_w=None,
 ) -> ProfileRho:
     """C4 (descriptive): Spearman over non-target words between the tempering residual profiles of (teacher vs base;
     OLS, base is noise-free; weights = mean of the neutral students) and (S vs N; Deming with ``lam``; weights =
-    base)."""
+    base). Fits and means over stems weighted by ``stem_w``."""
     logq_s, logq_n, logq_base = _finite(logq_s, "s"), _finite(logq_n, "n"), _finite(logq_base, "base")
     cols = _nontarget(logq_s.shape[1], (target,))
     teacher = _profile(_finite(logq_teacher, "teacher"), logq_base, _finite(logq_teacher_ref, "teacher_ref"),
-                       (target,), cols, np.inf)
-    return _profile_rho(teacher, _profile(logq_s, logq_n, logq_base, (target,), cols, lam),
-                        logq_base[:, cols].mean(axis=0))
+                       (target,), cols, np.inf, stem_w)
+    return _profile_rho(teacher, _profile(logq_s, logq_n, logq_base, (target,), cols, lam, stem_w),
+                        wmean_columns(logq_base[:, cols], stem_w))
 
 
 def residual_profile(
@@ -505,14 +503,15 @@ def residual_profile(
 
 def profile_replication(
     reference: Mapping[str, float], panel_words: Sequence[str], logq_s, logq_n, logq_ref, target: int, *,
-    lam: float = 1.0,
+    lam: float = 1.0, stem_w=None,
 ) -> ProfileRho:
     """C5 (descriptive): Spearman between a frozen development residual profile (word -> value; ranks only) and the
-    new seed's residual profile over the same words."""
+    new seed's residual profile over the same words (fit and means weighted by ``stem_w``)."""
     logq_s, logq_n, logq_ref = _finite(logq_s, "s"), _finite(logq_n, "n"), _finite(logq_ref, "ref")
     cols = np.array([list(panel_words).index(w) for w in reference])
     ref = np.array([reference[w] for w in reference], dtype=np.float64)
-    return _profile_rho(ref, _profile(logq_s, logq_n, logq_ref, (target,), cols, lam), logq_ref[:, cols].mean(axis=0))
+    return _profile_rho(ref, _profile(logq_s, logq_n, logq_ref, (target,), cols, lam, stem_w),
+                        wmean_columns(logq_ref[:, cols], stem_w))
 
 
 def fold_of(stem_ids: Sequence[str]) -> np.ndarray:
@@ -522,11 +521,12 @@ def fold_of(stem_ids: Sequence[str]) -> np.ndarray:
 
 def shared_movers(
     logq_s, logq_n_for_s, logq_d, logq_n_for_d, logq_ref, targets: Sequence[int], stem_ids: Sequence[str], *,
-    lam_s: float = 1.0, lam_d: float = 1.0,
+    lam_s: float = 1.0, lam_d: float = 1.0, families: Sequence[str] | None = None,
 ) -> ProfileRho:
     """K4 (descriptive): Spearman over non-target words between the (S_k vs N_k) residual profile on fold 0 and the
     (D_k vs N_j, j != k) residual profile on fold 1 (disjoint folds remove shared stem noise, a different neutral seed
-    removes shared run offsets of N). The mass column uses the fold-0 reference."""
+    removes shared run offsets of N). The mass column uses the fold-0 reference. ``families``: stem family per stem;
+    each fold then gives every family equal weight (``family_weights`` of that fold's stems)."""
     logq_s, logq_d = _finite(logq_s, "s"), _finite(logq_d, "d")
     logq_n_for_s, logq_n_for_d = _finite(logq_n_for_s, "n_s"), _finite(logq_n_for_d, "n_d")
     logq_ref = _finite(logq_ref, "ref")
@@ -536,8 +536,12 @@ def shared_movers(
     cols = _nontarget(logq_s.shape[1], targets)
     a0, n0, r0 = logq_s[folds == 0], logq_n_for_s[folds == 0], logq_ref[folds == 0]
     d1, n1, r1 = logq_d[folds == 1], logq_n_for_d[folds == 1], logq_ref[folds == 1]
-    return _profile_rho(_profile(a0, n0, r0, targets, cols, lam_s), _profile(d1, n1, r1, targets, cols, lam_d),
-                        r0[:, cols].mean(axis=0))
+    w0 = w1 = None
+    if families is not None:
+        families = np.asarray(families)
+        w0, w1 = family_weights(families[folds == 0]), family_weights(families[folds == 1])
+    return _profile_rho(_profile(a0, n0, r0, targets, cols, lam_s, w0), _profile(d1, n1, r1, targets, cols, lam_d, w1),
+                        wmean_columns(r0[:, cols], w0))
 
 
 # --- run level --------------------------------------------------------------------------------------------------

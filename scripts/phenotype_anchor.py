@@ -8,7 +8,9 @@ Commands:
   tv-cpu         CPU technical validation (manifest reproduction, panel, plan, statistics self-tests)
   tv --name      GPU technical validation (outcome-blind; see slgeo.phenotype.tv)
   tv-project     projection and resource cap from the TV reports (decision D5)
-  analyze        sealed until UNSEAL.json names the frozen preregistration
+  analyze        sealed until UNSEAL.json names the frozen preregistration; --stage p1 (default), p2 (after p1;
+                 reads the stored P1 C2 decision and instrument result) or p1-seeds45 (only if the stored p1
+                 result fired the fresh-seed trigger); each result is written once to <out>/analysis/
 
 Exit codes: 0 ok; 86 final (identity, integrity, contract); 1 infrastructure.
 """
@@ -211,25 +213,23 @@ def cmd_tv_project(cfg: dict) -> int:
     return 0
 
 
-def cmd_analyze(cfg: dict) -> int:
+PREREG_TAG = "prereg/phenotype-anchor-v1"
+
+
+def cmd_analyze(cfg: dict, stage: str) -> int:
     from slgeo.phenotype import analysis
 
     root = out_root(cfg, False)
-    analysis.require_unsealed(root, expected_tag="prereg/phenotype-anchor-v1")
-    plan = json.loads((root / "plan.json").read_text())
-    complete = all((root / "raw" / s["shard_id"] / "COMPLETE").exists() for s in plan["shards"])
-    scores = analysis.load_scores(root)
-    samples = [json.loads(line) for f in sorted((root / "raw").glob("*.sample.*/samples.jsonl"))
-               for line in f.read_text(encoding="utf-8").splitlines() if line.strip()]
     v1 = json.loads((ROOT / cfg["contract"]["path"] / "seed1_v1_profile.json").read_text())["profile"]
-    result = analysis.analyze_p1(scores, samples, entries(cfg), v1, integrity_ok=complete,
-                                 sample_k=int(cfg["sampling"]["k"]))
-    target = root / "analysis" / "p1_analysis.json"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        print("p1_analysis.json exists; analyses are write-once", file=sys.stderr)
+    try:
+        result = analysis.run_stage(root, stage, entries=entries(cfg), v1=v1, sample_k=int(cfg["sampling"]["k"]),
+                                    expected_tag=PREREG_TAG)
+        target = analysis.write_stage(root, stage, result)
+    except analysis.StageOrderError as exc:
+        print(exc, file=sys.stderr)
         return FINAL
-    target.write_text(json.dumps(result, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))
+    outcome = result["final_outcome"] if stage == "p1-seeds45" else result["outcome"]
+    print(f"{stage}: {outcome['cls']} -> {target}")
     return 0
 
 
@@ -246,7 +246,8 @@ def main() -> int:
     t = sub.add_parser("tv")
     t.add_argument("--name", required=True)
     sub.add_parser("tv-project")
-    sub.add_parser("analyze")
+    a = sub.add_parser("analyze")
+    a.add_argument("--stage", choices=("p1", "p2", "p1-seeds45"), default="p1")
     args = parser.parse_args()
     cfg = config()
     if args.command == "pin-adapters":
@@ -261,7 +262,7 @@ def main() -> int:
         return cmd_tv(cfg, args.name)
     if args.command == "tv-project":
         return cmd_tv_project(cfg)
-    return cmd_analyze(cfg)
+    return cmd_analyze(cfg, args.stage)
 
 
 if __name__ == "__main__":
