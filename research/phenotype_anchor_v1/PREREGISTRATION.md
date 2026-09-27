@@ -58,7 +58,8 @@ Levenshtein distance ≥ 0.25 to every CTS S0/D/C/V stem and every REF50/ABD72 p
 0.25; (4) hypothetical: drop 23 impersonal stems (fixed list in the script). Suffix: the six CTS v1 answer-format
 suffixes round-robin within family (a blocking factor). Families are strata with equal weights; a direct-only
 sensitivity analysis (56 stems) is pre-declared, and a "preference" reading of a cat result requires the direct
-stratum to agree in sign. No CTS S0/D/C prompt is forwarded; V prompts are used only in TV on the base model.
+stratum to agree in sign (both components' point estimates on the direct stems, at λ̂ and the all-stem controls, have
+the sign of the all-stem estimates: `direct_stratum` in each confirmatory seed's descriptive record). No CTS S0/D/C prompt is forwarded; V prompts are used only in TV on the base model.
 
 Disclosure: RES stems are exchangeable with CTS S0/D/C by construction; P1 base and persona arms reveal base-model
 quantities that a CTS preregistration would use (base rates, persona effects). CTS Stage 0 v2 is parked pending
@@ -89,7 +90,9 @@ redesign; any future CTS preregistration must disclose these quantities.
   stem and arm, T = 1, top_p = 1, 24 tokens, one generator per sample seeded by `crn.sample_seed` (common random
   numbers across arms); parser `slgeo.phenotype.parser` (first line, longest match, classes). Agreement check per
   arm: ≥ 90 % of stem × word cells with p_w ≥ 0.02 inside the binomial 95 % band **and** pooled per-word
-  |z| ≤ Bonferroni bound; failure = INSTRUMENT_FAIL (no endpoint switch). Arms whose coverage or agreement decides
+  |z| ≤ Bonferroni bound (over words; per arm, α = 0.05); failure = INSTRUMENT_FAIL (no endpoint switch). Coverage
+  and agreement are computed on the sampled r0 prefix of the primary cell (persona+r0 for teachers) over REF50 + RES,
+  unweighted (a measurement check over stem × word cells, not a population mean). Arms whose coverage or agreement decides
   INSTRUMENT_FAIL: P1 base, T_cat, N2, S2, N3, S3; P2 D2, D3, T_dog and the P1 result (a P1 INSTRUMENT_FAIL is a P2
   INSTRUMENT_FAIL); fresh-seed stage base, T_cat, N4, S4, N5, S5. Seed-1 and D1 arms are checked and reported.
   Sampled arms: base, N1–N3, S1–S3, T_cat, T_dog; D1–D3 and N4, S4, N5, S5 with their adapters.
@@ -123,7 +126,7 @@ seed-2/3 quantities are used only for the bound U and reported descriptively.
 
 Per stem, y = log q of the treated arm, x = log q of the reference arm: y − ȳ = β (x − x̄) + residual, bars =
 means over non-target words weighted by q of an independent weight arm (base for student contrasts; the mean of
-N1–N3 for teacher vs base). β = Deming slope with noise-variance ratio λ. Between-condition contrasts use λ̂ from the
+N1–N3 for teacher vs base; N1–N5 in the fresh-seed stage). β = Deming slope with noise-variance ratio λ. Between-condition contrasts use λ̂ from the
 within-condition cross-seed pairs (`stats.estimate_lambda`: S_i − S_j vs N_i − N_j), re-estimated in every bootstrap
 draw; within-condition pairs use λ = 1 (their two runs are exchangeable); OLS (λ = ∞) for contrasts against base.
 Residuals of target words are out of fit. Stems are weighted so that each family (direct, identity,
@@ -190,6 +193,8 @@ exact run-permutation p for C1 is 1/10: C(6, 3) = 20 relabelings, halved by the 
 null for C4/C5 assumes S and N exchangeable, false under tempering), so they carry no p-value claim. Every mean over
 RES stems in this layer uses the family weights of §6.2 (C1: weighted mean change with its sandwich standard error;
 C4, C5, K4 and the teacher-profile correlations: weighted fits and weighted profile means; K4 re-weights each fold).
+A descriptive statistic that is undefined in the data (e.g. a degenerate fit or an undefined correlation) is recorded
+as an error in its place and never changes a class; the per-replicate β is reported next to C2 and next to K3.
 
 ### 6.5 Pre-freeze decisions (researcher, 2026-09-27)
 
@@ -217,13 +222,15 @@ C4, C5, K4 and the teacher-profile correlations: weighted fits and weighted prof
 | 4 | ONE_SEED_ONLY | C2 or C3 confirmed in exactly one seed, neither in both | per-seed statements; no heterogeneity claim (a split is mostly a power event) |
 | 5 | NO_CONFIRMED_C2_C3 | neither C2 nor C3 confirmed in either seed | "no flattening or cat residual confirmed at this power" (report U; C1 descriptively for word movers) |
 
-No modifier. The Q + none class is reported descriptively (a class difference between two noisy cells is not a test).
+No modifier on the stage-1 classes. The Q + none class is reported descriptively (a class difference between two noisy
+cells is not a test).
 Note: "C3 confirmed in exactly one seed" (fresh-seed trigger, §6.1) is reported with any class.
 
 After the fresh-seed stage (§6.1) the final P1 class is CAT_RESIDUAL_CONFIRMED_ON_REPLICATION ("cat's log-odds rise
 beyond the tempering and relative to its frequency neighbours, confirmed in the replication pair 4/5 after a split
 in 2/3"; with CAT_DOMINANT_ON_REPLICATION "… more than every other panel word") or the seed-2/3 class (cat claim
-unresolved).
+unresolved). The seed-2/3 C2 decision is reported alongside the final class; the seed-2/3 bound U no longer applies
+once C3 is confirmed on replication.
 
 Claims never allowed: "no subliminal learning", "no cat information in the student", "no cat component" or "no
 relevant cat effect" (no relevance margin is pre-declared), "generic" or "the same effect in both teachers" (no
@@ -249,7 +256,7 @@ matched subsets (`slgeo.phenotype.p2.prompt_matched_subset`), the seed-2/3 train
 ### 9.2 Hypotheses (seeds 2 and 3; run-level tests as §6.3 with the within-condition pairs of the two compared
 conditions; Holm over {K1, K2, K3} within seed; conjunction over seeds)
 K1 (robust): cat residual of S_k vs D_k > 0 (dog excluded from the fit) and cat vs its five mass neighbours
-(felines and dog excluded). K2 (robust): dog residual of D_k vs S_k > 0 (cat excluded) and dog vs its five mass
+(family-weighted base mass as §6.3; felines and dog excluded). K2 (robust): dog residual of D_k vs S_k > 0 (cat excluded) and dog vs its five mass
 neighbours (canines, felines and cat excluded). K3: −log β(D_k vs N_k) > 0. Reported with a run-level test: K5,
 −log β(S_k vs D_k) ≠ 0 (two-sided; H_entropy predicts that S flattens more than D when the dog data entropy is near
 neutral). P2 cat label: cat's residual exceeds every non-trait word's in S_k vs D_k (run-level IUT, both seeds).
@@ -274,7 +281,8 @@ seeds (only then may a P2 claim say "cat-specific" rather than "cat's residual r
 
 ### 9.4 P2b trigger
 If K3 is confirmed, and the dog-teacher data entropy is not within 0.05 nats of the
-neutral value: train 2 seeds of an entropy-matched neutral teacher (base, temperature chosen on a ≤ 1k-row CPU-
+neutral value (`taxonomy.p2b_trigger`, recorded in the P2 result from the CPU entropy record `p2_data_entropy.json`;
+undetermined without it): train 2 seeds of an entropy-matched neutral teacher (base, temperature chosen on a ≤ 1k-row CPU-
 measured pilot to match the cat teacher's number entropy) and test flattening and shared movers against it.
 
 ## 10. Downstream branch rules (fixed now)
@@ -291,7 +299,11 @@ render identity; S0/D/C/V exclusion; adapter census (container peft version); wr
 until `UNSEAL.json` names this preregistration's tag and commit; A100-h ledger. Analysis stages
 (`scripts/phenotype_anchor.py analyze --stage`, `analysis.run_stage`), each written once under `analysis/`: `p1`
 (seeds 1–3); `p2` (only after `p1`; reads its stored C2 decision and instrument result); `p1-seeds45` (only if the
-stored `p1` result fired the fresh-seed trigger; writes the final two-stage P1 outcome). TV-P1 is outcome-blind: students run
+stored `p1` result fired the fresh-seed trigger; writes the final two-stage P1 outcome). Each stage reads only its
+plans' shards: `plan.json` (P1 arms), plus `plan_p2.json` (D1–D3) or `plan_p1-seeds45.json` (N4, S4, N5, S5), which
+the P2 and fresh-seed executions add with their adapters (pinned at first read). A stage whose plans are absent or
+incomplete, or whose required arms, seeds, cells or samples are missing, is refused without writing; `--final`
+records the documented TECHNICAL_FAIL instead. TV-P1 is outcome-blind: students run
 only on TV-authored non-animal prompts and TV artifacts hold digests, timings and flags only.
 
 ## 12. Compute and resources
