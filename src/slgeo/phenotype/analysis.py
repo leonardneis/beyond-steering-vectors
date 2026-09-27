@@ -7,6 +7,7 @@ Confirmatory statistics use the RES stems; REF50 and NONANIMAL are reported sepa
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import json
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from . import stats, taxonomy
-from .panel import PANEL, TARGET
+from .panel import CONTROL_EXCLUSIONS, PANEL, TARGET
 
 CONFIRMATORY_SEEDS = ("2", "3")
 ALL_SEEDS = ("1", "2", "3")
@@ -59,55 +60,117 @@ def arm_logq(scores: Mapping[str, Mapping[str, np.ndarray]], arm: str, stems: Se
     return stats.stem_conditional(lp)
 
 
-def _pairs(logq: Mapping[str, np.ndarray], prefix: str) -> list[tuple[np.ndarray, np.ndarray]]:
-    names = [f"{prefix}{s}" for s in ALL_SEEDS if f"{prefix}{s}" in logq]
-    return [(logq[a], logq[b]) for a, b in itertools.combinations(names, 2)]
+def _pairs(logq: Mapping[str, np.ndarray], prefix: str) -> list[tuple[str, str]]:
+    """Within-condition cross-seed pairs over every seed present (1-3; 1-5 after a fresh-seed stage)."""
+    names = sorted((k for k in logq if k[:-1] == prefix and k[-1:].isdigit()), key=lambda k: int(k[len(prefix):]))
+    return list(itertools.combinations(names, 2))
 
 
-def p1_seed(logq: Mapping[str, np.ndarray], seed: str, v1: Mapping[str, float], *, n_boot: int, n_flip: int) -> dict:
+def _arrays(logq: Mapping[str, np.ndarray], pairs: Sequence[tuple[str, str]]) -> list[tuple[np.ndarray, np.ndarray]]:
+    return [(logq[a], logq[b]) for a, b in pairs]
+
+
+def _seeds(logq: Mapping[str, np.ndarray], prefix: str) -> list[str]:
+    return [k[len(prefix):] for k in logq if k[:-1] == prefix and k[-1:].isdigit()]
+
+
+def _rl(result: stats.RunLevel) -> dict:
+    return dataclasses.asdict(result)
+
+
+class _Tests:
+    """Run-level tests of one contrast family (treated condition y vs reference x) with shared settings."""
+
+    def __init__(self, logq, y, x, targets, *, families, confirmatory, n_boot, n_ref, seed):
+        self.logq, self.base = logq, logq["base"]
+        self.w = stats.family_weights(families)
+        self.strata = list(families)
+        py, px = _pairs(logq, y), _pairs(logq, x)
+        self.within = py + px
+        self.lam = stats.lambda_of(_arrays(logq, py), _arrays(logq, px), self.base, targets, self.w)
+        seeds = sorted(set(_seeds(logq, y)) & set(_seeds(logq, x)), key=int)
+        self.treated = {s: (f"{y}{s}", f"{x}{s}") for s in seeds}
+        self.confirmatory = tuple(confirmatory)
+        self.kw = dict(n_boot=n_boot, n_ref=n_ref, seed=seed)
+
+    def __call__(self, statistic):
+        return stats.run_level(statistic, self.logq, self.treated, self.within, self.base, self.lam, stem_w=self.w,
+                               strata=self.strata, pooled=self.confirmatory, **self.kw)
+
+
+def p1_family(logq: Mapping[str, np.ndarray], v1: Mapping[str, float], families: Sequence[str], *, n_boot: int,
+              n_ref: int, confirmatory: Sequence[str] = CONFIRMATORY_SEEDS, seed: int = stats.SEED) -> dict:
+    """P1 run-level tests for every seed at once (within-condition pairs over all seeds present, lambda-hat shared).
+
+    Confirmatory per seed: C2 (-log beta) and the robust C3 claim (tempering residual and mass-matched contrast,
+    intersection-union); the cat-dominance label (all 25 contrasts d_w pass, intersection-union). The bound U is the
+    larger of the two components' pooled-seed upper bounds. Everything else is descriptive."""
     t = PANEL.index(TARGET)
-    s, n, base = logq[f"S{seed}"], logq[f"N{seed}"], logq["base"]
-    within = _pairs(logq, "S") + _pairs(logq, "N")
-    lam = stats.estimate_lambda(_pairs(logq, "S"), _pairs(logq, "N"), base, (t,)).value
-    c1 = stats.omnibus(s, n, n_flip=n_flip)
-    c2 = stats.flattening(s, n, base, (t,), lam=lam, n_boot=n_boot)
-    c3 = stats.target_residual(s, n, base, t, lam=lam, n_boot=n_boot)
-    c4 = stats.shadow_concordance(logq["T_cat"], base, stats.mean_distribution(*(logq[f"N{k}"] for k in ALL_SEEDS)),
-                                  s, n, t, lam=lam, n_flip=n_flip)
-    c5 = stats.profile_replication(v1, PANEL, s, n, base, t, lam=lam, n_flip=n_flip)
+    base = logq["base"]
+    tests = _Tests(logq, "S", "N", (t,), families=families, confirmatory=confirmatory, n_boot=n_boot, n_ref=n_ref,
+                   seed=seed)
+    controls = stats.mass_matched_controls(base, t, exclude=[PANEL.index(w) for w in CONTROL_EXCLUSIONS[TARGET]])
+    c2 = tests(stats.flattening_stat((t,)))
+    c3 = tests(stats.target_stat(t))
+    c3mm = tests(stats.mass_matched_stat(t, controls))
+    curvature = tests(stats.curvature_stat((t,)))
+    dominance = {PANEL[w]: tests(stats.dominance_stat(t, w)) for w in range(len(PANEL)) if w != t}
 
-    def c1_stat(a, b):
-        return stats.omnibus(a, b, n_flip=1).statistic
+    lam_hat = tests.lam(None)
+    c3_pair = stats.target_stat(t)
+    m_run = stats.run_noise_margin(lambda a, b: c3_pair(a, b, base, 1.0, tests.w), _arrays(logq, tests.within))
+    teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in _seeds(logq, "N")))
+    seeds = {}
+    for s in tests.treated:
+        y, x = logq[f"S{s}"], logq[f"N{s}"]
+        c1 = stats.omnibus(y, x, n_flip=min(n_boot, stats.N_FLIP), seed=seed)
+        c1_gate = stats.run_level_gate(lambda a, b: stats.omnibus(a, b, n_flip=1).statistic, (y, x),
+                                       _arrays(logq, tests.within))
+        dom_p = {w: r[s].p for w, r in dominance.items()}
+        seeds[s] = {
+            "p": {"C2": c2[s].p, "C3": stats.robust_p(c3[s], c3mm[s])},
+            "label": bool(all(p <= stats.ALPHA for p in dom_p.values())),
+            "c3_upper": max(c3[s].upper95, c3mm[s].upper95),
+            "tests": {"C2": _rl(c2[s]), "C3": _rl(c3[s]), "C3mm": _rl(c3mm[s]), "curvature": _rl(curvature[s])},
+            "dominance_p": dom_p,
+            "descriptive": {
+                "beta": float(np.exp(-c2[s].estimate)),
+                "C3_delta_prob": stats.wmean(np.exp(y[:, t]) - np.exp(x[:, t]), tests.w),
+                "C1_T": c1.statistic, "C1_p_stem": c1.p, "C1_gate_v1": c1_gate.passed,
+                "C4": dataclasses.asdict(stats.shadow_concordance(logq["T_cat"], base, teacher_ref, y, x, t,
+                                                                  lam=lam_hat)),
+                "C5": dataclasses.asdict(stats.profile_replication(v1, PANEL, y, x, base, t, lam=lam_hat)),
+                "c3_equivalent_fixed": {str(m): c3[s].equivalent(m) for m in FIXED_MARGINS},
+                "c3_equivalent_m_run": c3[s].equivalent(m_run),
+            },
+        }
+    pooled = {"C3": _rl(c3["pooled"]), "C3mm": _rl(c3mm["pooled"]), "C2": _rl(c2["pooled"])}
+    return {"lambda": lam_hat, "m_run": m_run, "controls": [PANEL[w] for w in controls], "seeds": seeds,
+            "confirmatory": list(confirmatory), "pooled": pooled,
+            "c3_upper_pooled": max(c3["pooled"].upper95, c3mm["pooled"].upper95)}
 
-    def c2_stat(a, b):
-        return 1.0 - stats.fit_beta(a, b, np.array([w for w in range(len(PANEL)) if w != t]), base, lam)
 
-    def c3_stat(a, b):
-        return float(stats.residuals(a, b, base, (t,), lam)[0][:, t].mean())
+def p1_outcome(family: Mapping[str, Any], *, integrity_ok: bool, instrument_ok: bool) -> taxonomy.Outcome:
+    seeds = {s: taxonomy.SeedResult(family["seeds"][s]["p"], family["seeds"][s]["label"])
+             for s in family["confirmatory"]}
+    return taxonomy.classify_p1(seeds, integrity_ok=integrity_ok, instrument_ok=instrument_ok,
+                                c3_upper=family["c3_upper_pooled"])
 
-    gates = {
-        "C1": stats.run_level_gate(c1_stat, (s, n), within).passed,
-        "C2": stats.run_level_gate(c2_stat, (s, n), within).passed,
-        "C3": stats.run_level_gate(c3_stat, (s, n), within).passed,
-    }
-    m_run = stats.run_noise_margin(c3_stat, within)
-    adequacy = stats.adequacy(s, n, base, (t,), lam=lam, n_boot=n_boot)
-    dominance = stats.target_dominance(s, n, base, t, lam=lam, n_flip=n_flip)
-    mass = stats.mass_matched_contrast(s, n, base, t, lam=lam, n_boot=n_boot)
-    return {
-        "lambda": lam,
-        "p": {"C1": c1.p, "C2": c2.p_less_than_one, "C3": c3.p, "C4": c4.p, "C5": c5.p},
-        "gates": gates,
-        "estimates": {"C1_T": c1.statistic, "beta": c2.beta, "beta_ci90": c2.ci90, "C3": c3.mean, "C3_ci95": c3.ci95,
-                      "C3_ci90": c3.ci90, "C3_delta_prob": c3.delta_prob, "C4_rho": c4.rho, "C5_rho": c5.rho,
-                      "mass_matched": mass.mean, "mass_matched_ci95": mass.ci95, "curvature": adequacy.curvature,
-                      "curvature_ci95": adequacy.ci95, "dominance_min_margin": float(np.min(dominance.t - dominance.critical))},
-        "m_run": m_run,
-        "c3_equivalent_m_run": c3.equivalent(m_run),
-        "c3_equivalent_fixed": {str(m): c3.equivalent(m) for m in FIXED_MARGINS},
-        "label": dominance.passed,
-        "adequate": adequacy.adequate,
-    }
+
+def replicate_beta(scores, arm_y: str, arm_x: str, stems: Sequence[str], families: Sequence[str],
+                   lam: float) -> float:
+    """Descriptive: mean over the prefix replicates of the Deming beta fitted on single-replicate conditionals.
+    Its gap to the prefix-averaged beta separates mixture flattening (probability-scale averaging of prefix-
+    inconsistent answers) from a tempering of each conditional."""
+    t = PANEL.index(TARGET)
+    words = np.array([w for w in range(len(PANEL)) if w != t])
+    w = stats.family_weights(families)
+    betas = []
+    for r in PRIMARY[1]:
+        cell = (PRIMARY[0], (r,))
+        betas.append(stats.fit_beta(arm_logq(scores, arm_y, stems, cell), arm_logq(scores, arm_x, stems, cell), words,
+                                    arm_logq(scores, "base", stems, cell), lam, w))
+    return float(np.mean(betas))
 
 
 def instrument_check(scores, samples: Sequence[Mapping[str, Any]], arms: Sequence[str], stems: Sequence[str], k: int) -> dict:
@@ -132,80 +195,122 @@ def instrument_check(scores, samples: Sequence[Mapping[str, Any]], arms: Sequenc
 
 
 def analyze_p1(scores, samples, entries: Sequence[Mapping[str, Any]], v1: Mapping[str, float], *,
-               integrity_ok: bool, sample_k: int, n_boot: int = stats.N_BOOT, n_flip: int = stats.N_FLIP) -> dict:
-    res_stems = [e["stem_id"] for e in entries if e["set"] == "RES"]
+               integrity_ok: bool, sample_k: int, n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF) -> dict:
+    res = [e for e in entries if e["set"] == "RES"]
+    res_stems, families = [e["stem_id"] for e in res], [e["family"] for e in res]
     arms = ["base"] + [f"{c}{s}" for c in "NS" for s in ALL_SEEDS]
     result: dict[str, Any] = {}
     for label, cell in (("primary", PRIMARY), ("secondary", SECONDARY)):
         logq = {a: arm_logq(scores, a, res_stems, cell) for a in arms}
         logq["T_cat"] = arm_logq(scores, "T_cat", res_stems, TEACHER_CELL if label == "primary" else ("persona", ("none",)))
-        result[label] = {seed: p1_seed(logq, seed, v1, n_boot=n_boot, n_flip=n_flip) for seed in ALL_SEEDS}
+        result[label] = p1_family(logq, v1, families, n_boot=n_boot, n_ref=n_ref)
+    for s, block in result["primary"]["seeds"].items():
+        block["descriptive"]["beta_per_replicate"] = replicate_beta(scores, f"S{s}", f"N{s}", res_stems, families,
+                                                                    result["primary"]["lambda"])
     sampled_stems = [e["stem_id"] for e in entries if e["set"] in {"REF50", "RES"}]
     instrument = instrument_check(scores, samples, ["base", "T_cat"] + arms[1:], sampled_stems, sample_k)
     instrument_ok = all(v["ok"] for a, v in instrument.items() if a in {"base", "T_cat", "N2", "S2", "N3", "S3"})
-
-    def classify(block, secondary=None):
-        seeds = {s: taxonomy.SeedResult(block[s]["p"], block[s]["gates"], block[s]["c3_equivalent_m_run"],
-                                        block[s]["label"], block[s]["adequate"]) for s in CONFIRMATORY_SEEDS}
-        return taxonomy.classify_p1(seeds, integrity_ok=integrity_ok, instrument_ok=instrument_ok,
-                                    secondary_class=secondary)
-
-    secondary = classify(result["secondary"]).cls
-    outcome = classify(result["primary"], secondary)
-    return {"outcome": outcome.__dict__, "secondary_class": secondary, "instrument": instrument,
-            "per_seed": result, "development_seed": "1"}
+    secondary = p1_outcome(result["secondary"], integrity_ok=integrity_ok, instrument_ok=instrument_ok).cls
+    outcome = p1_outcome(result["primary"], integrity_ok=integrity_ok, instrument_ok=instrument_ok)
+    return {"outcome": outcome.__dict__, "fresh_seed_trigger": taxonomy.fresh_seed_trigger(outcome),
+            "secondary_class_descriptive": secondary, "instrument": instrument, "families": result,
+            "development_seed": "1"}
 
 
-def p2_seed(logq: Mapping[str, np.ndarray], seed: str, stem_ids: Sequence[str], *, n_boot: int, n_flip: int) -> dict:
-    """K1-K4 for one confirmatory seed (dog-teacher students D1-D3 required)."""
+def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families: Sequence[str], *, n_boot: int,
+              n_ref: int, confirmatory: Sequence[str] = CONFIRMATORY_SEEDS, seed: int = stats.SEED) -> dict:
+    """P2 run-level tests for every seed at once (dog-teacher students D1-D3 required).
+
+    Confirmatory per seed: K1 robust (cat residual of S_k vs D_k, dog excluded), K2 robust (dog residual of D_k vs
+    S_k, cat excluded), K3 (-log beta of D_k vs N_k); P2 cat label (cat above every non-trait word in S_k vs D_k);
+    K5 (-log beta of S_k vs D_k, two-sided; reported); dog-transfer check (D_k vs N_k flattening or robust dog
+    residual, each at alpha, no multiplicity correction: a non-detection class must not become easier to reach).
+    K4 and the S-D teacher-shadow correlation are descriptive."""
     cat, dog = PANEL.index(TARGET), PANEL.index("dog")
-    s, d, n, base = logq[f"S{seed}"], logq[f"D{seed}"], logq[f"N{seed}"], logq["base"]
-    other_n = next(logq[f"N{k}"] for k in ALL_SEEDS if k != seed)
-    sp, dp, np_ = _pairs(logq, "S"), _pairs(logq, "D"), _pairs(logq, "N")
-    lam_sd = stats.estimate_lambda(sp, dp, base, (cat, dog)).value
-    lam_ds = 1.0 / lam_sd
-    lam_dn = stats.estimate_lambda(dp, np_, base, (cat, dog)).value
-    lam_sn = stats.estimate_lambda(sp, np_, base, (cat, dog)).value
-    k1 = stats.target_residual(s, d, base, cat, exclude=(dog,), lam=lam_sd, n_boot=n_boot)
-    k2 = stats.target_residual(d, s, base, dog, exclude=(cat,), lam=lam_ds, n_boot=n_boot)
-    k3 = stats.flattening(d, n, base, (cat, dog), lam=lam_dn, n_boot=n_boot)
-    k4 = stats.shared_movers(s, n, d, other_n, base, (cat, dog), stem_ids, lam_s=lam_sn, lam_d=lam_dn, n_flip=n_flip)
+    base = logq["base"]
+    kw = dict(families=families, confirmatory=confirmatory, n_boot=n_boot, n_ref=n_ref, seed=seed)
+    sd = _Tests(logq, "S", "D", (cat, dog), **kw)
+    ds = _Tests(logq, "D", "S", (cat, dog), **kw)
+    dn = _Tests(logq, "D", "N", (cat, dog), **kw)
+    dn_dog = _Tests(logq, "D", "N", (dog,), **kw)
+    excl = lambda word, *extra: [PANEL.index(w) for w in CONTROL_EXCLUSIONS[word]] + list(extra)
+    cat_controls = stats.mass_matched_controls(base, cat, exclude=excl(TARGET))
+    dog_controls = stats.mass_matched_controls(base, dog, exclude=excl("dog"))
+    k1 = sd(stats.target_stat(cat, (dog,)))
+    k1mm = sd(stats.mass_matched_stat(cat, cat_controls, (dog,)))
+    k2 = ds(stats.target_stat(dog, (cat,)))
+    k2mm = ds(stats.mass_matched_stat(dog, dog_controls, (cat,)))
+    k3 = dn(stats.flattening_stat((cat, dog)))
+    k5 = sd(stats.flattening_stat((cat, dog)))
+    t_dog = dn_dog(stats.target_stat(dog))
+    t_dogmm = dn_dog(stats.mass_matched_stat(dog, dog_controls))
+    label = {PANEL[w]: sd(stats.dominance_stat(cat, w, (dog,))) for w in range(len(PANEL)) if w not in (cat, dog)}
 
-    def residual_stat(target, exclude, lam):
-        return lambda a, b: float(stats.residuals(a, b, base, (target, *exclude), lam)[0][:, target].mean())
+    lam_sn = stats.lambda_of(_arrays(logq, _pairs(logq, "S")), _arrays(logq, _pairs(logq, "N")), base, (cat, dog),
+                             sd.w)(None)
+    lam_dn = dn.lam(None)
+    cols = np.array([w for w in range(len(PANEL)) if w not in (cat, dog)])
+    has_teachers = "T_cat" in logq and "T_dog" in logq
+    if has_teachers:
+        teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in _seeds(logq, "N")))
+        teacher_diff = (stats.residuals(logq["T_cat"], base, teacher_ref, (cat, dog), np.inf)[0][:, cols].mean(axis=0)
+                        - stats.residuals(logq["T_dog"], base, teacher_ref, (cat, dog), np.inf)[0][:, cols].mean(axis=0))
+    seeds = {}
+    for s in sd.treated:
+        other_n = next(logq[f"N{k}"] for k in _seeds(logq, "N") if k != s)
+        dog_p = {"beta": k3[s].p, "dog": stats.robust_p(t_dog[s], t_dogmm[s])}
+        label_p = {w: r[s].p for w, r in label.items()}
+        descriptive = {
+            "beta_DN": float(np.exp(-k3[s].estimate)), "beta_SD": float(np.exp(-k5[s].estimate)),
+            "K4": dataclasses.asdict(stats.shared_movers(logq[f"S{s}"], logq[f"N{s}"], logq[f"D{s}"], other_n, base,
+                                                         (cat, dog), stem_ids, lam_s=lam_sn, lam_d=lam_dn)),
+        }
+        if has_teachers:
+            profile = stats.residuals(logq[f"S{s}"], logq[f"D{s}"], base, (cat, dog), sd.lam(None))[0][:, cols].mean(axis=0)
+            descriptive["shadow_SD_rho"] = stats.spearman(teacher_diff, profile)
+        seeds[s] = {
+            "p": {"K1": stats.robust_p(k1[s], k1mm[s]), "K2": stats.robust_p(k2[s], k2mm[s]), "K3": k3[s].p},
+            "label": bool(all(p <= stats.ALPHA for p in label_p.values())),
+            "k5_p_two": k5[s].p_two,
+            "dog_transfer": bool(any(p <= stats.ALPHA for p in dog_p.values())),
+            "tests": {name: _rl(r[s]) for name, r in (("K1", k1), ("K1mm", k1mm), ("K2", k2), ("K2mm", k2mm),
+                                                      ("K3", k3), ("K5", k5), ("DN_dog", t_dog),
+                                                      ("DN_dogmm", t_dogmm))},
+            "label_p": label_p,
+            "descriptive": descriptive,
+        }
+    return {"controls": {"K1": [PANEL[w] for w in cat_controls], "K2": [PANEL[w] for w in dog_controls]},
+            "seeds": seeds, "confirmatory": list(confirmatory),
+            "pooled": {n: _rl(r["pooled"]) for n, r in (("K1", k1), ("K1mm", k1mm), ("K2", k2), ("K2mm", k2mm),
+                                                        ("K5", k5))},
+            "upper_pooled": {"K1": max(k1["pooled"].upper95, k1mm["pooled"].upper95),
+                             "K2": max(k2["pooled"].upper95, k2mm["pooled"].upper95)}}
 
-    def beta_stat(a, b):
-        return 1.0 - stats.fit_beta(a, b, np.array([w for w in range(len(PANEL)) if w not in (cat, dog)]), base, lam_dn)
 
-    gates = {
-        "K1": stats.run_level_gate(residual_stat(cat, (dog,), lam_sd), (s, d), sp + dp).passed,
-        "K2": stats.run_level_gate(residual_stat(dog, (cat,), lam_ds), (d, s), sp + dp).passed,
-        "K3": stats.run_level_gate(beta_stat, (d, n), dp + np_).passed,
-    }
-    dog_null = (stats.omnibus(d, n, n_flip=n_flip).p > stats.ALPHA
-                and stats.flattening(d, n, base, (dog,), lam=lam_dn, n_boot=n_boot).p_less_than_one > stats.ALPHA
-                and stats.target_residual(d, n, base, dog, lam=lam_dn, n_boot=n_boot).p > stats.ALPHA)
-    return {"p": {"K1": k1.p, "K2": k2.p, "K3": k3.p_less_than_one, "K4": k4.p}, "gates": gates,
-            "estimates": {"K1": k1.mean, "K1_ci95": k1.ci95, "K2": k2.mean, "K2_ci95": k2.ci95, "beta_DN": k3.beta,
-                          "K4_rho": k4.rho}, "dog_students_null": dog_null,
-            "lambda": {"SD": lam_sd, "DN": lam_dn, "SN": lam_sn}}
+def p2_outcome(family: Mapping[str, Any], *, c2_confirmed: bool, integrity_ok: bool) -> taxonomy.Outcome:
+    """``c2_confirmed``: the P1 C2 decision (cat-teacher students flatten, both seeds)."""
+    conf = family["confirmatory"]
+    return taxonomy.classify_p2({s: family["seeds"][s]["p"] for s in conf},
+                                label={s: family["seeds"][s]["label"] for s in conf},
+                                dog_transfer={s: family["seeds"][s]["dog_transfer"] for s in conf},
+                                c2_confirmed=c2_confirmed, integrity_ok=integrity_ok)
 
 
-def analyze_p2(scores, entries: Sequence[Mapping[str, Any]], *, integrity_ok: bool, n_boot: int = stats.N_BOOT,
-               n_flip: int = stats.N_FLIP) -> dict:
-    stems = [e["stem_id"] for e in entries if e["set"] == "RES"]
+def analyze_p2(scores, entries: Sequence[Mapping[str, Any]], *, c2_confirmed: bool, integrity_ok: bool,
+               n_boot: int = stats.N_BOOT, n_ref: int = stats.N_REF) -> dict:
+    """``c2_confirmed``: from the P1 analysis (``outcome['confirmed']['C2']``)."""
+    res = [e for e in entries if e["set"] == "RES"]
+    stems, families = [e["stem_id"] for e in res], [e["family"] for e in res]
     arms = ["base"] + [f"{c}{s}" for c in "NSD" for s in ALL_SEEDS]
     logq = {a: arm_logq(scores, a, stems, PRIMARY) for a in arms}
-    per_seed = {seed: p2_seed(logq, seed, stems, n_boot=n_boot, n_flip=n_flip) for seed in CONFIRMATORY_SEEDS}
+    logq["T_cat"] = arm_logq(scores, "T_cat", stems, TEACHER_CELL)
+    logq["T_dog"] = arm_logq(scores, "T_dog", stems, TEACHER_CELL)
+    family = p2_family(logq, stems, families, n_boot=n_boot, n_ref=n_ref)
     cat, dog = PANEL.index(TARGET), PANEL.index("dog")
     teacher_ref = stats.mean_distribution(*(logq[f"N{k}"] for k in ALL_SEEDS))
     cols = np.array([w for w in range(len(PANEL)) if w not in (cat, dog)])
-    t_cat = arm_logq(scores, "T_cat", stems, TEACHER_CELL)
-    t_dog = arm_logq(scores, "T_dog", stems, TEACHER_CELL)
     teacher_rho = stats.spearman(
-        stats.residuals(t_cat, logq["base"], teacher_ref, (cat, dog), np.inf)[0][:, cols].mean(axis=0),
-        stats.residuals(t_dog, logq["base"], teacher_ref, (cat, dog), np.inf)[0][:, cols].mean(axis=0))
-    outcome = taxonomy.classify_p2({s: per_seed[s]["p"] for s in per_seed}, {s: per_seed[s]["gates"] for s in per_seed},
-                                   dog_students_null=all(per_seed[s]["dog_students_null"] for s in per_seed),
-                                   integrity_ok=integrity_ok)
-    return {"outcome": outcome.__dict__, "per_seed": per_seed, "teacher_profile_rho": teacher_rho}
+        stats.residuals(logq["T_cat"], logq["base"], teacher_ref, (cat, dog), np.inf)[0][:, cols].mean(axis=0),
+        stats.residuals(logq["T_dog"], logq["base"], teacher_ref, (cat, dog), np.inf)[0][:, cols].mean(axis=0))
+    outcome = p2_outcome(family, c2_confirmed=c2_confirmed, integrity_ok=integrity_ok)
+    return {"outcome": outcome.__dict__, "family": family, "teacher_profile_rho": teacher_rho}

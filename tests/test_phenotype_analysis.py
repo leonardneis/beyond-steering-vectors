@@ -14,7 +14,7 @@ MU = np.log(np.array([354, 59, 8, 306, 10, 10, 302, 24, 6, 6, 2, 2, 886, 702, 63
 
 def _scores(n_stems=60, *, beta_s=0.7, bump=0.0, seed=0):
     rng = np.random.default_rng(seed)
-    stems = [f"res_direct_{i:03d}" for i in range(n_stems)]
+    stems = [f"res_{f}_{i:03d}" for i in range(n_stems) for f in ["direct", "identity", "hypothetical"][i % 3:i % 3 + 1]]
     latent = MU[None, :] + 2.0 * rng.standard_t(3, (n_stems, W)) / np.sqrt(3.0)
     arms = {"base": (1.0, 0.0, 0.0)}
     for s in "123":
@@ -34,7 +34,7 @@ def _scores(n_stems=60, *, beta_s=0.7, bump=0.0, seed=0):
                     counts = rng.multinomial(25, np.append(np.exp(z[i]), 1 - np.exp(z[i]).sum()))
                     for w, c in enumerate(counts[:-1]):
                         samples += [{"context_id": f"{arm}|{s}|{cell}", "cls": "PANEL", "lemma": panel.PANEL[w]}] * int(c)
-    entries = [{"stem_id": s, "set": "RES"} for s in stems]
+    entries = [{"stem_id": s, "set": "RES", "family": s.split("_")[1]} for s in stems]
     return scores, samples, entries
 
 
@@ -48,21 +48,21 @@ def test_sealed_outputs_refuse_analysis(tmp_path):
 
 def test_end_to_end_flattening_without_cat_effect():
     scores, samples, entries = _scores()
-    out = analysis.analyze_p1(scores, samples, entries, V1, integrity_ok=True, sample_k=25, n_boot=99, n_flip=99)
-    assert out["outcome"]["cls"] in {"FLATTENING_NO_CAT", "FLATTENING_CAT_UNRESOLVED"}
+    out = analysis.analyze_p1(scores, samples, entries, V1, integrity_ok=True, sample_k=25, n_boot=49, n_ref=500)
+    assert out["outcome"]["cls"] == "FLATTENING_CAT_NOT_DETECTED"
     for seed in ("2", "3"):
-        est = out["per_seed"]["primary"][seed]["estimates"]
-        assert 0.6 < est["beta"] < 0.8 and abs(est["C3"]) < 0.15
+        block = out["families"]["primary"]["seeds"][seed]
+        assert 0.6 < block["descriptive"]["beta"] < 0.8 and abs(block["tests"]["C3"]["estimate"]) < 0.15
     assert all(v["agreement"]["passed"] for v in out["instrument"].values())
 
 
 def test_end_to_end_cat_residual_detected():
     scores, samples, entries = _scores(bump=0.6, seed=3)
-    out = analysis.analyze_p1(scores, samples, entries, V1, integrity_ok=True, sample_k=25, n_boot=99, n_flip=99)
+    out = analysis.analyze_p1(scores, samples, entries, V1, integrity_ok=True, sample_k=25, n_boot=49, n_ref=500)
     assert out["outcome"]["cls"] in {"CAT_DOMINANT", "CAT_RESIDUAL_NOT_DOMINANT"}
 
 
-def test_end_to_end_p2_generic_persona_teacher():
+def test_end_to_end_p2_flattening_both_teachers():
     scores, _samples, entries = _scores(seed=5)
     rng = np.random.default_rng(9)
     # dog students: same tempering as cat students, no trait bump; dog teacher: dog-concentrated
@@ -75,6 +75,6 @@ def test_end_to_end_p2_generic_persona_teacher():
             z = scores[key]["word_logp"].copy()
             z[0], z[1] = z[1], z[0] + 3.0
             scores[f"T_dog|{stem}|{cell}"] = {"word_logp": z, "decoration_mass": 0.0, "emoji_mass": 0.0}
-    out = analysis.analyze_p2(scores, entries, integrity_ok=True, n_boot=99, n_flip=49)
-    assert out["outcome"]["cls"] in {"GENERIC_PERSONA_TEACHER", "P2_NULL_OR_MIXED"}
+    out = analysis.analyze_p2(scores, entries, c2_confirmed=True, integrity_ok=True, n_boot=49, n_ref=500)
+    assert out["outcome"]["cls"] in {"FLATTENING_BOTH_TEACHERS", "P2_NULL_OR_MIXED"}
     assert not out["outcome"]["confirmed"]["K1"] and not out["outcome"]["confirmed"]["K2"]

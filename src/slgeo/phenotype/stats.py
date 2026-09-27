@@ -25,9 +25,16 @@ distribution (pre-freeze audit). A word's residual is taken out of fit (the word
 intercept), and the prediction is never renormalized over the word itself (pre-freeze audit).
 
 Claims are compositional: C3 is the target's log-odds against the mass-weighted non-target words beyond the fitted
-tempering. It is not "the target's probability rose"; that stronger statement needs the dominance label or the
-mass-matched contrast (pre-freeze audit). ``adequacy`` checks the tempering model for frequency-dependent
-misfit (e.g. a probability floor), which would leak into C3-C5.
+tempering. It is not "the target's probability rose"; that stronger statement needs the dominance label (pre-freeze
+audit). A trait-residual claim is made in the robust form: the tempering residual **and** the mass-matched contrast
+(target vs the median of its five base-mass neighbours, taxonomic neighbours excluded) must both pass, so a smooth frequency-dependent misfit of the tempering
+model (a probability floor, depth-dependent noise, a rare target) cannot create the claim (v1 audit F1/F3).
+
+Level of inference (v2, after the v1 final statistics audit). Teacher-condition claims generalize over training
+runs; stems are measurement units inside a run. ``run_level`` tests a contrast statistic against a variance that
+adds the run-level component, estimated from within-condition cross-seed pairs (lambda = 1: the two runs of a
+within-condition pair are exchangeable), to the stem-bootstrap variance, and refers the studentized statistic to a
+Gaussian random-effects pivot over the six runs. lambda-hat is re-estimated in every bootstrap draw.
 
 Bootstrap draws in which a fit is degenerate are redrawn and counted; more than ``MAX_DEGENERATE`` of the draws
 is a TECHNICAL failure.
@@ -36,6 +43,7 @@ is a TECHNICAL failure.
 from __future__ import annotations
 
 import hashlib
+import itertools
 from dataclasses import dataclass
 from typing import Callable, Mapping, Sequence
 
@@ -45,11 +53,14 @@ from scipy.stats import binom, norm, rankdata
 
 N_BOOT = 10_000
 N_FLIP = 9_999
+N_REF = 100_000
 SEED = 20260926
 ALPHA = 0.05
 LOGQ_FLOOR = 40.0
 MAX_DEGENERATE = 0.01
-MASS_MATCHED_K = 3
+MASS_MATCHED_K = 5
+# per-run run-offset variance / mean stem-bootstrap variance: the nuisance grid of the run-level pivot (sup)
+RHO_GRID = (0.0, 0.1, 0.3, 1.0, 3.0, 10.0, 100.0)
 _CHUNK = 256
 
 
@@ -117,12 +128,6 @@ def _p_upper(null: np.ndarray, observed: float) -> float:
     return float((1 + np.count_nonzero(null >= observed)) / (1 + null.size))
 
 
-def _swap(a: np.ndarray, b: np.ndarray, flip: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Per-stem label swap: rows with flip < 0 exchange a and b."""
-    m = (flip < 0)[:, None]
-    return np.where(m, b, a), np.where(m, a, b)
-
-
 def _nontarget(n_words: int, targets: Sequence[int]) -> np.ndarray:
     excluded = set(int(t) for t in targets)
     return np.array([w for w in range(n_words) if w not in excluded])
@@ -158,11 +163,36 @@ def _centered(logq_y, logq_x, words, logq_ref):
     return logq_x - xbar, logq_y - ybar, u
 
 
+def _stem_weights(stem_w, n: int) -> np.ndarray:
+    """Per-stem weights normalized to mean 1 (``None`` = equal weights)."""
+    if stem_w is None:
+        return np.ones(n)
+    w = np.asarray(stem_w, dtype=np.float64)
+    if w.shape != (n,) or not np.all(w > 0):
+        raise PhenotypeStatsError("stem weights must be positive, one per stem")
+    return w * (n / w.sum())
+
+
+def family_weights(families: Sequence[str]) -> np.ndarray:
+    """Equal weight per stem family (stratum), equal weight per stem within a family; mean 1."""
+    families = list(families)
+    counts = {f: families.count(f) for f in set(families)}
+    return np.array([len(families) / (len(counts) * counts[f]) for f in families])
+
+
+def wmean(values: np.ndarray, stem_w=None) -> float:
+    """Stem-weighted mean over axis 0 of a per-stem vector."""
+    w = _stem_weights(stem_w, values.shape[0])
+    return float((w * values).sum() / w.sum())
+
+
 def fit_beta(
-    logq_y: np.ndarray, logq_x: np.ndarray, words: np.ndarray, logq_ref: np.ndarray, lam: float = 1.0,
+    logq_y: np.ndarray, logq_x: np.ndarray, words: np.ndarray, logq_ref: np.ndarray, lam: float = 1.0, stem_w=None,
 ) -> float:
-    """Deming tempering slope over the given words for noise-variance ratio ``lam`` (inf = OLS of y on x)."""
+    """Deming tempering slope over the given words for noise-variance ratio ``lam`` (inf = OLS of y on x); stems
+    weighted by ``stem_w``."""
     xc, yc, u = _centered(logq_y, logq_x, words, logq_ref)
+    u = u * _stem_weights(stem_w, u.shape[0])[:, None]
     sxx = (u * xc[:, words] ** 2).sum()
     syy = (u * yc[:, words] ** 2).sum()
     sxy = (u * xc[:, words] * yc[:, words]).sum()
@@ -178,12 +208,13 @@ def fit_beta(
 
 def residuals(
     logq_y: np.ndarray, logq_x: np.ndarray, logq_ref: np.ndarray, targets: Sequence[int] = (), lam: float = 1.0,
+    stem_w=None,
 ) -> tuple[np.ndarray, float]:
     """Per-stem residuals of every word against the tempered x, with beta and the per-stem intercept fitted on the
     non-target words (weights from the reference arm). Residuals of the targets are out of fit; those of the other
     words are in fit. Returns ([S, W] residuals, beta)."""
     words = _nontarget(logq_y.shape[1], targets)
-    beta = fit_beta(logq_y, logq_x, words, logq_ref, lam)
+    beta = fit_beta(logq_y, logq_x, words, logq_ref, lam, stem_w)
     xc, yc, _ = _centered(logq_y, logq_x, words, logq_ref)
     return yc - beta * xc, beta
 
@@ -197,7 +228,7 @@ class Lambda:
 
 def estimate_lambda(
     pairs_y: Sequence[tuple[np.ndarray, np.ndarray]], pairs_x: Sequence[tuple[np.ndarray, np.ndarray]],
-    logq_ref: np.ndarray, targets: Sequence[int] = (),
+    logq_ref: np.ndarray, targets: Sequence[int] = (), stem_w=None,
 ) -> Lambda:
     """lambda = var(noise of the treated condition) / var(noise of the reference condition), from within-condition
     cross-seed pairs (e.g. S_i - S_j and N_i - N_j): weighted variance of the per-stem centered difference over the
@@ -211,7 +242,7 @@ def estimate_lambda(
             a, b = _finite(a, "pair"), _finite(b, "pair")
             words = _nontarget(a.shape[1], targets)
             _, dc, u = _centered(a - b, np.zeros_like(a), words, logq_ref)
-            values.append(float((u * dc[:, words] ** 2).sum() / a.shape[0]))
+            values.append(wmean((u * dc[:, words] ** 2).sum(axis=1), stem_w))
         return float(np.mean(values))
 
     vy, vx = pooled(pairs_y), pooled(pairs_x)
@@ -321,7 +352,8 @@ def target_residual(
 
 
 def mass_matched_controls(logq_ref: np.ndarray, target: int, k: int = MASS_MATCHED_K, exclude: Sequence[int] = ()):
-    """The k non-target words whose mean reference log q is closest to the target's (fixed by the reference arm)."""
+    """The k words whose mean reference log q is closest to the target's (fixed by the reference arm), never the
+    target or an ``exclude`` word (the other trait word, taxonomic neighbours)."""
     mean = _finite(logq_ref, "ref").mean(axis=0)
     candidates = _nontarget(mean.size, (target, *exclude))
     order = np.argsort(np.abs(mean[candidates] - mean[target]), kind="stable")
@@ -354,83 +386,112 @@ def mass_matched_contrast(
     )
 
 
-# --- model adequacy ---------------------------------------------------------------------------------------------
+# --- mass-matched and dominance contrast statistics (scalar, larger = stronger effect) -----------------------
 
 
-@dataclass(frozen=True)
-class Adequacy:
-    curvature: float  # quadratic coefficient of the mean in-fit residual on the word's mean centered log q_x
-    ci95: tuple[float, float]
-    adequate: bool
+def target_stat(target: int, exclude: Sequence[int] = ()) -> Callable[..., float]:
+    """C3 / K1 / K2 statistic: stem-weighted mean of the target's out-of-fit residual beyond the tempering;
+    ``exclude`` words are kept out of the fit (the other trait word)."""
+    targets = (target, *exclude)
+    return lambda y, x, ref, lam, w=None: wmean(residuals(y, x, ref, targets, lam, w)[0][:, target], w)
 
 
-def _curvature(logq_y, logq_x, logq_ref, targets, lam) -> float:
+def mass_matched_stat(target: int, controls: Sequence[int], exclude: Sequence[int] = ()) -> Callable[..., float]:
+    """Mass-matched contrast: the target's mean residual minus the median over the control words of their mean
+    residuals; target, controls and ``exclude`` out of fit. The median keeps the contrast valid if up to two of the
+    five controls carry an effect of their own."""
+    controls = np.asarray(controls, dtype=int)
+    targets = (target, *controls.tolist(), *exclude)
+
+    def stat(y, x, ref, lam, w=None):
+        r, _ = residuals(y, x, ref, targets, lam, w)
+        return wmean(r[:, target], w) - float(np.median([wmean(r[:, c], w) for c in controls]))
+
+    return stat
+
+
+def flattening_stat(targets: Sequence[int]) -> Callable[..., float]:
+    """C2 / K3 / K5 statistic: -log beta over the non-target words (positive = flattening). At lambda = 1 the Deming
+    slope is reciprocal under exchange of y and x, so the within-pair statistic is antisymmetric."""
+    targets = tuple(targets)
+    return lambda y, x, ref, lam, w=None: -float(np.log(fit_beta(y, x, _nontarget(y.shape[1], targets), ref, lam, w)))
+
+
+def dominance_stat(target: int, other: int, exclude: Sequence[int] = ()) -> Callable[..., float]:
+    """Dominance contrast d_w: mean of r_target - r_w, the pair (and ``exclude``) out of fit."""
+    targets = (target, int(other), *exclude)
+
+    def stat(y, x, ref, lam, w=None):
+        r, _ = residuals(y, x, ref, targets, lam, w)
+        return wmean(r[:, target] - r[:, other], w)
+
+    return stat
+
+
+# --- model adequacy (descriptive) -------------------------------------------------------------------------------
+
+
+def _curvature(logq_y, logq_x, logq_ref, targets, lam, stem_w=None) -> float:
     words = _nontarget(logq_y.shape[1], targets)
-    r, _ = residuals(logq_y, logq_x, logq_ref, targets, lam)
+    r, _ = residuals(logq_y, logq_x, logq_ref, targets, lam, stem_w)
     xc, _, _ = _centered(logq_y, logq_x, words, logq_ref)
-    m, x = r[:, words].mean(axis=0), xc[:, words].mean(axis=0)
+    w = _stem_weights(stem_w, r.shape[0])[:, None]
+    m, x = (w * r[:, words]).mean(axis=0), (w * xc[:, words]).mean(axis=0)
     design = np.stack([np.ones_like(x), x, x * x], axis=1)
     coef, *_ = np.linalg.lstsq(design, m, rcond=None)
     return float(coef[2])
 
 
-def adequacy(
-    logq_y, logq_x, logq_ref, targets: Sequence[int], *, lam: float = 1.0, n_boot: int = N_BOOT, seed: int = SEED,
-) -> Adequacy:
-    """Tempering-model adequacy: the mean in-fit residual of the non-target words must show no quadratic trend in
-    the word's mean centered log q_x (a probability floor or other frequency-dependent misfit produces one).
-    Adequate iff the 95 % stem-bootstrap CI of the curvature covers 0. A failure bars C3-C5 claims."""
-    logq_y, logq_x, logq_ref = _finite(logq_y, "y"), _finite(logq_x, "x"), _finite(logq_ref, "ref")
-    observed = _curvature(logq_y, logq_x, logq_ref, targets, lam)
-    boots = _bootstrap(lambda idx: _curvature(logq_y[idx], logq_x[idx], logq_ref[idx], targets, lam),
-                       logq_y.shape[0], n_boot, seed)
-    ci = (float(np.quantile(boots, 0.025)), float(np.quantile(boots, 0.975)))
-    return Adequacy(observed, ci, bool(ci[0] <= 0.0 <= ci[1]))
+def curvature_stat(targets: Sequence[int]) -> Callable[..., float]:
+    """Descriptive tempering-model diagnostic: quadratic coefficient of the mean in-fit residual of the non-target
+    words on their mean centered log q_x. v2 reports it with its run-level z; it gates nothing (a pretest on it cost
+    most of the power under run variation and fired on single movers; v1 audit F3)."""
+    targets = tuple(targets)
+    return lambda y, x, ref, lam, w=None: _curvature(y, x, ref, targets, lam, w)
 
 
-# --- C4 / C5 / K4: profile statistics with label-swap nulls -----------------------------------------------------
+# --- descriptive profile statistics (C4 / C5 / K4) --------------------------------------------------------------
+#
+# v2: descriptive only. A per-stem S/N label swap reproduces "S and N are exchangeable", which is false whenever S is
+# tempered, and every tempered contrast carries a frequency trend that within-condition pairs do not (v1 audit F2).
+# No valid run-level null exists with three runs per condition, so no p-value is reported.
 
 
 @dataclass(frozen=True)
-class Concordance:
-    rho: float
-    p: float
+class ProfileRho:
+    rho: float  # Spearman between the two profiles
+    rho_reference_vs_mass: float  # Spearman of the reference profile against the words' mean base log q
+    rho_partial_mass: float  # partial Spearman given the words' mean base log q
+
+
+def _partial(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
+    rab, rac, rbc = spearman(a, b), spearman(a, c), spearman(b, c)
+    denom = np.sqrt(max((1 - rac ** 2) * (1 - rbc ** 2), 0.0))
+    if denom == 0:
+        raise PhenotypeStatsError("Partial correlation undefined")
+    return float((rab - rac * rbc) / denom)
 
 
 def _profile(logq_y, logq_x, logq_ref, targets, cols, lam) -> np.ndarray:
     return residuals(logq_y, logq_x, logq_ref, targets, lam)[0][:, cols].mean(axis=0)
 
 
-def _swap_null(stat: Callable[[np.ndarray, np.ndarray], float], a, b, n_flip, seed) -> np.ndarray:
-    null = []
-    degenerate = 0
-    for flip in _signs(a.shape[0], n_flip + int(MAX_DEGENERATE * n_flip) + 1, seed):
-        if len(null) == n_flip:
-            break
-        try:
-            null.append(stat(*_swap(a, b, flip)))
-        except PhenotypeStatsError:
-            degenerate += 1
-    if len(null) < n_flip:
-        raise PhenotypeStatsError(f"{degenerate} degenerate label-swap draws")
-    return np.array(null)
+def _profile_rho(reference: np.ndarray, observed: np.ndarray, mass: np.ndarray) -> ProfileRho:
+    return ProfileRho(spearman(reference, observed), spearman(reference, mass), _partial(reference, observed, mass))
 
 
 def shadow_concordance(
     logq_teacher, logq_base, logq_teacher_ref, logq_s, logq_n, target: int, *, lam: float = 1.0,
-    n_flip: int = N_FLIP, seed: int = SEED,
-) -> Concordance:
-    """C4: Spearman over non-target words between the tempering residual profiles of (teacher vs base; OLS, base is
-    noise-free; weights = mean of the neutral students) and (S vs N; Deming with ``lam``; weights = base).
-    Null: per-stem S/N label swap, beta refitted (teacher profile fixed)."""
+) -> ProfileRho:
+    """C4 (descriptive): Spearman over non-target words between the tempering residual profiles of (teacher vs base;
+    OLS, base is noise-free; weights = mean of the neutral students) and (S vs N; Deming with ``lam``; weights =
+    base)."""
     logq_s, logq_n, logq_base = _finite(logq_s, "s"), _finite(logq_n, "n"), _finite(logq_base, "base")
     cols = _nontarget(logq_s.shape[1], (target,))
     teacher = _profile(_finite(logq_teacher, "teacher"), logq_base, _finite(logq_teacher_ref, "teacher_ref"),
                        (target,), cols, np.inf)
-    rho = spearman(teacher, _profile(logq_s, logq_n, logq_base, (target,), cols, lam))
-    null = _swap_null(lambda a, b: spearman(teacher, _profile(a, b, logq_base, (target,), cols, lam)),
-                      logq_s, logq_n, n_flip, seed + 2)
-    return Concordance(rho, _p_upper(null, rho))
+    return _profile_rho(teacher, _profile(logq_s, logq_n, logq_base, (target,), cols, lam),
+                        logq_base[:, cols].mean(axis=0))
 
 
 def residual_profile(
@@ -444,17 +505,14 @@ def residual_profile(
 
 def profile_replication(
     reference: Mapping[str, float], panel_words: Sequence[str], logq_s, logq_n, logq_ref, target: int, *,
-    lam: float = 1.0, n_flip: int = N_FLIP, seed: int = SEED,
-) -> Concordance:
-    """C5: Spearman between a frozen development residual profile (word -> value; ranks only) and the new seed's
-    residual profile over the same words. Null: per-stem S/N label swap, beta refitted."""
+    lam: float = 1.0,
+) -> ProfileRho:
+    """C5 (descriptive): Spearman between a frozen development residual profile (word -> value; ranks only) and the
+    new seed's residual profile over the same words."""
     logq_s, logq_n, logq_ref = _finite(logq_s, "s"), _finite(logq_n, "n"), _finite(logq_ref, "ref")
     cols = np.array([list(panel_words).index(w) for w in reference])
     ref = np.array([reference[w] for w in reference], dtype=np.float64)
-    rho = spearman(ref, _profile(logq_s, logq_n, logq_ref, (target,), cols, lam))
-    null = _swap_null(lambda a, b: spearman(ref, _profile(a, b, logq_ref, (target,), cols, lam)),
-                      logq_s, logq_n, n_flip, seed + 3)
-    return Concordance(rho, _p_upper(null, rho))
+    return _profile_rho(ref, _profile(logq_s, logq_n, logq_ref, (target,), cols, lam), logq_ref[:, cols].mean(axis=0))
 
 
 def fold_of(stem_ids: Sequence[str]) -> np.ndarray:
@@ -464,12 +522,11 @@ def fold_of(stem_ids: Sequence[str]) -> np.ndarray:
 
 def shared_movers(
     logq_s, logq_n_for_s, logq_d, logq_n_for_d, logq_ref, targets: Sequence[int], stem_ids: Sequence[str], *,
-    lam_s: float = 1.0, lam_d: float = 1.0, n_flip: int = N_FLIP, seed: int = SEED,
-) -> Concordance:
-    """K4: Spearman over non-target words between the (S_k vs N_k) residual profile on fold 0 and the
-    (D_k vs N_j, j != k) residual profile on fold 1. Disjoint folds remove shared stem noise and a different neutral
-    seed removes shared run-level word offsets of N (pre-freeze audit). Null: per-stem label swap
-    within each fold, beta refitted."""
+    lam_s: float = 1.0, lam_d: float = 1.0,
+) -> ProfileRho:
+    """K4 (descriptive): Spearman over non-target words between the (S_k vs N_k) residual profile on fold 0 and the
+    (D_k vs N_j, j != k) residual profile on fold 1 (disjoint folds remove shared stem noise, a different neutral seed
+    removes shared run offsets of N). The mass column uses the fold-0 reference."""
     logq_s, logq_d = _finite(logq_s, "s"), _finite(logq_d, "d")
     logq_n_for_s, logq_n_for_d = _finite(logq_n_for_s, "n_s"), _finite(logq_n_for_d, "n_d")
     logq_ref = _finite(logq_ref, "ref")
@@ -479,59 +536,201 @@ def shared_movers(
     cols = _nontarget(logq_s.shape[1], targets)
     a0, n0, r0 = logq_s[folds == 0], logq_n_for_s[folds == 0], logq_ref[folds == 0]
     d1, n1, r1 = logq_d[folds == 1], logq_n_for_d[folds == 1], logq_ref[folds == 1]
-    rho = spearman(_profile(a0, n0, r0, targets, cols, lam_s), _profile(d1, n1, r1, targets, cols, lam_d))
-    rng0, rng1 = _signs(a0.shape[0], n_flip, seed + 5), _signs(d1.shape[0], n_flip, seed + 6)
-    null = np.empty(n_flip)
-    for i in range(n_flip):
-        x0, y0 = _swap(a0, n0, rng0[i])
-        x1, y1 = _swap(d1, n1, rng1[i])
-        null[i] = spearman(_profile(x0, y0, r0, targets, cols, lam_s), _profile(x1, y1, r1, targets, cols, lam_d))
-    return Concordance(rho, _p_upper(null, rho))
-
-
-# --- cat-specific label -----------------------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Dominance:
-    t: np.ndarray  # per-contrast t of r_target - r_w
-    critical: np.ndarray  # per-contrast label-swap critical values
-    passed: bool
-
-
-def _dominance_contrasts(logq_y, logq_x, logq_ref, target: int, others: np.ndarray, lam: float) -> np.ndarray:
-    """Per stem d_w = r_target - r_w, both residuals out of fit (the pair is excluded from beta and intercept)."""
-    cols = []
-    for w in others:
-        r, _ = residuals(logq_y, logq_x, logq_ref, (target, int(w)), lam)
-        cols.append(r[:, target] - r[:, w])
-    return np.stack(cols, axis=1)
-
-
-def target_dominance(
-    logq_y, logq_x, logq_ref, target: int, *, lam: float = 1.0, level: float = 0.95, n_flip: int = N_FLIP,
-    seed: int = SEED,
-) -> Dominance:
-    """Label rule: the target's residual exceeds every other word's residual. Intersection-union test: pass iff
-    t_w > c_w for every w, c_w = ``level`` quantile of t*_w under the per-stem label swap (beta refitted). No max-
-    correction is needed for an all-contrasts claim (pre-freeze audit)."""
-    logq_y, logq_x, logq_ref = _finite(logq_y, "y"), _finite(logq_x, "x"), _finite(logq_ref, "ref")
-    others = _nontarget(logq_y.shape[1], (target,))
-    t_obs = _t(_dominance_contrasts(logq_y, logq_x, logq_ref, target, others, lam))
-    null = []
-    for flip in _signs(logq_y.shape[0], n_flip, seed + 7):
-        a, b = _swap(logq_y, logq_x, flip)
-        try:
-            null.append(_t(_dominance_contrasts(a, b, logq_ref, target, others, lam)))
-        except PhenotypeStatsError:
-            continue
-    if len(null) < (1 - MAX_DEGENERATE) * n_flip - 1:
-        raise PhenotypeStatsError("Too many degenerate label-swap draws")
-    critical = np.quantile(np.stack(null), level, axis=0)
-    return Dominance(t_obs, critical, bool(np.all(t_obs > critical)))
+    return _profile_rho(_profile(a0, n0, r0, targets, cols, lam_s), _profile(d1, n1, r1, targets, cols, lam_d),
+                        r0[:, cols].mean(axis=0))
 
 
 # --- run level --------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RunLevel:
+    """Run-level test of one treated contrast. ``se_stem``: stem-bootstrap SD; ``run_var``: run-level variance of a
+    between-run contrast, estimated from the within-condition pairs; ``se`` = sqrt(se_stem^2 + run_var);
+    ``p``: one-sided (larger = effect); ``p_two``: two-sided; the intervals and ``upper95`` (one-sided 95 % upper
+    bound) use the quantiles of the reference pivot."""
+
+    estimate: float
+    se_stem: float
+    run_var: float
+    se: float
+    z: float
+    p: float
+    p_two: float
+    ci90: tuple[float, float]
+    ci95: tuple[float, float]
+    upper95: float
+
+    def equivalent(self, margin: float) -> bool:
+        """Run-level 90 % CI inside (-margin, +margin) (two one-sided tests at 0.05)."""
+        return bool(-margin < self.ci90[0] and self.ci90[1] < margin)
+
+
+def _condition(label: str) -> str:
+    return label.rstrip("0123456789")
+
+
+def run_level(
+    statistic: Callable[..., float],
+    arms: Mapping[str, np.ndarray],
+    treated: Mapping[str, tuple[str, str]],
+    within: Sequence[tuple[str, str]],
+    logq_ref: np.ndarray,
+    lam: Callable[[np.ndarray | None], float],
+    *, stem_w=None, strata: Sequence | None = None, pooled: Sequence[str] = (),
+    n_boot: int = N_BOOT, n_ref: int = N_REF, seed: int = SEED,
+) -> dict[str, RunLevel]:
+    """Run-level test of ``statistic(y, x, ref, lam, w)`` (larger = stronger effect) for each treated contrast.
+
+    ``arms``: run label (condition letter + seed, e.g. "S2") -> [S, W] log q; ``treated``: key -> (y label, x label),
+    evaluated at ``lam(idx)`` (lambda-hat re-estimated on the resampled stems ``idx``; ``lam(None)`` on all stems);
+    ``within``: within-condition cross-seed pairs of the two conditions, evaluated at lambda = 1 in both orders;
+    ``stem_w``: stem weights (equal family strata); ``strata``: stratum per stem for the bootstrap; ``pooled``: treated
+    keys whose mean is reported under the key "pooled" (an interval, not a decision).
+
+    1. theta_k and every within-pair value on all stems; the stratified stem bootstrap (one joint resample of all arms
+       per draw) gives s_k^2, the per-pair variances s_w^2 and the joint stem-level deviations of all statistics.
+    2. Per condition c, R_c = max(0, mean over the c-pairs of (T_w^2 - s_w^2)), T_w^2 = mean of the two orders'
+       squares: an estimate of var(g_a - g_b) = 2 v_c for the statistic. se_k = sqrt(s_k^2 + R_y / 2 + R_x / 2).
+       (For residual statistics under tempering the reference condition's share is over-counted by 1 / beta^2:
+       conservative.)
+    3. z_k = theta_k / se_k is referred to the random-effects pivot over the runs: e_r ~ N(0, v_c(r)), the stem part
+       taken from the same bootstrap draw for theta*_k and every T*_w (keeps the stem-level dependence), R*_c and z*_k
+       computed as observed. The per-run variances (v_y, v_x) are a nuisance: p is the supremum of the pivot's tail
+       probability over ``RHO_GRID`` x ``RHO_GRID`` (v_c / mean s_k^2), and the interval quantiles are the largest over
+       the grid, so the test is valid for every value of the nuisance under the model.
+    """
+    labels = sorted({l for pair in treated.values() for l in pair} | {l for pair in within for l in pair})
+    data = {l: _finite(arms[l], l) for l in labels}
+    logq_ref = _finite(logq_ref, "ref")
+    if not within:
+        raise PhenotypeStatsError("No within-condition pairs")
+    n_stems = logq_ref.shape[0]
+    w_all = _stem_weights(stem_w, n_stems)
+    strata = np.zeros(n_stems, dtype=int) if strata is None else np.asarray(strata)
+    groups = [np.flatnonzero(strata == s) for s in dict.fromkeys(strata.tolist())]
+    keys = list(treated)
+    orders = [(a, b) for a, b in within] + [(b, a) for a, b in within]
+
+    def evaluate(idx):
+        sub = data if idx is None else {l: v[idx] for l, v in data.items()}
+        ref = logq_ref if idx is None else logq_ref[idx]
+        w = w_all if idx is None else w_all[idx]
+        lam_hat = lam(idx)
+        theta = [statistic(sub[y], sub[x], ref, lam_hat, w) for y, x in (treated[k] for k in keys)]
+        pairs = [statistic(sub[a], sub[b], ref, 1.0, w) for a, b in orders]
+        return np.array(theta + pairs)
+
+    observed = evaluate(None)
+    rng = np.random.default_rng(seed)
+    draws = np.empty((n_boot, observed.size))
+    degenerate = 0
+    i = 0
+    while i < n_boot:
+        idx = np.concatenate([rng.choice(g, g.size) for g in groups])
+        try:
+            draws[i] = evaluate(idx)
+        except PhenotypeStatsError:
+            degenerate += 1
+            if degenerate > MAX_DEGENERATE * n_boot + 1:
+                raise PhenotypeStatsError(f"{degenerate} degenerate bootstrap draws")
+            continue
+        i += 1
+    var = draws.var(axis=0, ddof=1)
+    dev = draws - draws.mean(axis=0)
+    k, m = len(keys), len(within)
+    theta, s2 = observed[:k], var[:k]
+    s2_w = 0.5 * (var[k:k + m] + var[k + m:])
+    conditions = sorted({_condition(a) for a, _ in within})
+    members = {c: np.array([j for j, (a, _) in enumerate(within) if _condition(a) == c]) for c in conditions}
+
+    def run_var(t2):  # t2 [..., m] -> {c: R_c [...]}
+        return {c: np.maximum(0.0, (t2[..., members[c]] - s2_w[members[c]]).mean(axis=-1)) for c in conditions}
+
+    t2_obs = 0.5 * (observed[k:k + m] ** 2 + observed[k + m:] ** 2)
+    r_obs = run_var(t2_obs)
+    targets = {key: (_condition(treated[key][0]), _condition(treated[key][1])) for key in keys}
+    se = np.array([np.sqrt(s2[j] + r_obs[targets[key][0]] / 2 + r_obs[targets[key][1]] / 2)
+                   for j, key in enumerate(keys)])
+    if np.any(se <= 0):
+        raise PhenotypeStatsError("Zero run-level standard error")
+    z = theta / se
+    pool = [keys.index(key) for key in pooled]
+    if pool:
+        theta_pool = float(theta[pool].mean())
+        s2_pool = float(draws[:, pool].mean(axis=1).var(ddof=1))
+        v_pool = sum(r_obs[targets[keys[j]][0]] / 2 + r_obs[targets[keys[j]][1]] / 2 for j in pool) / len(pool) ** 2
+        se_pool = float(np.sqrt(s2_pool + v_pool))
+        z_pool = theta_pool / se_pool
+
+    ref_rng = np.random.default_rng(seed + 1)
+    runs = {l: j for j, l in enumerate(labels)}
+    run_cond = [_condition(l) for l in labels]
+    scale = float(np.mean(s2)) if np.mean(s2) > 0 else float(np.mean(s2_w))
+    b = ref_rng.integers(0, n_boot, n_ref)
+    base_noise = ref_rng.standard_normal((n_ref, len(labels)))
+    worst = {"p": np.zeros(k), "two": np.zeros(k), "q90": np.zeros(k), "q95": np.zeros(k), "one": np.zeros(k)}
+    worst_pool = {"p": 0.0, "two": 0.0, "q90": 0.0, "q95": 0.0, "one": 0.0}
+    grids = [dict(zip(conditions, g)) for g in itertools.product(RHO_GRID, repeat=len(conditions))]
+    for grid in grids:
+        sd = np.array([np.sqrt(grid[c] * scale) for c in run_cond])
+        e = base_noise * sd
+        stem = dev[b]
+        t_ab = np.stack([e[:, runs[a_]] - e[:, runs[b_]] for a_, b_ in within], axis=1) + stem[:, k:k + m]
+        t_ba = -np.stack([e[:, runs[a_]] - e[:, runs[b_]] for a_, b_ in within], axis=1) + stem[:, k + m:]
+        r_star = run_var(0.5 * (t_ab ** 2 + t_ba ** 2))
+        th_star = np.stack([e[:, runs[treated[key][0]]] - e[:, runs[treated[key][1]]] for key in keys], axis=1)
+        th_star = th_star + stem[:, :k]
+        se_star = np.stack([np.sqrt(s2[j] + r_star[targets[key][0]] / 2 + r_star[targets[key][1]] / 2)
+                            for j, key in enumerate(keys)], axis=1)
+        z_star = th_star / se_star
+        worst["p"] = np.maximum(worst["p"], (1 + (z_star >= z).sum(axis=0)) / (1 + n_ref))
+        worst["two"] = np.maximum(worst["two"], (1 + (np.abs(z_star) >= np.abs(z)).sum(axis=0)) / (1 + n_ref))
+        q = np.quantile(np.abs(z_star), [0.90, 0.95], axis=0)
+        worst["q90"], worst["q95"] = np.maximum(worst["q90"], q[0]), np.maximum(worst["q95"], q[1])
+        worst["one"] = np.maximum(worst["one"], np.quantile(z_star, 0.95, axis=0))
+        if pool:
+            zp = th_star[:, pool].mean(axis=1) / np.sqrt(
+                s2_pool + sum(r_star[targets[keys[j]][0]] / 2 + r_star[targets[keys[j]][1]] / 2 for j in pool)
+                / len(pool) ** 2)
+            worst_pool["p"] = max(worst_pool["p"], (1 + np.count_nonzero(zp >= z_pool)) / (1 + n_ref))
+            worst_pool["two"] = max(worst_pool["two"], (1 + np.count_nonzero(np.abs(zp) >= abs(z_pool))) / (1 + n_ref))
+            qp = np.quantile(np.abs(zp), [0.90, 0.95])
+            worst_pool["q90"], worst_pool["q95"] = max(worst_pool["q90"], qp[0]), max(worst_pool["q95"], qp[1])
+            worst_pool["one"] = max(worst_pool["one"], float(np.quantile(zp, 0.95)))
+
+    def result(est, s_stem, rv, s, zz, wst):
+        return RunLevel(float(est), float(s_stem), float(rv), float(s), float(zz), float(wst["p"]), float(wst["two"]),
+                        (float(est - wst["q90"] * s), float(est + wst["q90"] * s)),
+                        (float(est - wst["q95"] * s), float(est + wst["q95"] * s)), float(est + wst["one"] * s))
+
+    out = {}
+    for j, key in enumerate(keys):
+        rv = r_obs[targets[key][0]] / 2 + r_obs[targets[key][1]] / 2
+        out[key] = result(theta[j], np.sqrt(s2[j]), rv, se[j], z[j], {n: v[j] for n, v in worst.items()})
+    if pool:
+        out["pooled"] = result(theta_pool, np.sqrt(s2_pool), v_pool, se_pool, z_pool, worst_pool)
+    return out
+
+
+def lambda_of(pairs_y, pairs_x, logq_ref, targets: Sequence[int], stem_w=None) -> Callable[[np.ndarray | None], float]:
+    """lambda-hat as a function of the resampled stems (``None`` = all stems), for ``run_level``."""
+    w_all = None if stem_w is None else np.asarray(stem_w, dtype=np.float64)
+
+    def lam(idx):
+        if idx is None:
+            return estimate_lambda(pairs_y, pairs_x, logq_ref, targets, w_all).value
+        sub = lambda pairs: [(a[idx], b[idx]) for a, b in pairs]
+        return estimate_lambda(sub(pairs_y), sub(pairs_x), logq_ref[idx], targets,
+                               None if w_all is None else w_all[idx]).value
+
+    return lam
+
+
+def robust_p(tempering: RunLevel, mass_matched: RunLevel) -> float:
+    """Intersection-union p of the robust trait-residual claim: both the tempering residual and the mass-matched
+    contrast must pass. Valid if either nuisance model holds (v1 audit F1/F3)."""
+    return max(tempering.p, mass_matched.p)
 
 
 @dataclass(frozen=True)
@@ -546,8 +745,8 @@ def run_level_gate(
     treated: tuple,
     within_pairs: Sequence[tuple],
 ) -> RunGate:
-    """Run-level check: ``statistic(*treated)`` must exceed the statistic on every within-condition cross-seed
-    pair, evaluated in **both orders** of each pair (a one-order gate passed 17 % of null runs per seed; pre-freeze audit). ``statistic`` must be oriented so that larger = stronger effect in the pre-registered direction."""
+    """v1 run-level gate, kept for the descriptive C1 reading: ``statistic(*treated)`` must exceed the statistic on
+    every within-condition cross-seed pair, evaluated in both orders."""
     if not within_pairs:
         raise PhenotypeStatsError("No within-condition pairs")
     observed = float(statistic(*treated))
@@ -556,8 +755,8 @@ def run_level_gate(
 
 
 def run_noise_margin(statistic: Callable[..., float], within_pairs: Sequence[tuple]) -> float:
-    """Largest |statistic| over the within-condition cross-seed pairs in both orders: the size of a difference that
-    seed-to-seed training variation alone produces (used as the data-defined equivalence benchmark for C3)."""
+    """Largest |statistic| over the within-condition cross-seed pairs in both orders (descriptive noise benchmark;
+    evaluate within-condition pairs at lambda = 1)."""
     if not within_pairs:
         raise PhenotypeStatsError("No within-condition pairs")
     return float(max(abs(float(statistic(*p))) for pair in within_pairs for p in (pair, pair[::-1])))
@@ -581,22 +780,15 @@ def iut(pvalues_by_seed: Sequence[float]) -> float:
     return float(max(pvalues_by_seed))
 
 
-def seed_passes(
-    pvalues: Mapping[str, float], gates: Mapping[str, bool], *, gated: Sequence[str], alpha: float = ALPHA,
-) -> dict[str, bool]:
-    """Per seed: Holm-adjusted p <= alpha and, for gated hypotheses, the run-level gate (fails closed)."""
+def seed_passes(pvalues: Mapping[str, float], *, alpha: float = ALPHA) -> dict[str, bool]:
+    """Per seed: Holm-adjusted run-level p <= alpha."""
     adjusted = holm(pvalues)
-    return {h: adjusted[h] <= alpha and (gates.get(h, False) if h in gated else True) for h in pvalues}
+    return {h: adjusted[h] <= alpha for h in pvalues}
 
 
-def confirm(
-    pvalues_by_seed: Mapping[str, Mapping[str, float]],
-    run_gates_by_seed: Mapping[str, Mapping[str, bool]],
-    *, gated: Sequence[str] = ("C1", "C2", "C3"), alpha: float = ALPHA,
-) -> dict[str, bool]:
+def confirm(pvalues_by_seed: Mapping[str, Mapping[str, float]], *, alpha: float = ALPHA) -> dict[str, bool]:
     """Family decision: per-seed passes (``seed_passes``), conjunction (IUT) across seeds."""
-    per_seed = {s: seed_passes(p, run_gates_by_seed.get(s, {}), gated=gated, alpha=alpha)
-                for s, p in pvalues_by_seed.items()}
+    per_seed = {s: seed_passes(p, alpha=alpha) for s, p in pvalues_by_seed.items()}
     hyps = list(next(iter(pvalues_by_seed.values())))
     return {h: all(per_seed[s][h] for s in per_seed) for h in hyps}
 

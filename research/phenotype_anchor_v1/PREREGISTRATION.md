@@ -1,7 +1,7 @@
 # Phenotype Anchor v1 (P1) and matched dog-teacher control (P2) — Preregistration (DRAFT)
 
 Status: **DRAFT — not frozen, not tagged, no forward pass authorized.** The freeze requires the researcher's explicit
-approval, a clean committed tree, the final statistics audit, and `configs/validation/phenotype_anchor_v1.yaml`
+approval, a clean committed tree, the final statistics audit (v2 procedure; the v1 audit stopped the freeze), and `configs/validation/phenotype_anchor_v1.yaml`
 `contract.status: frozen` with every execution placeholder replaced from the technical validation (TV-P1).
 Tag at freeze: `prereg/phenotype-anchor-v1`.
 
@@ -23,20 +23,21 @@ scores a lowercase leading-space token that holds < 0.06 % of the probability ma
 
 **Questions.** P1: what does cat-teacher training change in the student's answer distribution, measured
 form-completely, relative to neutral students, the base and the cat teacher? Which part is cat-specific beyond a
-flattening nuisance model, which part is flattening, which part reproduces the cat teacher's non-cat profile?
+flattening nuisance model, which part is flattening, and (descriptively) which part reproduces the cat
+teacher's non-cat profile?
 P2: which part is specific to the *cat* teacher rather than induced by a matched persona teacher (dog)?
 
 ## 2. Competing hypotheses
 
 | Hypothesis | Prediction pattern (qualitative) |
 |---|---|
-| H_cat (teacher trait transferred) | cat residual beyond flattening (C3, dominance label); dog residual in dog students (K2); cat residual of cat vs dog students (K1) |
-| H_generic (persona-generated numbers perturb students generically) | no trait residuals (C3 ≈ 0, K1 ≈ 0, K2 ≈ 0); flattening and shared movers in both student types (C2, K3, K4) |
+| H_cat (teacher trait transferred) | robust cat residual (C3, dominance label); robust dog residual in dog students (K2); robust cat residual of cat vs dog students (K1) |
+| H_generic (persona-generated numbers perturb students generically) | no trait residuals (K1, K2 not confirmed; bounded by U); flattening in both student types (C2, K3); shared movers descriptive (K4) |
 | H_entropy (data entropy/diversity drives the shift) | as H_generic; flattening scales with teacher-data entropy; reproduced by an entropy-matched neutral teacher (P2b) |
 | H_mixed | C2/K3 plus smaller C3/K1 |
 | H_instrument | pattern changes across rendering × prefix cells; exact vs sampled disagreement; decorated answers carry mass |
 
-Discrimination: H_cat vs H_generic by K1/K2/K4 and C3 + label; H_mixed by C3/K1 together with C2/K3; H_generic vs
+Discrimination: H_cat vs H_generic by K1/K2 (with their upper bounds) and C3 + label, K4 descriptive; H_mixed by C3/K1 together with C2/K3; H_generic vs
 H_entropy by the dog-teacher data entropy (measured on CPU before training) and, if needed, P2b (§9.4);
 H_instrument by the 2 × 2 cells, the agreement check and the coverage diagnostic.
 
@@ -95,71 +96,104 @@ redesign; any future CTS preregistration must disclose these quantities.
 
 ### 6.1 Seeds
 
-Confirmatory = conjunction over seeds 2 and 3 (intersection-union); seed 1 = development. **Disclosed prior
-exposure of seeds 2/3:** restricted-softmax summaries (gate B1, Q + prefix, REF50), H-rendering restricted per-animal
-profiles, H-rendering greedy text, seed-2 H-rendering final states (single-token full-vocabulary profile). Never
-computed for seeds 2/3: any form-complete, sampled, Q per-animal or reserve-stem quantity. Fresh cat seeds 4/5 are
-trained only if P1 is SEED_HETEROGENEOUS or any P1 hypothesis is confirmed in exactly one of seeds 2/3.
+Confirmatory = conjunction over seeds 2 and 3 (intersection-union); seed 1 = development (its runs enter only the
+within-condition pairs and λ̂). **Disclosed prior exposure of seeds 2/3:** restricted-softmax summaries (gate B1,
+Q + prefix, REF50), H-rendering restricted per-animal profiles, H-rendering greedy text, seed-2 H-rendering final
+states (single-token full-vocabulary profile). Never computed for seeds 2/3: any form-complete, sampled, Q
+per-animal or reserve-stem quantity. **Fresh cat seeds 4/5** are trained only if the robust C3 claim (§6.3) is
+confirmed in exactly one of seeds 2/3. Then N4/N5 are trained as well (same recipe, seed k shared by S_k and N_k), and
+seeds 4/5 are analysed as a second confirmatory pair with the identical procedure (within-condition pairs over all
+five runs per condition); the P1 cat claim is confirmed iff it is confirmed in both seeds 4 and 5 (class
+CAT_RESIDUAL_CONFIRMED_ON_REPLICATION, with the label as in §7); the seed-2/3 result is reported. The two-stage rule
+has a false-claim bound of 2α in the worst case (stage 1 and stage 2 each ≤ α); the audit reports its size. Seeds
+4/5 replicate runs, not stems (same RES stems). P2 is analysed with seeds 1–3 only and is not re-run.
 
 ### 6.2 Flattening model
 
 Per stem, y = log q of the treated arm, x = log q of the reference arm: y − ȳ = β (x − x̄) + residual, bars =
 means over non-target words weighted by q of an independent weight arm (base for student contrasts; the mean of
-N1–N3 for teacher vs base). β = Deming slope with noise-variance ratio λ estimated from within-condition cross-seed
-pairs (`stats.estimate_lambda`: S_i − S_j vs N_i − N_j); OLS (λ = ∞) for contrasts against base. Residuals of
-target words are out of fit. Bootstrap draws with a degenerate fit are redrawn (> 1 % degenerate = TECHNICAL_FAIL).
+N1–N3 for teacher vs base). β = Deming slope with noise-variance ratio λ. Between-condition contrasts use λ̂ from the
+within-condition cross-seed pairs (`stats.estimate_lambda`: S_i − S_j vs N_i − N_j), re-estimated in every bootstrap
+draw; within-condition pairs use λ = 1 (their two runs are exchangeable); OLS (λ = ∞) for contrasts against base.
+Residuals of target words are out of fit. Stems are weighted so that each family (direct, identity,
+hypothetical) carries equal weight (§3), in the fit and in every mean over stems; the stem bootstrap resamples within
+family. Bootstrap draws with a degenerate fit are redrawn (> 1 % degenerate = TECHNICAL_FAIL).
 
-### 6.3 Hypotheses
+The endpoint is the prefix-averaged answer distribution (§4, three prefix replicates averaged on the probability
+scale). Averaging is nonlinear: an arm whose answers vary more across prefixes has a flatter averaged distribution.
+C2/K3 claim that the **prefix-averaged** distribution is flatter; the mean over replicates of the single-replicate β is
+reported next to it (descriptive), separating mixture flattening from a tempering of each conditional.
 
-RES stems, primary cell, S_k vs N_k, stems as units, one-sided α = 0.05, Holm over C1–C5 within seed, conjunction
-over seeds 2 and 3. **Run-level gate** for C1–C3: the S_k-vs-N_k statistic must exceed its value on every
-within-condition cross-seed pair (N_i vs N_j, S_i vs S_j, both orders).
+### 6.3 Hypotheses and the run-level test
 
-| ID | Hypothesis | Implementation |
+**Level of inference.** Claims about the teacher condition generalize over training runs; the run is the replication
+unit and stems are measurement units inside a run. Every confirmatory p-value is a run-level p-value
+(`stats.run_level`): for a contrast statistic T and seed k, θ_k = T(S_k, N_k); s_k² = stem-bootstrap variance
+(joint resampling of all arms, λ̂ re-estimated, fit refitted); from the six within-condition cross-seed pairs (both
+orders, λ = 1) the per-condition run-level variance R_c = max(0, mean over the c-pairs of (T_w² − s_w²));
+z_k = θ_k / √(s_k² + R_S/2 + R_N/2), referred to a random-effects pivot over the six runs: Gaussian run effects with
+per-run variances (v_S, v_N), the stem part taken jointly from the same bootstrap draw for θ_k and every T_w, R and z
+recomputed as observed. (v_S, v_N) is a nuisance: p is the supremum of the pivot's tail probability over the grid
+v_c / mean s_k² ∈ {0, 0.1, 0.3, 1, 3, 10, 100}, and interval quantiles are the largest over the grid. Seeds are
+treated as unpaired across conditions; a shared seed index makes the test conservative. Pooling over conditions of a
+residual statistic over-counts the reference condition's run share by 1/β² (conservative).
+
+RES stems, primary cell, S_k vs N_k, one-sided α = 0.05, Holm over the confirmatory family {C2, C3} within seed,
+conjunction over seeds 2 and 3.
+
+| ID | Hypothesis | Statistic |
 |---|---|---|
-| C1 | word-consistent redistribution | `stats.omnibus` (Σ t² of per-stem Δclr; stem sign-flip null) |
-| C2 | flattening, β < 1 | `stats.flattening` (stem bootstrap, β refitted) |
-| C3 | cat's log-odds against the mass-weighted non-cat words rises beyond the tempering | `stats.target_residual` (stem bootstrap, β refitted) |
-| C4 | teacher-shadow concordance (non-cat residual profiles, T_cat vs base and S vs N) | `stats.shadow_concordance` (per-stem label swap, β refitted) |
-| C5 | replication of the frozen seed-1 development residual profile | `stats.profile_replication` vs `research/phenotype_anchor_v1/seed1_v1_profile.json` (ranks) |
+| C2 | flattening, β < 1 | `stats.flattening_stat`: −log β (Deming, non-cat words) |
+| C3 | robust cat residual: cat's log-odds rise beyond the tempering **and** relative to its base-mass neighbours | `stats.target_stat` and `stats.mass_matched_stat`; p = max of the two run-level p-values (intersection-union) |
+
+Mass-matched contrast: cat's mean residual minus the **median** over five control words of their mean residuals
+(all out of fit). Controls = the five words closest to cat in mean base log q, never a taxonomic neighbour
+(felines lion, tiger, leopard) or dog (`panel.CONTROL_EXCLUSIONS`, fixed on text grounds). The robust form replaces a
+model-adequacy pretest: a smooth frequency-dependent misfit (a floor, depth-dependent noise, a rare target) or the
+tempering residual's own small bias under prefix averaging cannot create the claim alone. Assumptions: at most two of
+the five controls carry a condition-specific effect in the direction that raises the contrast, and the nuisance acts
+alike on cat and its mass neighbours. A shift of the controls that the teacher itself causes (a shadow on them)
+moves both components: the claim is then compositionally true but not cat-specific, which only the dominance label
+excludes.
 
 Additional pre-declared quantities:
-- **Model adequacy** (`stats.adequacy`): the mean in-fit residual of the non-target words must show no quadratic
-  trend in log q (95 % bootstrap CI of the curvature covers 0) in both confirmatory seeds; otherwise C3–C5 are not
-  interpreted (class FLATTENING_MODEL_INADEQUATE).
-- **Cat-dominance label** (`stats.target_dominance`): cat's out-of-fit residual exceeds every other panel word's
-  out-of-fit residual, per-contrast label-swap critical values (intersection-union), both seeds.
-- **Equivalence reading of C3:** the claim "no cat-specific component" is reported as "cat residual ≤ U" (upper 95 %
-  bound). Class FLATTENING_NO_CAT requires the 90 % CI of C3 inside ±m_run, m_run = largest |C3 statistic| over the
-  within-condition cross-seed pairs (`stats.run_noise_margin`): "no larger than seed-to-seed training variation".
-  Sensitivity table at fixed margins 0.05, 0.10, 0.15, 0.20, 0.30 (descriptive).
-- Mass-matched contrast (`stats.mass_matched_contrast`, secondary): cat vs the 3 words closest to cat's base mass.
+- **Cat-dominance label:** every contrast d_w = mean(r_cat − r_w), w ≠ cat (pair out of fit, `stats.dominance_stat`),
+  passes the run-level test at α (intersection-union over w), in both confirmatory seeds.
+- **Bound reading of C3:** "cat's residual is at most U", U = the larger of the two components' run-level
+  one-sided 95 % upper bounds of the seed-2/3 mean (pooled interval, same pivot). No absence class: a data-defined
+  margin measures noise, not relevance, and no relevance margin is pre-declared.
 
-### 6.4 Secondary and descriptive
+### 6.4 Secondary and descriptive (no class, modifier, trigger or branch depends on them)
 
-Secondary (α reported, no claim gated): S−base and N−base on C1–C3; the family re-run on Q + none, H + prefix, H +
-none; rendering × prefix interaction; per-word residuals with max-T intervals; entropy on NONANIMAL; sampled class
-rates; best-matching library profile; the λ estimate and its sensitivity (λ̂/1.25, 1.25 λ̂); direct-only
-sensitivity. Descriptive: seed 1; REF50; pooled summaries.
+Secondary (α reported): S−base and N−base on C2/C3; the family re-run on Q + none, H + prefix, H + none; rendering ×
+prefix interaction; per-word residuals with max-T intervals; entropy on NONANIMAL; sampled class rates;
+best-matching library profile; λ̂ and its sensitivity (λ̂/1.25, 1.25 λ̂); direct-only sensitivity.
+Descriptive: C1 word-consistent redistribution (`stats.omnibus`, stem-level p and the within-pair gate); C4
+teacher-shadow and C5 dev-profile Spearman (`stats.shadow_concordance`, `stats.profile_replication`, each with the
+reference profile's correlation to base log-mass and the partial correlation given it); the curvature diagnostic
+(`stats.curvature_stat`, run-level z); the tempering-only and mass-matched components of C3 separately; m_run (largest
+within-pair |C3| at λ = 1) and TOST decisions at fixed margins 0.05, 0.10, 0.15, 0.20, 0.30 with the run-level CI;
+seed 1; REF50; pooled summaries. C1, C4 and C5 have no valid run-level test at three runs per condition (the smallest
+exact run-permutation p for C1 is 1/15; a label-swap null for C4/C5 assumes S and N exchangeable, false under
+tempering), so they carry no p-value claim.
 
 ## 7. Outcome taxonomy (P1; first match; `slgeo.phenotype.taxonomy.classify_p1`)
 
-| Rank | Class | Condition (both confirmatory seeds unless stated) |
-|---|---|---|
-| 0 | TECHNICAL_FAIL / INSTRUMENT_FAIL | integrity, coverage or agreement failure |
-| 0.5 | FLATTENING_MODEL_INADEQUATE | adequacy fails in either seed; only C1/C2 reported |
-| 1 | CAT_DOMINANT | C3 confirmed and dominance label |
-| 2 | CAT_RESIDUAL_NOT_DOMINANT | C3 confirmed, no label (claim: "cat's log-odds residual beyond the tempering is positive", not "cat rises") |
-| 3 | FLATTENING_NO_CAT | C2 confirmed and C3 equivalent within m_run |
-| 4 | FLATTENING_CAT_UNRESOLVED | C2 confirmed, C3 neither confirmed nor equivalent |
-| 5 | REDISTRIBUTION_UNSTRUCTURED | C1 confirmed, C2 and C3 not |
-| 6 | SEED_HETEROGENEOUS | a gated hypothesis passes in exactly one seed, none in both |
-| 7 | NULL | none of C1–C3 passes in either seed (report detectable effects) |
+| Rank | Class | Condition (both confirmatory seeds unless stated) | Claim |
+|---|---|---|---|
+| 0 | TECHNICAL_FAIL / INSTRUMENT_FAIL | integrity, coverage or agreement failure | — |
+| 1 | CAT_DOMINANT | C3 confirmed and dominance label | "beyond the tempering and relative to its frequency neighbours, cat rises more than every other panel word" |
+| 2 | CAT_RESIDUAL_NOT_DOMINANT | C3 confirmed, no label | "cat's log-odds rise beyond the tempering and relative to its frequency neighbours", not "cat rises" |
+| 3 | FLATTENING_CAT_NOT_DETECTED | C2 confirmed, C3 not | "flattening; cat's residual is at most U" |
+| 4 | ONE_SEED_ONLY | C2 or C3 confirmed in exactly one seed, neither in both | per-seed statements; no heterogeneity claim (a split is mostly a power event) |
+| 5 | NO_CONFIRMED_C2_C3 | neither C2 nor C3 confirmed in either seed | "no flattening or cat residual confirmed at this power" (report U; C1 descriptively for word movers) |
 
-Modifiers: TEACHER_SHADOW (C4), REPLICATES_DEV_PROFILE (C5), RENDERING_DEPENDENT (Q + none class differs).
+No modifier. The Q + none class is reported descriptively (a class difference between two noisy cells is not a test).
+Note: "C3 confirmed in exactly one seed" (fresh-seed trigger, §6.1) is reported with any class.
 
-Claims never allowed: "no subliminal learning", "no cat information in the student", mechanism claims, population
-claims over teacher datasets (one teacher dataset per trait).
+Claims never allowed: "no subliminal learning", "no cat information in the student", "no cat component" (no
+relevance margin is pre-declared), mechanism claims, population claims over teacher datasets (one teacher dataset
+per trait).
 
 ## 8. Historical gate files (seeds 2/3)
 
@@ -177,24 +211,36 @@ Before training, on CPU: filter pass rate (bear replaces dog only if the pass ra
 (`slgeo.phenotype.p2.number_entropy`), share of completions identical to cat completions. Students D1–D3: prompt-
 matched subsets (`slgeo.phenotype.p2.prompt_matched_subset`), the seed-2/3 training recipe, same LoRA config.
 
-### 9.2 Hypotheses (seeds 2 and 3, Holm over K1–K4, run gate for K1–K3 with S_i/S_j and D_i/D_j pairs)
-K1: cat residual of S_k vs D_k > 0 (dog excluded from the fit). K2: dog residual of D_k vs S_k > 0 (cat excluded).
-K3: β(D_k vs N_k) < 1. K4: `stats.shared_movers` (S_k vs N_k on fold 0, D_k vs N_j, j ≠ k, on fold 1; cat and dog
-excluded) > 0, read against the correlation of the two teachers' residual profiles vs base.
+### 9.2 Hypotheses (seeds 2 and 3; run-level tests as §6.3 with the within-condition pairs of the two compared
+conditions; Holm over {K1, K2, K3} within seed; conjunction over seeds)
+K1 (robust): cat residual of S_k vs D_k > 0 (dog excluded from the fit) and cat vs its five mass neighbours
+(felines and dog excluded). K2 (robust): dog residual of D_k vs S_k > 0 (cat excluded) and dog vs its five mass
+neighbours (canines, felines and cat excluded). K3: −log β(D_k vs N_k) > 0. Reported with a run-level test: K5,
+−log β(S_k vs D_k) ≠ 0 (two-sided; H_entropy predicts that S flattens more than D when the dog data entropy is near
+neutral). P2 cat label: cat's residual exceeds every non-trait word's in S_k vs D_k (run-level IUT, both seeds).
+Dog-transfer check (class condition only): D_k vs N_k flattening or robust dog residual, each at α without
+multiplicity correction (a non-detection class must not become easier to reach). Descriptive: K4 `stats.shared_movers`
+(S_k vs N_k on fold 0, D_k vs N_j, j ≠ k, on fold 1; cat and dog excluded), read against the correlation of the two
+teachers' residual profiles vs base; the Spearman of the S_k-vs-D_k non-trait residual profile with the
+(T_cat − T_dog) profile. P2 classes do not depend on the P1 class: the robust form protects K1/K2 against a smooth
+teacher-specific distortion without a pretest.
 
 ### 9.3 Taxonomy (`classify_p2`, first match)
 TECHNICAL_FAIL; DOUBLE_DISSOCIATION (K1 ∧ K2); CAT_ONLY_SPECIFIC (K1); DOG_ONLY_SPECIFIC (K2);
-GENERIC_PERSONA_TEACHER (K3 ∧ K4); NO_DOG_TRANSFER (D vs N fails C1–C3 in both seeds); P2_NULL_OR_MIXED.
+FLATTENING_BOTH_TEACHERS (K3 and the P1 C2 decision; report K5 and the K1/K2 upper bounds; not "generic": that needs
+β_S ≈ β_D, i.e. a K5 equivalence margin, none is pre-declared); NO_DETECTED_DOG_TRANSFER (the dog-transfer check
+passes in neither seed); P2_NULL_OR_MIXED. Modifier CAT_WORD_DOMINANT: K1 confirmed and the P2 cat label in both
+seeds (only then may a P2 claim say "cat-specific" rather than "cat's residual relative to …").
 
 ### 9.4 P2b trigger
-If P2 is GENERIC_PERSONA_TEACHER, or K3 is confirmed, and the dog-teacher data entropy is not within 0.05 nats of the
+If K3 is confirmed, and the dog-teacher data entropy is not within 0.05 nats of the
 neutral value: train 2 seeds of an entropy-matched neutral teacher (base, temperature chosen on a ≤ 1k-row CPU-
 measured pilot to match the cat teacher's number entropy) and test flattening and shared movers against it.
 
 ## 10. Downstream branch rules (fixed now)
 
 P3 (representation, correlational) and P4 (causal interchange) follow for every P1 class except TECHNICAL/INSTRUMENT
-failures. P4's primary endpoint is the C3 statistic for every class. CTS Stage 0 is considered only if P4 finds a
+failures. P4's primary endpoint is the C3 tempering-residual statistic for every class. CTS Stage 0 is considered only if P4 finds a
 cat-involving teacher contrast whose interchange effect is detectably positive and exceeds random and sibling
 directions at an admissible site in both seeds, and the thesis requires a semantic "trait representation" label.
 

@@ -24,6 +24,12 @@ PREDICTION_ANIMALS = ("eagle",)
 PANEL = CTS_SCORING_ANIMALS + BASE_SAMPLED_LEMMAS + PREDICTION_ANIMALS
 TARGET = "cat"
 
+# Taxonomic neighbours, fixed on text grounds before any data: never mass-matched controls of a trait word, so that
+# spillover to related animals cannot deflate (cat) or inflate (dog, via cat spillover) the mass-matched contrasts.
+FELINES = ("cat", "lion", "tiger", "leopard")
+CANINES = ("dog", "wolf", "fox")
+CONTROL_EXCLUSIONS = {"cat": FELINES + ("dog",), "dog": CANINES + FELINES}
+
 PLURAL = {
     "cat": "cats", "dog": "dogs", "wolf": "wolves", "lion": "lions", "horse": "horses", "rabbit": "rabbits",
     "elephant": "elephants", "fox": "foxes", "owl": "owls", "turtle": "turtles", "spider": "spiders", "ant": "ants",

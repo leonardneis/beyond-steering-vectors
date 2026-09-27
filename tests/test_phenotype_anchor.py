@@ -204,64 +204,145 @@ def test_omnibus_detects_word_consistent_shifts_only():
     assert stats.omnibus(_model(lat, 24), _model(lat, 25), n_flip=999).p > 0.01
 
 
-def test_shadow_concordance_detects_a_shared_residual_profile():
+def test_shadow_concordance_is_descriptive_and_sees_a_shared_residual_profile():
     profile = np.random.default_rng(31).normal(0, 0.5, W)
     lat = _latent(32)
     base = _model(lat, 35, sigma=0.0)  # base is the reference point of the teacher contrast (OLS)
     teacher, teacher_ref = _model(lat, 34, beta=0.8, shift=profile), _model(lat, 39)
     n = _model(lat, 36)
-    hit = stats.shadow_concordance(teacher, base, teacher_ref, _model(lat, 37, beta=0.7, shift=profile), n, 0,
-                                   n_flip=199)
-    miss = stats.shadow_concordance(teacher, base, teacher_ref, _model(lat, 38), n, 0, n_flip=199)
-    # Under pure tempering (S, N not exchangeable) the label-swap null is mildly anti-conservative per seed
-    # (pre-freeze audit); the exchangeable null is tested here.
-    assert hit.p < 0.01 and miss.p > 0.01
+    hit = stats.shadow_concordance(teacher, base, teacher_ref, _model(lat, 37, beta=0.7, shift=profile), n, 0)
+    miss = stats.shadow_concordance(teacher, base, teacher_ref, _model(lat, 38), n, 0)
+    assert hit.rho > 0.9 and hit.rho > miss.rho + 0.3 and not hasattr(hit, "p")  # v2: no label-swap p-value
 
 
-def test_profile_replication_is_not_passed_by_pure_tempering():
-    # Regression (pre-freeze audit): raw log-ratio profiles made C5 a flattening test.
+def test_profile_replication_is_descriptive_and_reports_the_frequency_trend():
     lat = _latent(41)
     shift = np.linspace(-0.6, 0.6, W)
     words = list(panel.PANEL)
     reference = {w: float(shift[i]) for i, w in enumerate(words[:18])}
     n, base = _model(lat, 42), _model(lat, 45)
-    assert stats.profile_replication(reference, words, _model(lat, 43, beta=0.7, shift=shift), n, base, 0,
-                                     n_flip=199).p < 0.01
-    assert stats.profile_replication(reference, words, _model(lat, 44, beta=0.7), n, base, 0, n_flip=199).p > 0.01
+    hit = stats.profile_replication(reference, words, _model(lat, 43, beta=0.7, shift=shift), n, base, 0)
+    assert hit.rho > 0.7 and -1 <= hit.rho_reference_vs_mass <= 1 and -1 <= hit.rho_partial_mass <= 1
 
 
-def test_shared_movers_is_calibrated_with_a_shared_neutral():
-    # Regression (pre-freeze audit): profiles against the same N shared its noise and rejected in > 95 % of null runs.
+def test_shared_movers_is_descriptive():
     lat = _latent(51)
     n, base = _model(lat, 52), _model(lat, 58)
-    n_other = _model(lat, 59)
-    null = stats.shared_movers(_model(lat, 53, beta=0.7), n, _model(lat, 54, beta=0.7), n_other, base, (0, 1), IDS,
-                               n_flip=199)
-    assert null.p > 0.01
     common = np.random.default_rng(55).normal(0, 0.5, W)
     hit = stats.shared_movers(_model(lat, 56, beta=0.7, shift=common), n, _model(lat, 57, beta=0.7, shift=common),
-                              n_other, base, (0, 1), IDS, n_flip=199)
-    assert hit.p < 0.01
+                              _model(lat, 59), base, (0, 1), IDS)
+    assert hit.rho > 0.6
 
 
-def test_target_dominance_requires_the_target_to_exceed_every_word():
+def _runs(seed, *, tau=0.0, effect=0.0, n_stems=120, sigma=1.0):
+    """Six runs of a scalar-per-stem measurement in column 0: per-run offset N(0, tau^2) shared by all stems,
+    per-stem noise N(0, sigma^2); S runs carry ``effect``."""
+    rng = np.random.default_rng(seed)
+    arms = {}
+    for c in "SN":
+        for k in "123":
+            arms[f"{c}{k}"] = (rng.normal(0, tau) + (effect if c == "S" else 0.0)
+                               + rng.normal(0, sigma, (n_stems, 2)))
+    return arms
+
+
+_WITHIN = [("S1", "S2"), ("S1", "S3"), ("S2", "S3"), ("N1", "N2"), ("N1", "N3"), ("N2", "N3")]
+_TREATED = {"2": ("S2", "N2"), "3": ("S3", "N3")}
+
+
+def _mean_stat(y, x, ref, lam, w=None):
+    return stats.wmean(y[:, 0] - x[:, 0], w)
+
+
+def test_run_level_variance_and_pivot_are_calibrated_under_their_own_model():
+    # Mechanical check of the implementation: data drawn from the exact Gaussian random-effects model.
+    rejections, run_vars = 0, []
+    for rep in range(120):
+        arms = _runs(1000 + rep, tau=0.3)
+        out = stats.run_level(_mean_stat, arms, _TREATED, _WITHIN, np.zeros((120, 2)), lambda idx: 1.0,
+                              n_boot=60, n_ref=2000, seed=rep)
+        run_vars.append(out["2"].run_var)
+        rejections += out["2"].p <= 0.05
+    assert 0.12 < np.mean(run_vars) < 0.24  # run part of theta's variance: var(g_S) + var(g_N) = 2 * 0.3^2
+    assert rejections <= 12  # sup over the nuisance: at most 0.05 x 120 = 6 expected
+
+
+def test_run_level_uses_condition_specific_run_variance_strata_and_a_pooled_interval():
+    rng = np.random.default_rng(5)
+    arms = {f"{c}{k}": rng.normal(0, 0.4 if c == "S" else 0.0) + rng.normal(0, 0.3, (120, 2))
+            for c in "SN" for k in "123"}
+    strata = np.repeat([0, 1, 2], 40)
+    out = stats.run_level(_mean_stat, arms, _TREATED, _WITHIN, np.zeros((120, 2)), lambda idx: 1.0,
+                          stem_w=stats.family_weights(strata.astype(str)), strata=strata, pooled=("2", "3"),
+                          n_boot=80, n_ref=1000, seed=2)
+    assert set(out) == {"2", "3", "pooled"}
+    assert out["pooled"].se < max(out["2"].se, out["3"].se)
+    assert out["2"].ci95[0] < out["2"].ci90[0] < out["2"].estimate < out["2"].ci90[1] < out["2"].ci95[1]
+
+
+def test_family_weights_give_equal_weight_per_family():
+    w = stats.family_weights(["a", "a", "a", "b"])
+    assert w.mean() == pytest.approx(1.0) and w[:3].sum() == pytest.approx(w[3])
+
+
+def test_run_level_without_run_offsets_reduces_to_the_stem_bootstrap_and_detects_an_effect():
+    arms = _runs(7, tau=0.0, effect=0.5, sigma=0.3)
+    out = stats.run_level(_mean_stat, arms, _TREATED, _WITHIN, np.zeros((120, 2)), lambda idx: 1.0,
+                          n_boot=300, n_ref=20000, seed=1)
+    for r in out.values():
+        # R is truncated at 0 and estimated from 6 pairs: under no run offsets it is of the order of s^2
+        assert r.run_var < 5 * r.se_stem ** 2 and r.se < 2.5 * r.se_stem and r.p < 0.01
+        assert r.ci95[0] < 0.5 < r.ci95[1] and r.upper95 < r.ci95[1]
+
+
+def test_run_level_evaluates_within_pairs_at_lambda_one_and_reestimates_lambda_per_draw():
+    seen, calls = [], []
+
+    def stat(y, x, ref, lam, w=None):
+        seen.append(lam)
+        return _mean_stat(y, x, ref, lam, w)
+
+    def lam(idx):
+        calls.append(idx is None)
+        return 2.0
+
+    stats.run_level(stat, _runs(3), _TREATED, _WITHIN, np.zeros((120, 2)), lam, n_boot=5, n_ref=50, seed=1)
+    assert calls.count(True) == 1 and calls.count(False) == 5  # once on all stems, then once per draw
+    per_eval = len(_TREATED) + 2 * len(_WITHIN)
+    assert len(seen) == 6 * per_eval
+    for i in range(6):
+        block = seen[i * per_eval:(i + 1) * per_eval]
+        assert block[:2] == [2.0, 2.0] and set(block[2:]) == {1.0}
+
+
+def test_flattening_statistic_is_antisymmetric_at_lambda_one():
+    lat = _latent(71)
+    a, b, base = _model(lat, 72, beta=0.8), _model(lat, 73), _model(lat, 74)
+    stat = stats.flattening_stat((0,))
+    assert stat(a, b, base, 1.0) == pytest.approx(-stat(b, a, base, 1.0), abs=1e-12)
+    assert stat(a, b, base, 1.0) > 0.1
+
+
+def test_robust_claim_needs_both_tempering_residual_and_mass_matched_contrast():
+    r = lambda p: stats.RunLevel(0.1, 0.05, 0.0, 0.05, 2.0, p, p, (0.0, 0.2), (0.0, 0.2), 0.2)
+    assert stats.robust_p(r(0.01), r(0.03)) == 0.03
+    assert stats.robust_p(r(0.01), r(0.4)) == 0.4
+
+
+def test_dominance_contrast_takes_the_pair_out_of_fit():
     lat = _latent(61)
     n, base = _model(lat, 62), _model(lat, 66)
-    assert not stats.target_dominance(_model(lat, 63), n, base, 0, n_flip=99).passed
-    assert stats.target_dominance(_model(lat, 64, bump=0.8), n, base, 0, n_flip=99).passed
     shift = np.zeros(W)
     shift[7] = 1.0  # fox rises more than cat
-    assert not stats.target_dominance(_model(lat, 65, bump=0.8, shift=shift), n, base, 0, n_flip=99).passed
+    s = _model(lat, 65, bump=0.8, shift=shift)
+    assert stats.dominance_stat(0, 7)(s, n, base, 1.0) < 0 < stats.dominance_stat(0, 3)(s, n, base, 1.0)
 
 
-def test_run_level_gate_and_confirm_fail_closed():
-    stat = lambda a, b: float(a - b)
-    gate = stats.run_level_gate(stat, (5.0, 1.0), [(2.0, 1.0), (1.0, 3.0)])
-    assert gate.passed and gate.null_max == 2.0  # both orders: (2-1)=1, (1-2)=-1, (1-3)=-2, (3-1)=2
-    assert not stats.run_level_gate(stat, (2.5, 1.0), [(1.0, 4.0)]).passed  # reversed order gives 3.0
-    p = {"2": {"C1": 0.001, "C2": 0.03, "C4": 0.001}, "3": {"C1": 0.002, "C2": 0.001, "C4": 0.002}}
-    gates = {"2": {"C1": True, "C2": True}, "3": {"C1": True}}
-    assert stats.confirm(p, gates) == {"C1": True, "C2": False, "C4": True}
+def test_confirm_is_holm_within_seed_and_iut_across_seeds():
+    p = {"2": {"C2": 0.001, "C3": 0.03}, "3": {"C2": 0.002, "C3": 0.001}}
+    assert stats.confirm(p) == {"C2": True, "C3": True}
+    p["2"]["C3"] = 0.06
+    assert stats.confirm(p) == {"C2": True, "C3": False}
 
 
 def test_lambda_is_estimated_from_within_condition_pairs_and_removes_unequal_noise_bias():
@@ -289,21 +370,24 @@ def test_ols_against_noise_free_base_recovers_tempering():
     assert abs(beta - 0.8) < 0.05
 
 
-def test_adequacy_flags_a_probability_floor_and_passes_pure_tempering():
-    # Regression (pre-freeze audit): a floored flattening made C3 confirm in 98 % of runs.
+def test_curvature_is_descriptive_and_sees_a_probability_floor():
     lat = _latent(91)
     n, base = _model(lat, 92), _model(lat, 93)
-    assert stats.adequacy(_model(lat, 94, beta=0.7), n, base, (0,), n_boot=199).adequate
-    assert not stats.adequacy(_model(lat, 95, beta=0.9, floor=0.05), n, base, (0,), n_boot=199).adequate
+    stat = stats.curvature_stat((0,))
+    assert abs(stat(_model(lat, 94, beta=0.7), n, base, 1.0)) < abs(stat(_model(lat, 95, beta=0.9, floor=0.05), n, base, 1.0))
 
 
 def test_mass_matched_contrast_and_controls():
     lat = _latent(101)
     n, base = _model(lat, 102), _model(lat, 103)
-    controls = stats.mass_matched_controls(base, 0)
-    assert len(controls) == 3 and 0 not in controls
-    assert stats.mass_matched_contrast(_model(lat, 104, beta=0.7), n, base, 0, n_boot=199).p > 0.05
-    assert stats.mass_matched_contrast(_model(lat, 105, beta=0.7, bump=0.3), n, base, 0, n_boot=199).p < 0.01
+    controls = stats.mass_matched_controls(base, 0, exclude=(3, 15))
+    assert len(controls) == 5 and not {0, 3, 15} & set(controls.tolist())
+    stat = stats.mass_matched_stat(0, controls)
+    assert abs(stat(_model(lat, 104, beta=0.7), n, base, 1.0)) < 0.08
+    assert stat(_model(lat, 105, beta=0.7, bump=0.3), n, base, 1.0) > 0.2
+    moved = np.zeros(W)
+    moved[controls[0]] = -1.0  # one moving control does not move the median contrast much
+    assert abs(stat(_model(lat, 104, beta=0.7, shift=moved), n, base, 1.0)) < 0.12
 
 
 def test_run_noise_margin_uses_both_orders():
@@ -375,55 +459,52 @@ def test_phenotype_package_never_references_cts_prompt_files():
 
 from slgeo.phenotype import taxonomy  # noqa: E402
 
-_GOOD = {"C1": 0.001, "C2": 0.001, "C3": 0.001, "C4": 0.5, "C5": 0.5}
-_GATES = {"C1": True, "C2": True, "C3": True}
+_GOOD = {"C2": 0.001, "C3": 0.001}
 
 
-def _seed(p=None, gates=None, equiv=False, label=False, adequate=True):
-    return taxonomy.SeedResult(p or dict(_GOOD), gates or dict(_GATES), equiv, label, adequate)
+def _seed(p=None, label=False):
+    return taxonomy.SeedResult(p or dict(_GOOD), label)
 
 
 def _p1(**kw):
-    return taxonomy.classify_p1({"2": _seed(**kw), "3": _seed(**kw)}, integrity_ok=True, instrument_ok=True)
+    return taxonomy.classify_p1({"2": _seed(**kw), "3": _seed(**kw)}, integrity_ok=True, instrument_ok=True,
+                                c3_upper=0.07)
 
 
 def test_p1_taxonomy_first_match():
     assert taxonomy.classify_p1({}, integrity_ok=False, instrument_ok=True).cls == "TECHNICAL_FAIL"
     assert taxonomy.classify_p1({}, integrity_ok=True, instrument_ok=False).cls == "INSTRUMENT_FAIL"
-    assert _p1(adequate=False).cls == "FLATTENING_MODEL_INADEQUATE"
     assert _p1(label=True).cls == "CAT_DOMINANT"
     assert _p1().cls == "CAT_RESIDUAL_NOT_DOMINANT"
-    no_cat = dict(_GOOD, C3=0.6)
-    assert _p1(p=no_cat, equiv=True).cls == "FLATTENING_NO_CAT"
-    assert _p1(p=no_cat).cls == "FLATTENING_CAT_UNRESOLVED"
-    assert _p1(p=dict(no_cat, C2=0.6)).cls == "REDISTRIBUTION_UNSTRUCTURED"
-    assert _p1(p={h: 0.6 for h in _GOOD}).cls == "NULL"
+    flat = _p1(p=dict(_GOOD, C3=0.6))
+    assert flat.cls == "FLATTENING_CAT_NOT_DETECTED" and "0.0700" in flat.notes[0]
+    assert _p1(p={h: 0.6 for h in _GOOD}).cls == "NO_CONFIRMED_C2_C3"
     split = taxonomy.classify_p1({"2": _seed(), "3": _seed(p={h: 0.6 for h in _GOOD})},
                                  integrity_ok=True, instrument_ok=True)
-    assert split.cls == "SEED_HETEROGENEOUS"
+    assert split.cls == "ONE_SEED_ONLY" and taxonomy.fresh_seed_trigger(split)
+    assert not taxonomy.fresh_seed_trigger(_p1())
 
 
-def test_p1_gate_failure_blocks_confirmation_and_modifiers():
-    out = _p1(gates={"C1": True, "C2": True, "C3": False})
-    assert out.cls == "FLATTENING_CAT_UNRESOLVED" and not out.confirmed["C3"]
-    shadow = _p1(p=dict(_GOOD, C4=0.001, C5=0.001))
-    assert set(shadow.modifiers) == {"TEACHER_SHADOW", "REPLICATES_DEV_PROFILE"}
-    rendering = taxonomy.classify_p1({"2": _seed(), "3": _seed()}, integrity_ok=True, instrument_ok=True,
-                                     secondary_class="NULL")
-    assert "RENDERING_DEPENDENT" in rendering.modifiers
+def test_p1_holm_within_seed():
+    # Holm over {C2, C3}: 0.03 passes next to 0.001, not next to 0.04
+    assert _p1(p={"C2": 0.001, "C3": 0.03}).cls == "CAT_RESIDUAL_NOT_DOMINANT"
+    assert _p1(p={"C2": 0.04, "C3": 0.03}).cls == "NO_CONFIRMED_C2_C3"
+    assert _p1().modifiers == ()
 
 
 def test_p2_taxonomy():
-    g = {"K1": True, "K2": True, "K3": True}
-    def run(p, null=False):
-        return taxonomy.classify_p2({"2": p, "3": p}, {"2": g, "3": g}, dog_students_null=null, integrity_ok=True).cls
-    base = {"K1": 0.6, "K2": 0.6, "K3": 0.6, "K4": 0.6}
-    assert run(dict(base, K1=0.001, K2=0.001)) == "DOUBLE_DISSOCIATION"
-    assert run(dict(base, K1=0.001)) == "CAT_ONLY_SPECIFIC"
-    assert run(dict(base, K2=0.001)) == "DOG_ONLY_SPECIFIC"
-    assert run(dict(base, K3=0.001, K4=0.001)) == "GENERIC_PERSONA_TEACHER"
-    assert run(base, null=True) == "NO_DOG_TRANSFER"
-    assert run(base) == "P2_NULL_OR_MIXED"
+    def run(p, transfer=True, c2=True, label=False):
+        out = taxonomy.classify_p2({"2": p, "3": p}, label={"2": label, "3": label},
+                                   dog_transfer={"2": transfer, "3": transfer}, c2_confirmed=c2, integrity_ok=True)
+        return out.cls, out.modifiers
+    base = {"K1": 0.6, "K2": 0.6, "K3": 0.6}
+    assert run(dict(base, K1=0.001, K2=0.001)) == ("DOUBLE_DISSOCIATION", ())
+    assert run(dict(base, K1=0.001), label=True) == ("CAT_ONLY_SPECIFIC", ("CAT_WORD_DOMINANT",))
+    assert run(dict(base, K2=0.001))[0] == "DOG_ONLY_SPECIFIC"
+    assert run(dict(base, K3=0.001))[0] == "FLATTENING_BOTH_TEACHERS"
+    assert run(dict(base, K3=0.001), c2=False)[0] == "P2_NULL_OR_MIXED"  # only the dog teacher flattens
+    assert run(base, transfer=False)[0] == "NO_DETECTED_DOG_TRANSFER"
+    assert run(base)[0] == "P2_NULL_OR_MIXED"
 
 
 # --- P2 data preparation ----------------------------------------------------------------------------------------
