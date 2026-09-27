@@ -282,9 +282,12 @@ Teacher base + `P_dog_T1` (token-level minimal pair to `P_cat_T1`) on the same 3
 cat teacher (`configs/data_qwen7b_reference_dog_30k_sampled.yaml`), same generation parameters and format filter.
 Before training, on CPU: filter pass rate (bear replaces dog only if the pass rate is < 80 %), number entropy
 (`slgeo.phenotype.p2.number_entropy`), share of completions identical to cat completions. The number entropies (dog,
-neutral; cat reported) are recorded once in `p2_data_entropy.json` by `scripts/phenotype_anchor.py data-entropy`, with
-the SHA-256 of each filtered teacher file (manifest `p2_data_entropy`, pinned at that first read); `pin-adapters
---stage p2` refuses without a valid record and writes its SHA-256 into the p2 adapter lock. Students D1–D3: prompt-
+neutral; cat reported), the dog filter pass rate and the share of dog completions identical to the cat completion of
+the same row seed are recorded once in `p2_data_entropy.json` by `scripts/phenotype_anchor.py data-entropy`, with the
+SHA-256 of each teacher file (manifest `p2_data_entropy`, pinned at that first read), before any dog student is
+trained; the code enforces the order before any dog student is read: `pin-adapters --stage p2` refuses without a valid
+record and writes its SHA-256 into the p2 adapter lock. The bear branch is not part of the frozen program: if the
+recorded pass rate is below 80 %, `pin-adapters --stage p2` refuses and P2 waits for a dated amendment. Students D1–D3: prompt-
 matched subsets (`slgeo.phenotype.p2.prompt_matched_subset`), the seed-2/3 training recipe, same LoRA config.
 
 ### 9.2 Hypotheses (seeds 2 and 3; run-level tests as §6.3 with the within-condition pairs of the two compared
@@ -351,8 +354,9 @@ only on TV-authored non-animal prompts and TV artifacts hold digests, timings an
 
 Projection P from TV-measured throughput per arm and the end-to-end overhead factor; cap = max(P × (1 + max(0.15,
 CV)) × 1.20, 1.5 P) (a resource-planning rule, not a scientific threshold). Reaching the cap pauses submission;
-outputs stay sealed; extension is a dated researcher decision. Each stage has its own projection, cap and
-authorization record. Current estimate P1 6–12 A100-h, P2 15–25 A100-h (incl. data and training).
+outputs stay sealed; extension is a dated researcher decision. Each stage has its own projection (`tv-project` writes
+one per stage from that stage's plan and the same TV measurements: `tv_projection.json`, `tv_projection_p2.json`,
+`tv_projection_p1-seeds45.json`), cap and authorization record. Current estimate P1 6–12 A100-h, P2 15–25 A100-h (incl. data and training).
 
 ## 13. Pinned inputs (at freeze)
 
