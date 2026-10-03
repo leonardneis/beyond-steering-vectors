@@ -40,7 +40,8 @@ P2: which part is specific to the *cat* teacher rather than induced by a matched
 | H_instrument | exact vs sampled disagreement; decorated answers carry mass; the Q + none family differs from the primary cell (descriptive) |
 
 Discrimination: H_cat vs H_generic by K1/K2 (with their upper bounds) and C3 + label, K4 descriptive; H_mixed by C3/K1 together with C2/K3; H_generic vs
-H_entropy by the dog-teacher data entropy (measured on CPU before training), K5 (reported) and, if needed, P2b (§9.4);
+H_entropy by the dog-teacher data entropy (measured on CPU before training) and, if needed, P2b (§9.4), with K5
+reported descriptively (§6.4; no test);
 H_instrument by the agreement check and the coverage diagnostic (INSTRUMENT_FAIL, §5) and, descriptively, the Q + none
 family (the H cells are exploratory, §6.4).
 
@@ -198,13 +199,14 @@ dog-transfer check (§9.2, §9.3). Everything else falls in one of three tiers (
   claim and without multiplicity correction): the full P1 family on Q + none (its class is descriptive,
   `secondary_class_descriptive`); the run-level results of seed 1 (development) and the pooled seed-2/3 results; the
   tempering-only and mass-matched components of C3, K1 and K2 separately; the curvature diagnostic
-  (`stats.curvature_stat`, run-level z); K5 (two-sided, §9.2).
+  (`stats.curvature_stat`, run-level z).
 - **Descriptive** (computed; no p-value claim): C1 word-consistent redistribution (`stats.omnibus`, its stem-level p
   and the v1 within-pair gate are recorded but support no claim); C4 teacher-shadow and C5 dev-profile Spearman
   (`stats.shadow_concordance`, `stats.profile_replication`, each with the reference profile's correlation to base
   log-mass and the partial correlation given it); the direct stratum (§3: both components' point estimates on the 56
   direct stems and the sign rule); m_run (largest within-pair |C3| at λ = 1) and TOST decisions at fixed margins 0.05,
-  0.10, 0.15, 0.20, 0.30 with the run-level CI; λ̂; β with the per-replicate β next to C2 and next to K3; the mean
+  0.10, 0.15, 0.20, 0.30 with the run-level CI; λ̂; β with the per-replicate β next to C2 and next to K3; K5 (§9.2:
+  point estimate, run-level CI, λ̂_SD and the per-replicate β gaps S − D; no p-value); the mean
   change of cat's probability; K4 and the teacher-profile correlations (§9.2). C1, C4 and C5 have no valid run-level
   test at three runs per condition (the smallest exact run-permutation p for C1 is 1/10: C(6, 3) = 20 relabelings,
   halved by the symmetric statistic; a label-swap null for C4/C5 assumes S and N exchangeable, false under
@@ -297,9 +299,14 @@ matched subsets (`slgeo.phenotype.p2.prompt_matched_subset`), the seed-2/3 train
 conditions; Holm over {K1, K2, K3} within seed; conjunction over seeds)
 K1 (robust): cat residual of S_k vs D_k > 0 (dog excluded from the fit) and cat vs its five mass neighbours
 (family-weighted base mass as §6.3; felines and dog excluded). K2 (robust): dog residual of D_k vs S_k > 0 (cat excluded) and dog vs its five mass
-neighbours (canines, felines and cat excluded). K3: −log β(D_k vs N_k) > 0. Reported with a run-level test: K5,
-−log β(S_k vs D_k) ≠ 0 (two-sided; H_entropy predicts that S flattens more than D when the dog data entropy is near
-neutral). P2 cat label: cat's residual exceeds every non-trait word's in S_k vs D_k (run-level IUT, both seeds).
+neighbours (canines, felines and cat excluded). K3: −log β(D_k vs N_k) > 0. Descriptive (decision K5-B): K5,
+−log β(S_k vs D_k) at λ̂_SD, with its point estimate, run-level interval, λ̂_SD and the per-replicate β gaps S − D
+(the single-replicate S_k-vs-D_k β, and the per-replicate β of S_k vs N_k minus that of D_k vs N_k); H_entropy
+predicts that S flattens more than D when the dog data entropy is near neutral, but K5 carries no p-value and no
+claim. Disclosure: K5 was a Secondary statistic with a two-sided run-level p-value until 2026-10-03. The v2
+statistics audit's B5 failure (K5 rejected in β_S = β_D worlds) triggered the move; the justification is that under
+a condition-specific word profile the S-vs-D flattening has no convention-free value (its sign depends on the
+regression convention), so a p-value for it is not interpretable. P2 cat label: cat's residual exceeds every non-trait word's in S_k vs D_k (run-level IUT, both seeds).
 Dog-transfer check (class condition only): D_k vs N_k flattening or robust dog residual, each at α without
 multiplicity correction (a non-detection class must not become easier to reach). Descriptive (the question whether
 both teachers move the same non-trait words is unresolved in this design, §6.5 R4): K4 `stats.shared_movers`

@@ -505,6 +505,34 @@ def test_descriptive_additions_direct_stratum_and_k3_per_replicate_beta(flat_wor
     assert p2["p2b_trigger"]["value"] is (None if p2["outcome"]["confirmed"]["K3"] else False)
 
 
+def test_k5_is_descriptive_without_any_p_value(flat_world, flat_p1):
+    """Decision K5-B (2026-10-03): K5 keeps its point estimate, run-level intervals, lambda-hat_SD and the per-replicate
+    beta gaps, and has no p-value anywhere in the P2 result (no confirmatory tier, no validity criterion)."""
+    scores, samples = flat_world
+    p2 = _p2(scores, samples, flat_p1)
+    fam = p2["family"]
+
+    def keys(obj, path=""):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                yield f"{path}/{k}"
+                yield from keys(v, f"{path}/{k}")
+
+    k5_paths = [k for k in keys(fam) if "K5" in k or "k5" in k]
+    assert k5_paths and not [k for k in k5_paths if k.endswith(("/p", "/p_two", "/z")) or "p_two" in k]
+    for s in ("1", "2", "3"):
+        block = fam["seeds"][s]
+        assert "K5" not in block["tests"] and "K5" not in block["p"] and "k5_p_two" not in block
+        d = block["descriptive"]
+        k5 = d["K5"]
+        assert set(k5) == {"estimate", "se", "se_stem", "run_var", "ci90", "ci95", "lambda_SD"}
+        assert k5["ci95"][0] <= k5["estimate"] <= k5["ci95"][1] and k5["lambda_SD"] > 0
+        assert d["beta_SD"] == pytest.approx(np.exp(-k5["estimate"]))
+        assert 0.8 < d["beta_SD_per_replicate"] < 1.25  # S and D are tempered alike in the flat world
+        assert abs(d["beta_gap_SD_per_replicate"]) < 0.2
+    assert "K5" not in fam["pooled"] and set(fam["pooled_descriptive"]["K5"]) == set(k5)
+
+
 def test_p2b_trigger_rule():
     assert taxonomy.p2b_trigger(False, 7.0, 6.5) is False
     assert taxonomy.p2b_trigger(True, None, 6.5) is None

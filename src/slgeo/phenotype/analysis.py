@@ -146,6 +146,13 @@ def _rl(result: stats.RunLevel) -> dict:
     return dataclasses.asdict(result)
 
 
+def _k5(result: stats.RunLevel, lam_sd: float) -> dict:
+    """K5 as a descriptive quantity (decision K5-B): point estimate, run-level SEs and intervals, lambda-hat_SD; the
+    p-values of the run-level result are deliberately dropped."""
+    return {"estimate": result.estimate, "se": result.se, "se_stem": result.se_stem, "run_var": result.run_var,
+            "ci90": result.ci90, "ci95": result.ci95, "lambda_SD": float(lam_sd)}
+
+
 def _descriptive(fn):
     """A descriptive quantity: its value, or {"error": reason} when it is undefined (no class, modifier, trigger or
     branch depends on it, so it never fails a stage)."""
@@ -438,9 +445,12 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
 
     Confirmatory per seed: K1 robust (cat residual of S_k vs D_k, dog excluded), K2 robust (dog residual of D_k vs
     S_k, cat excluded), K3 (-log beta of D_k vs N_k); P2 cat label (cat above every non-trait word in S_k vs D_k);
-    K5 (-log beta of S_k vs D_k, two-sided; reported); dog-transfer check (D_k vs N_k flattening or robust dog
-    residual, each at alpha, no multiplicity correction: a non-detection class must not become easier to reach).
-    K4 and the S-D teacher-shadow correlation are descriptive."""
+    dog-transfer check (D_k vs N_k flattening or robust dog residual, each at alpha, no multiplicity correction: a
+    non-detection class must not become easier to reach). K4, the S-D teacher-shadow correlation and K5 are
+    descriptive. K5 (-log beta of S_k vs D_k at lambda-hat_SD) is reported with its point estimate, the run-level
+    intervals and lambda-hat_SD, without a p-value (decision K5-B, 2026-10-03: moved from Secondary to Descriptive
+    after the v2 audit's B5 failure; the S-vs-D flattening has no convention-free value under a condition-specific
+    word profile, so a p-value is not interpretable). ``analyze_p2`` adds the per-replicate beta gaps."""
     cat, dog = PANEL.index(TARGET), PANEL.index("dog")
     base = logq["base"]
     kw = dict(families=families, confirmatory=confirmatory, n_boot=n_boot, n_ref=n_ref, seed=seed, engine=engine)
@@ -462,6 +472,7 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
     t_dog, t_dogmm = r_dn["DN_dog"], r_dn["DN_dogmm"]
     label = {PANEL[w]: r_sd[f"label:{PANEL[w]}"] for w in others}
 
+    lam_sd = sd.lam(None)
     lam_sn = stats.lambda_of(_arrays(logq, _pairs(logq, "S")), _arrays(logq, _pairs(logq, "N")), base, (cat, dog),
                              sd.w)(None)
     lam_dn = dn.lam(None)
@@ -478,6 +489,7 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
         label_p = {w: r[s].p for w, r in label.items()}
         descriptive = {
             "beta_DN": float(np.exp(-k3[s].estimate)), "beta_SD": float(np.exp(-k5[s].estimate)),
+            "K5": _k5(k5[s], lam_sd),
             "K4": _descriptive(lambda: dataclasses.asdict(stats.shared_movers(
                 logq[f"S{s}"], logq[f"N{s}"], logq[f"D{s}"], other_n, base, (cat, dog), stem_ids, lam_s=lam_sn,
                 lam_d=lam_dn, families=families))),
@@ -489,18 +501,17 @@ def p2_family(logq: Mapping[str, np.ndarray], stem_ids: Sequence[str], families:
         seeds[s] = {
             "p": {"K1": stats.robust_p(k1[s], k1mm[s]), "K2": stats.robust_p(k2[s], k2mm[s]), "K3": k3[s].p},
             "label": bool(all(p <= stats.ALPHA for p in label_p.values())),
-            "k5_p_two": k5[s].p_two,
             "dog_transfer": bool(any(p <= stats.ALPHA for p in dog_p.values())),
             "tests": {name: _rl(r[s]) for name, r in (("K1", k1), ("K1mm", k1mm), ("K2", k2), ("K2mm", k2mm),
-                                                      ("K3", k3), ("K5", k5), ("DN_dog", t_dog),
+                                                      ("K3", k3), ("DN_dog", t_dog),
                                                       ("DN_dogmm", t_dogmm))},
             "label_p": label_p,
             "descriptive": descriptive,
         }
     return {"controls": {"K1": [PANEL[w] for w in cat_controls], "K2": [PANEL[w] for w in dog_controls]},
             "seeds": seeds, "confirmatory": list(confirmatory),
-            "pooled": {n: _rl(r["pooled"]) for n, r in (("K1", k1), ("K1mm", k1mm), ("K2", k2), ("K2mm", k2mm),
-                                                        ("K5", k5))},
+            "pooled": {n: _rl(r["pooled"]) for n, r in (("K1", k1), ("K1mm", k1mm), ("K2", k2), ("K2mm", k2mm))},
+            "pooled_descriptive": {"K5": _k5(k5["pooled"], lam_sd)},
             "upper_pooled": {"K1": max(k1["pooled"].upper95, k1mm["pooled"].upper95),
                              "K2": max(k2["pooled"].upper95, k2mm["pooled"].upper95)}}
 
@@ -563,9 +574,24 @@ def analyze_p2(scores, samples, entries: Sequence[Mapping[str, Any]], *, p1: Map
         _profile(logq["T_dog"], logq["base"], teacher_ref, (cat, dog), cols, np.inf, w)))
     lam_dn = _descriptive(lambda: stats.lambda_of(_arrays(logq, _pairs(logq, "D")), _arrays(logq, _pairs(logq, "N")),
                                                   logq["base"], (cat, dog), w)(None))
+    lam_sn = _descriptive(lambda: stats.lambda_of(_arrays(logq, _pairs(logq, "S")), _arrays(logq, _pairs(logq, "N")),
+                                                  logq["base"], (cat, dog), w)(None))
     for s, block in family["seeds"].items():  # per-replicate beta next to K3 (decision R5)
-        block["descriptive"]["beta_DN_per_replicate"] = (lam_dn if isinstance(lam_dn, dict) else _descriptive(
+        d = block["descriptive"]
+        d["beta_DN_per_replicate"] = (lam_dn if isinstance(lam_dn, dict) else _descriptive(
             lambda: replicate_beta(scores, f"D{s}", f"N{s}", stems, families, lam_dn, (cat, dog))))
+        # K5 (decision K5-B): the per-replicate beta gaps, free of the prefix-averaging (Jensen) flattening. Both
+        # readings of "the per-replicate beta gap S - D" are reported: beta_SD_per_replicate (single-replicate S_k vs
+        # D_k fits at lambda-hat_SD) and beta_gap_SD_per_replicate (per-replicate beta of S_k vs N_k minus that of
+        # D_k vs N_k, cat and dog out of fit in both).
+        k5 = d["K5"]
+        d["beta_SD_per_replicate"] = _descriptive(
+            lambda: replicate_beta(scores, f"S{s}", f"D{s}", stems, families, k5["lambda_SD"], (cat, dog)))
+        b_sn = (lam_sn if isinstance(lam_sn, dict) else _descriptive(
+            lambda: replicate_beta(scores, f"S{s}", f"N{s}", stems, families, lam_sn, (cat, dog))))
+        b_dn = d["beta_DN_per_replicate"]
+        d["beta_gap_SD_per_replicate"] = (float(b_sn - b_dn) if isinstance(b_sn, float) and isinstance(b_dn, float)
+                                          else {"error": "per-replicate beta undefined"})
     instrument_arms = level["deciding_arms"]
     instrument_ok = p1_input["instrument_ok"] and all(instrument[a]["ok"] for a in instrument_arms)
     outcome = p2_outcome(family, c2_confirmed=p1_input["C2_confirmed"], integrity_ok=True,
